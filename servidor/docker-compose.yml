@@ -1,0 +1,103 @@
+name: asistente
+
+# Broker MQTT del servidor de la casa.
+# Paso 0b de la Fase 4. Este archivo implementa la propuesta v2.
+#
+# Decisiones ya aplicadas:
+#   - network_mode: host. Sin red propia de Compose, porque hay que escuchar en
+#     127.0.0.1, en tailscale0 y en ens18 a la vez, y porque el puente se
+#     conecta por IP de Tailscale y por MagicDNS.
+#   - user "1883:1883": el proceso arranca YA como mosquitto, sin root. Es
+#     necesario para que el grupo 1000 de group_add sobreviva: si el proceso
+#     arranca como root, Mosquitto llama a initgroups("mosquitto", 1883) al
+#     bajar privilegios, y eso BORRA los grupos suplementarios que puso Docker.
+#     Verificado: con root + group_add, el broker igual dice
+#     "Unable to open pwfile".
+#     Sin root no corre el chown -R del entrypoint, pero no hace falta: al
+#     crearse el volumen, Docker copia el contenido y la propiedad de
+#     /mosquitto/data de la imagen, que ya es 1883:1883. Verificado.
+#   - group_add 1000: el passwd es 640 ilse:ilse y el broker no es el dueno,
+#     asi que lo lee por el grupo (gid 1000).
+#   - tmpfs en /mosquitto/log: la imagen declara VOLUME ahi y, sin montaje,
+#     Docker crearia un volumen anonimo en cada "up".
+#   - log_dest stdout: los registros salen por "docker compose logs".
+#     "log_privacy" NO existe en Mosquitto; una opcion desconocida aborta el
+#     arranque.
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.22
+    container_name: asistente-mosquitto
+
+    restart: unless-stopped
+    network_mode: host
+    stop_grace_period: 20s
+
+    user: "1883:1883"
+    group_add:
+      - "1000"
+
+    environment:
+      # Solo para el healthcheck. El usuario "salud" existe unicamente para eso.
+      MOSQUITTO_SALUD_PASSWORD: ${MQTT_SALUD_PASSWORD:?falta MQTT_SALUD_PASSWORD en servidor/.env}
+
+    volumes:
+      # Configuracion en solo lectura: el broker nunca la modifica.
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/config/acl.conf:/mosquitto/config/acl.conf:ro
+      # Secretos, fuera del repositorio: aqui queda passwd (640, ilse:ilse).
+      - ${MOSQUITTO_SECRETS_DIR}:/mosquitto/secrets:ro
+      # Persistencia: sesiones y mensajes retenidos entre reinicios.
+      - mosquitto_data:/mosquitto/data
+
+    tmpfs:
+      - /mosquitto/log
+      - /tmp
+
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+    mem_limit: 256m
+    cpus: 0.50
+    pids_limit: 100
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      # Un $SYS retenido llega al suscribirse, sin esperar los 10 s de
+      # sys_interval. Por eso -W 5 basta.
+      test:
+        - CMD
+        - mosquitto_sub
+        - -h
+        - 127.0.0.1
+        - -p
+        - "1883"
+        - -u
+        - salud
+        - -P
+        - ${MQTT_SALUD_PASSWORD:?falta MQTT_SALUD_PASSWORD en servidor/.env}
+        - -t
+        # $$ escapa el $ para Compose: sin esto, Compose leeria $SYS como una
+        # variable y el topic quedaria /broker/version.
+        - $$SYS/broker/version
+        - -C
+        - "1"
+        - -W
+        - "5"
+        - -v
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  # El proyecto se llama "asistente" (name: arriba), asi que el volumen real se
+  # llama asistente_mosquitto_data. La clave va sin el prefijo para que el
+  # nombre final no quede "asistente_asistente_...".
+  mosquitto_data:

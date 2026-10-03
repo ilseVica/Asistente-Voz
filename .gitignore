@@ -1,0 +1,24 @@
+# Secretos. El .env real nunca entra al repositorio.
+.env
+.env.local
+!.env.example
+
+# Material criptografico, por si alguien lo deja cerca.
+*.pem
+*.key
+*.crt
+id_rsa*
+
+# Base de datos de persistencia y registros del broker.
+*.db
+*.log
+logs/
+
+# Productos de trabajo de las sesiones de analisis: no son codigo del proyecto.
+resultados de prompt/
+
+# Ruido del sistema y de los editores.
+.DS_Store
+Thumbs.db
+*.swp
+*~

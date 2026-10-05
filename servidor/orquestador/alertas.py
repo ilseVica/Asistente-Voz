@@ -89,13 +89,17 @@ def validar(topico: str, cuerpo: str) -> tuple:
         alerta/gas    {"id":"...","gas_adc":2100}
         alerta/ayuda  {"id":"...","origen":"alexa"}
 
-    Un campo `tipo` en el mensaje se acepta pero se ignora, con una línea de aviso:
-    no es un campo del contrato, y si viene, el tópico manda.
-
     Los campos EXTRA no se rechazan. Se avisan y la alerta sigue adelante, y es
     deliberado: un campo de más no es una razón para tragarse un aviso de gas. La
     regla del simulador y la del firmware se pueden ampliar sin que este servicio
     empiece a perder alertas por un campo nuevo que nadie ha revisado.
+
+    Y `tipo` no es una excepción: es un campo más que no está en el contrato, así que
+    cae en la misma bolsa. Antes tenía su propio aviso, y una versión anterior lo
+    trataba casi como un error. Un `tipo` equivocado no es un mensaje roto: es un
+    mensaje que trae de más una etiqueta que aquí no se usa, y manda el tópico igual.
+    Lo que sí se rechaza sigue siendo lo que deja el aviso inservible: que no tenga
+    `id`, que no sea JSON, o que el `gas_adc` no sea un número en rango.
     """
     tipo = TIPO_POR_TOPICO.get(topico)
     if tipo is None:
@@ -120,10 +124,6 @@ def validar(topico: str, cuerpo: str) -> tuple:
                 "id %r no cumple: texto de 1 a 64 con minusculas, digitos y guiones"
                 % (id_alerta,))
 
-    if "tipo" in carga:
-        registro.warning("la alerta %s trae el campo tipo %r, que no es del contrato; "
-                      "manda el topico (%s)", id_alerta, carga["tipo"], tipo)
-
     if tipo == "gas":
         error = _validar_gas(carga)
     else:
@@ -131,18 +131,23 @@ def validar(topico: str, cuerpo: str) -> tuple:
     if error is not None:
         return None, None, None, error
 
-    sobrantes = sorted(set(carga) - {"id", "gas_adc", "origen", "tipo"})
+    # Las claves del contrato, para este tipo de alerta, son las unicas que no
+    # cuentan como sobrantes. `tipo` cuenta como sobrante, y sale en la lista con
+    # los demas: es el mismo problema y merece el mismo aviso.
+    obligatorias = {"id", "gas_adc"} if tipo == "gas" else {"id", "origen"}
+    sobrantes = sorted(set(carga) - obligatorias)
     if sobrantes:
         # Se acepta y se avisa. NO se rechaza.
         #
         # Descartar una alerta de gas por un campo de sobra es el peor fallo que
         # puede tener este archivo: la familia no recibe el aviso y el log dice
-        # «rechazada», que parece unadecision del sistema y no un error. El
+        # «rechazada», que parece una decision del sistema y no un error. El
         # problema real de un campo de mas es del que publica, y se le avisa con
         # un warning en vez de dejarle la familia sin saber nada.
         #
-        # `tipo` no sale en la lista porque ya tiene su aviso propio mas arriba,
-        # que es el caso mas comun: el firmware viejo mandaba ese campo.
+        # En la lista sale `tipo` si viene, que es el caso mas comun: el firmware
+        # viejo mandaba ese campo, y un `tipo` que contradice al topico es
+        # precisamente el caso en el que conviene gritar un poco mas.
         registro.warning("la alerta %s trae campos que no son del contrato (%s); se "
                          "acepta y se ignoran", id_alerta, ", ".join(sobrantes))
 
@@ -172,7 +177,7 @@ def _validar_ayuda(carga: dict):
     """`alerta/ayuda` trae `origen`, pero su ausencia NO descarta la alerta.
 
     El origen es lo que le dice a la familia si la petición viene de Alexa o de
-    la voz, y el contrato solo admite cuatro valores (plan, linea 195). Un origen
+    la voz, y el contrato solo admite cuatro valores (plan, línea 195). Un origen
     desconocido no descarta la alerta: se registra y se sigue, porque perder una
     petición de ayuda por un campo mal escrito sería peor que mandar un mensaje
     con un origen raro.
@@ -239,7 +244,7 @@ def texto_para_telegram(carga: dict, tipo: str) -> str:
         else:
             # La peticion se acepta sin `origen` (ver `_validar_ayuda`), asi que
             # el texto tiene que salir bien tambien sin el. Decir «origen:
-            # desconocido» seria confuso: no es que no se sepa, es que no vino.
+            # desconocido» sería confuso: no es que no se sepa, es que no vino.
             de_quien = "(no dice de donde)"
         texto = (
             "PETICION DE AYUDA desde casa.\n\n"
@@ -256,7 +261,7 @@ def texto_para_telegram(carga: dict, tipo: str) -> str:
 def teclado_alerta(id_alerta: str):
     """El teclado de botones del mensaje de alerta.
 
-    Se construye en `bot.py` y se devuelve aqui para que quien llama no tenga que
+    Se construye en `bot.py` y se devuelve aquí para que quien llama no tenga que
     importar `telegram`: `cola.py` solo necesita pasarselo a `Remitente.enviar`.
     """
     import bot
@@ -311,5 +316,16 @@ def procesar(topico: str, cuerpo: str, base) -> bool:
         registro.info("la alerta %s ya estaba en la cola", id_alerta)
         return False
 
-    registro.warning("ALERTA %s de %s encolada", tipo.upper(), id_alerta)
+    # `insertar_alerta` ya ha creado un envio por cada familiar registrado. Que no
+    # haya ninguno no es un error: el aviso queda pendiente a la espera de que se
+    # registre alguien, y en ese momento se le hace fan out
+    # (`db.fan_out_sin_destino`).
+    destinatarios = base.contar_familiares()
+    if destinatarios:
+        registro.warning("ALERTA %s de %s encolada para %d familiar(es)",
+                         tipo.upper(), id_alerta, destinatarios)
+    else:
+        registro.warning("ALERTA %s de %s encolada, pero no hay ningun familiar "
+                         "registrado: se queda esperando a que se registre uno",
+                         tipo.upper(), id_alerta)
     return True

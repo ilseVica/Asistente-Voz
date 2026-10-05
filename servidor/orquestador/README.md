@@ -14,9 +14,12 @@ enterarse.
   veces de lo mismo.
 - Junta las peticiones de ayuda que llegan seguidas (P05): dos en menos de un
   minuto son una sola alerta, no dos.
-- Guarda en SQLite cada alerta que acepta, con su estado y su próximo reintento.
+- Guarda en SQLite cada alerta que acepta, y **un envío por cada familiar
+  registrado** en el momento de encolarla, cada uno con su propio contador de
+  intentos.
 - Manda a Telegram lo que está pendiente, y reintenta con espera creciente si
-  falla. **Para siempre**: una alerta de gas no se descarta nunca.
+  falla. **Para siempre**: una alerta de gas no se descarta nunca. Y si a un
+  familiar no le sale, a los demás les sale igual.
 - Publica en `casa/sala/satelite/decir` cuando alguien pulsa «Ya lo atendí».
 - Purga sola: los `id` a los 7 días, las alertas a los 30.
 
@@ -44,13 +47,44 @@ El código vale 10 minutos, es de un solo uso, y aguanta cinco intentos. Se mand
 por un canal que no sea el chat del bot, que es justo lo que hay que hacer con un
 teléfono: se lo dices a la persona por teléfono, o se lo das en la mano.
 
-Al escribir `/registro <código>` en un chat privado, el bot guarda ese `chat_id`
-en `familia.json` y responde confirmando. A partir de ahí, ese chat es el único
-destino de las alertas y el único que puede pulsar «Ya lo atendí».
+Al escribir `/registro <código>` en un chat privado, el bot da de alta ese `chat_id`
+en la tabla `familiares` de SQLite y responde confirmando. **Cada chat que se
+registra se suma**: el segundo familiar no sustituye al primero, y a partir de ahí
+los dos reciben las alertas nuevas.
 
 Sin esto, cualquiera que encontrara el bot podía escribir `/registro` y quedarse
 con las alertas de gas de la casa. Que nadie pueda adivinar el código es la mitad
 del trabajo; que el código caduque y se pueda usar una sola vez, la otra mitad.
+
+Un chat **ya registrado** que escribe `/registro` no recibe nada. Ni siquiera un
+«ya estás registrado»: confirmar que el bot existe ya le dice a cualquiera que
+hable con él que este es el bot de la casa, y eso solo se le dice a quien ya está
+dentro.
+
+### Ver y dar de baja a los familiares
+
+La lista está en SQLite, no en un archivo, así que se pregunta a la base:
+
+```bash
+docker compose exec orquestador python -m registro familiares
+docker compose exec orquestador python -m registro baja CHAT_ID
+```
+
+`familiares` dice el `chat_id`, el nombre, cuándo se dio de alta y cuántos avisos
+le quedaron sin mandar. `baja` lo quita y **cancela lo que le quedaba por
+recibir**; los avisos que ya tenía entregados no se pueden deshacer, porque esa
+persona ya los vio.
+
+El `chat_id` entero sale por la consola del operador y **nunca por el log**: en
+los logs va enmascarado (`...2570`), porque `docker logs` lo lee cualquiera con
+acceso al servidor y un `chat_id` es el número de una persona.
+
+### `familia.json`
+
+Ya no se usa. Era el diseño de un solo familiar: un archivo con un `chat_id`. La
+primera vez que arranca esta versión, el familiar de ese archivo se copia a la
+tabla y el archivo se renombra a `familia.json.migrado` —se renombra, no se borra,
+por si el servicio se muere entre la copia y el renombrado—.
 
 ## Por qué la sesión MQTT es persistente
 
@@ -84,19 +118,37 @@ no lo son:
   de su sesión persistente, y se las entrega cuando vuelve. Eso es lo que se
   comprueba en la prueba P26.
 
-## Por qué hay dos tablas
+## Las tablas, y por qué el estado no está en `alertas`
 
-`ids_procesados` es la memoria de lo ya visto, y `alertas` es la cola de trabajo.
-Están separadas y **no hay llave foránea entre ellas**, a propósito:
+Hay cuatro tablas:
 
-- Los `id` se purgan a los 7 días. Si no lo fueran, serían el historial de lo que pasó en la casa.
-- Las alertas se purgan a los 30 días.
-- Con una llave foránea entre las dos, al purgar los `id` a los 7 días, la alerta
-  de hace diez días se perdería en cascada, o la purga fallaría. Ninguna de las
-  dos cosas sirve.
+| Tabla | Para qué |
+| --- | --- |
+| `ids_procesados` | la memoria de lo ya visto, para no avisar dos veces |
+| `familiares` | quién recibe las alertas |
+| `alertas` | qué pasó, con su JSON y sus horas |
+| `envios` | **quién lo tiene que recibir, y cómo va** |
 
-Ninguna necesita la relación: `ids_procesados` solo se consulta con
-`SELECT 1 WHERE id = ?`, y `alertas` se consulta por su propia clave primaria.
+La que manda es `envios`: una fila por `(alerta_id, chat_id)`, con su `intentos`, su
+`proximo_intento_en` y su `enviado_en`. **`alertas` ya no tiene una columna de
+estado**, y el estado sale de los envíos (`db.CASE_ESTADO`).
+
+La razón es que con dos familiares «el estado de la alerta» no existe como un
+dato: la misma alerta puede estar entregada a una persona y esperando a otra que
+tenía el móvil sin cobertura. Si el estado fuera una columna de `alertas`, habría
+que elegir cuál de los dos escribir, y la elección siempre pierde a alguien. Con
+una fila por persona, las dos cosas son verdad a la vez y `/alertas` puede decir
+«1 de 2», que es justo la información que hace falta cuando alguien pregunta por
+qué su hermano no ha visto el aviso.
+
+Por eso, un fallo de red **no descarta nada**: se anota en la fila del envío que
+falló y los demás siguen su camino. Lo único que se descarta es un `carga_json`
+ilegible, porque reintentar un texto que no se puede leer no lo arregla nunca.
+
+`ids_procesados` y `alertas` **no tienen llave foránea entre ellas**, a propósito:
+los `id` se purgan a los 7 días y las alertas a los 30, y con una llave foránea al
+purgar los `id` la alerta de hace diez días se perdería en cascada. Ninguna de las
+dos necesita la relación.
 
 ## Por qué el `id` no se valida con el formato del contrato
 
@@ -152,7 +204,9 @@ TELEGRAM_ACTIVAR_BOT=1    # sin esto el bot de /registro no arranca
 PANEL_URL=                 # vacío está bien: el panel no existe todavía
 ```
 
-`TELEGRAM_CHAT_ID` **no** hay que ponerlo: lo descubre el bot con `/registro`.
+`TELEGRAM_CHAT_ID` **no** hay que ponerlo: la lista la descubre el bot con
+`/registro`. Si se pone y la lista está vacía, se usa como atajo para dar de alta
+ese chat al arrancar, y no pasa nada más.
 
 ### Sin token
 
@@ -187,8 +241,16 @@ grupo del vecindario publicaría el teléfono de la persona que lo usa.
 
 | Comando | Qué hace |
 | --- | --- |
-| `/registro <código>` | Registra **este** chat con un código de un solo uso. Sin código, no hace nada |
+| `/registro <código>` | Suma **este** chat a la lista con un código de un solo uso, sin quitar a nadie |
 | `/alertas` | Cuántas hay pendientes, cuántas se mandaron y las últimas cinco |
+
+`/registro` sin código, o con un código que no sirve, pide el código. Y si el chat
+**ya está en la lista**, no se responde nada: el silencio es de ese chat, no global.
+
+`/alertas` contesta a **cualquier** familiar registrado, y a nadie más. Que el
+silencio de `/registro`, este permiso y el botón de «Ya lo atendí» pregunten lo
+mismo a la base es lo que evita que haya un chat que puede leer el historial pero
+no puede resolver, o al revés.
 
 Y en cada aviso de alerta hay un botón:
 
@@ -197,10 +259,10 @@ Y en cada aviso de alerta hay un botón:
 | **Ya lo atendí** | Marca la alerta como `resuelta`, reescribe el mensaje para que se vea como atendida, y avisa al satélite |
 
 Que `/registro` solo funcione con un código, y solo una vez, es lo que evita que
-cualquiera que escriba al bot pueda cambiar el destino de las alertas de gas. Por
-eso, cuando ya está registrado, no se responde nada: ni siquiera «ya estás
-registrado», porque confirmar que el bot existe ya le dice a cualquiera que hable
-con él que este es el bot de la casa.
+cualquiera que escriba al bot se meta en la lista de quien recibe los avisos de gas.
+Por eso, cuando ese chat ya está registrado, no se responde nada: ni siquiera «ya
+estás registrado», porque confirmar que el bot existe ya le dice a cualquiera que
+hable con él que este es el bot de la casa.
 
 **`/silencio` se quitó a propósito.** Hasta la versión anterior, el bot tenía un
 comando que ponía una hora de silencio y contestaba que las alertas «se siguen
@@ -223,7 +285,12 @@ Las esperas son 15, 30, 60, 120 y 300 segundos, y a partir de ahí siempre 300:
 
 **Una alerta no se descarta nunca.** Un fallo de red, un Telegram caído o el bot
 suspendido un mes dejan la alerta pendiente, y sale sola cuando el problema se
-arregla. La alternativa —dar la alerta por perdida tras cinco intentos— convierte
+arregla.
+
+Y cada familiar va por su cuenta: el móvil sin cobertura acumula sus intentos y
+sus esperas sin tocar los del otro. El caso que duele es el contrario —un teléfono
+que bloquea al bot se queda sin alertas para siempre— y por eso la baja de un
+familiar es una decisión del operador, no algo que el sistema decida solo. La alternativa —dar la alerta por perdida tras cinco intentos— convierte
 un problema temporal en una alarma que nadie recibe, que es exactamente el fallo
 que este servicio existe para que no pase.
 

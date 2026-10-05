@@ -3,9 +3,10 @@
 Abre el bot de comandos en el chat privado de la familia. Hay dos comandos y un
 botón:
 
-- `/registro <codigo>`: da de alta el chat al que se mandan las alertas.
+- `/registro <código>`: da de alta ese chat en la lista de quienes reciben las
+  alertas. Los que ya estaban siguen estándolo.
 - `/alertas`: cuántas hay en la cola, cuántas se han mandado y cuáles son las
-  últimas cinco.
+  últimas cinco. Contesta a cualquier familiar registrado.
 - Botón **«Ya lo atendí»**: marca la alerta como resuelta, edita el mensaje de
   Telegram para que el familiar vea uno solo con la hora, y publica en
   `casa/sala/satelite/decir` el aviso de que alguien ya está con el aviso (P17).
@@ -13,6 +14,50 @@ botón:
 Enviar las alertas vive en `telegram_cliente.py`. La separación es por ritmo: esto
 es un bucle de eventos de Telegram que corre en su propio hilo, y lo otro es una
 llamada de red que hace el trabajador de la cola.
+
+## Varios familiares, no uno
+
+La lista de quienes reciben las alertas está en la tabla `familiares` de SQLite
+(`db.py`). Cada chat que entra con un código válido se **suma**, y nadie sale por
+eso. `alertas.py` hace un envío por cada familiar registrado en el momento de
+encolar el aviso, y cada envío lleva su propio contador de intentos, que es lo que
+hace que el móvil sin cobertura no retrase el aviso para los demás.
+
+Este bot no lleva la lista: la pregunta "y este chat, ¿está registrado?" la hace
+siempre la base (`db.familiar_registrado`), y los tres sitios que la necesitan
+preguntan lo mismo. Que el silencio de `/registro`, el permiso de `/alertas` y el
+botón de «Ya lo atendí» consulten la misma definición es lo que evita un chat que
+puede leer el historial pero no resolver, o al revés.
+
+## El silencio de `/registro` es de un chat, no de todos
+
+Un chat ya registrado que escribe `/registro` no recibe nada. Ni siquiera un «ya
+estás registrado»: confirmar que el bot existe ya le dice a cualquiera que hable con
+él que este es el bot de la casa, y eso solo se le dice a quien ya está dentro.
+
+Un chat que **no** está registrado sí recibe respuesta, y necesita un código de un
+solo uso para darse de alta. Ahí está el otro lado: alguien que descubra el bot en
+una conversación privada puede confirmarle que existe. Es el precio de que un
+segundo familiar pueda darse de alta solo, que es lo que pide el plan (P20), y no
+se ve en la práctica: el código lo genera el operador del servidor y vale 10
+minutos.
+
+## Decisiones de seguridad
+
+**Solo chat privado.** En un grupo, el bot publicaría el número de teléfono de la
+persona en un canal donde lo pueden leer mil personas. `_es_privado()` descarta
+todo lo que no sea un chat de dos.
+
+**`/registro` acepta un código de un solo uso.** El código lo genera el operador
+con un comando del contenedor y vale 10 minutos. Sin eso, cualquier persona que
+encontrara el bot podría meterse en la lista de quien recibe los avisos de gas de
+una persona mayor.
+
+**Los `chat_id` no salen enteros al log.** Todo lo que se registra usa
+`db.enmascarar_chat`, que deja los últimos cuatro dígitos. Un `chat_id` de Telegram
+es el número de una persona y `docker logs` se lee con cualquiera que tenga acceso
+al servidor; el entero sale por la consola del operador (`python -m registro
+familiares`), que es donde está quien ya tiene el shell.
 
 ## `/silencio` se quitó
 
@@ -37,36 +82,6 @@ dos importan:
 
 El aviso de gas es lo único que este sistema manda a la familia, y no admite
 excepciones: ni por comando ni por botón.
-
-## Decisiones de seguridad
-
-**Solo chat privado.** En un grupo, el bot publicaría el número de teléfono de la
-persona en un canal donde lo pueden leer mil personas. `_es_privado()` descarta
-todo lo que no sea un chat de dos.
-
-**`/registro` solo acepta un código de un solo uso.** El código lo genera el
-operador con un comando del contenedor y vale 10 minutos. Sin eso, cualquier
-persona que encontrara el bot se podría dar de alta y cambiar el destino de los
-avisos de gas de una persona mayor.
-
-**`/registro` necesita un código de un solo uso, y el silencio es para el chat que
-ya está registrado.** Es lo que evita que cualquiera que escriba al bot pueda
-cambiar el destino de las alertas de gas. Y al chat ya registrado no se le
-responde nada, ni siquiera «ya estás registrado»: confirmar que el bot existe ya
-le dice a cualquiera que hable con él que este es el bot de la casa.
-
-Ese silencio es **solo para el chat registrado**. Un chat distinto sí puede
-registrarse, con un código nuevo, y pasa a ser el destino de las alertas: en una
-casa pueden ser dos los que llevan el teléfono. Antes el silencio era global y un
-segundo familiar no se podía registrar nunca sin borrar `familia.json` a mano.
-
-Por el mismo motivo, `/alertas` tampoco responde a un chat que no sea el
-registrado. Es una lectura del historial de la casa, y responder confirmaría que
-el bot existe y qué ha pasado en ella.
-
-El chat se guarda en disco (en `familia.json`, vía `registro.py`) y no solo en
-memoria, para que un reinicio del servicio no deje las alertas sin destino hasta
-que alguien escriba `/registro` otra vez. Y en un reinicio no hay nadie escribiendo.
 """
 
 import logging
@@ -78,6 +93,7 @@ from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
                           CommandHandler, ContextTypes)
 
 import config
+import db as db_modulo
 import registro as registro_modulo
 import telegram_cliente
 
@@ -112,14 +128,10 @@ def teclado_alerta(id_alerta: str) -> InlineKeyboardMarkup:
 
 
 class ClienteBot:
-    def __init__(self, base, remitente, familia=None, publicar=None):
+    def __init__(self, base, remitente, publicar=None):
         self.base = base
         self.remitente = remitente
-        self.familia = familia
         self.publicar = publicar
-        self.registrado = familia.esta_registrado() if familia else bool(
-            remitente.chat_id
-        )
         self.aplicacion = None
 
     def arrancar(self) -> None:
@@ -172,8 +184,9 @@ class ClienteBot:
             # descarta antes de mirarlo. La persona ve que su mensaje se envió y no
             # pasa nada, que es la forma más segura de perder el registro. Con
             # `False` el comando se atiende al arrancar. Lo único que se reprocesa son
-            # mensajes de más de una sesión, y aqui todos son de consulta o de alta:
-            # `/registro` es silencioso si ya está registrado y `/alertas` solo lee.
+            # mensajes de más de una sesión, y aquí todos son de consulta o de alta:
+            # `/registro` es silencioso si ese chat ya está registrado y `/alertas`
+            # solo lee.
             self.aplicacion.run_polling(
                 allowed_updates=Update.ALL_TYPES,
                 drop_pending_updates=False,
@@ -184,27 +197,24 @@ class ClienteBot:
             registro.exception("el bot de comandos no pudo arrancar: %s",
                                telegram_cliente.sanear(error))
 
-    # --- /registro ---------------------------------------------------------
-
     # --- Registro de familiares ---------------------------------------------
 
-    def _chat_registrado(self) -> str:
-        """El `chat_id` que hay ahora mismo como destino de las alertas."""
-        if self.familia is not None and self.familia.esta_registrado():
-            return str(self.familia.datos.get("chat_id") or "")
-        return str(self.remitente.chat_id or "")
+    def _es_registrado(self, update: Update) -> bool:
+        """¿Viene este comando de un chat que recibe las alertas?
 
-    def _es_el_registrado(self, update: Update) -> bool:
-        """¿Viene este comando del chat registrado?
+        Una sola pregunta, la de `db.familiar_registrado`, y la misma para los tres
+        sitios que la necesitan: el silencio de `/registro`, si `/alertas` contesta,
+        y si el botón «Ya lo atendí» se atiende.
 
-        `self.registrado` a secas no sirve: es un booleano, y dice «hay alguien
-        registrado», no «es esta persona». Con solo el booleano, cualquier chat
-        privado que hallara el bot podría leer el historial de alertas de la casa.
+        Que sea la misma no es casualidad. Con dos definiciones distintas de
+        "registrado" el sistema tiene un caso raro y muy raro de debug: un chat que
+        puede resolver una alerta pero no puede ver el historial, o que ve el
+        historial pero no puede darse de baja con `/registro`. Sale en una prueba
+        concreta y no se entiende mirando el bot.
         """
-        registrado = self._chat_registrado()
-        if not registrado:
+        if update.effective_chat is None:
             return False
-        return str(update.effective_chat.id) == registrado
+        return self.base.familiar_registrado(update.effective_chat.id)
 
     async def cmd_registro(self, update: Update,
                            contexto: ContextTypes.DEFAULT_TYPE) -> None:
@@ -212,103 +222,128 @@ class ClienteBot:
             return
 
         chat_id = str(update.effective_chat.id)
+        quien = db_modulo.enmascarar_chat(chat_id)
 
-        # El silencio NO es para todo el mundo, es para el chat que ya esta
-        # registrado. Ver el comentario de la clase: responder «ya estas
-        # registrado» confirma que este es el bot de la casa, y eso solo se le
-        # dice a quien ya esta dentro.
-        #
-        # Para un chat DISTINTO al registrado, `/registro` exige un codigo nuevo y
-        # si lo tiene, cambia el destino de las alertas. Antes el silencio era
-        # global y un segundo familiar no se podia registrar nunca: la casa se
-        # quedaba con un unico destino para siempre, y cambiarlo exigia borrar
-        # `familia.json` a mano desde el contenedor.
-        if self.registrado and chat_id == self._chat_registrado():
+        # El silencio es SOLO para este chat, y solo si ya esta en la lista. Los
+        # demas chats privados no reciben un «ya estas registrado»: eso confirmaria
+        # que este es el bot de la casa a cualquiera que lo encontrara. Un chat que
+        # no esta en la lista recibe el aviso de que necesita un código, y con un
+        # código nuevo se suma a la lista sin quitar a nadie.
+        if self.base.familiar_registrado(chat_id):
             return
-
-        otro_destino = ""
-        if self.registrado:
-            otro_destino = (
-                "Aviso: las alertas dejan de llegar al chat %s y pasan a este.\n\n"
-                % self._chat_registrado()
-            )
 
         argumentos = contexto.args or []
         if not argumentos:
+            ya_hay = self.base.contar_familiares()
+            plural = "persona" if ya_hay == 1 else "personas"
+            aviso = ""
+            if ya_hay:
+                aviso = ("\n\nAhora mismo hay %d %s registrado(s). Si te registras, "
+                         "recibireis las alertas los dos." % (ya_hay, plural))
             await update.effective_message.reply_text(
                 "Falta el codigo.\n\n"
                 "Escribe:\n"
                 "/registro CODIGO\n\n"
                 "El codigo te lo da quien instalo el asistente."
+                + aviso
             )
             return
 
         codigo = argumentos[0].strip()
         motivo = registro_modulo.comprobar_codigo(codigo)
         if motivo is not None:
-            registro.warning("/registro con un codigo que no sirve (%s)", motivo)
+            registro.warning("/registro desde el familiar %s con un codigo que no "
+                             "sirve (%s)", quien, motivo)
             await update.effective_message.reply_text(
                 "No se pudo registrar: %s.\n\nPide un codigo nuevo." % motivo
             )
             return
 
         nombre = " ".join(argumentos[1:]).strip()
-        self.registrado = True
-        self.remitente.chat_id = chat_id
-        self.remitente.disponible = bool(self.remitente.token)
+        nuevo = self.base.registrar_familiar(chat_id, nombre=nombre)
         registro_modulo.marcar_codigo_usado(codigo)
-        if self.familia is not None:
-            try:
-                self.familia.registrar(chat_id, nombre=nombre)
-            except OSError as error:
-                # Sin el archivo, el registro se pierde en el próximo reinicio.
-                # Se avisa, pero el chat de esta sesión sigue valiendo.
-                registro.error("el chat %s se registro en memoria pero no en "
-                               "disco: %s", chat_id, error)
-        registro.warning("chat %s registrado por /registro con un codigo de un "
-                         "solo uso%s", chat_id,
-                         " (cambia el destino anterior)" if otro_destino else "")
-        await update.effective_message.reply_text(
+
+        # Los avisos que se acumularon mientras no había a quien mandarlos salen
+        # ahora. Se hace aquí, y no al arrancar el servicio, porque entre el arranque
+        # y el registro puede entrar otra alerta: encolar el fan out justo despues
+        # de insertar al familiar es donde no puede quedar una alerta sin
+        # destinatario por un corte.
+        atrasados = self.base.fan_out_sin_destino(chat_id)
+
+        registro.warning("familiar %s dado de alta por /registro con un codigo de un "
+                         "solo uso%s", quien,
+                         "" if nuevo else " (ya estaba en la lista)")
+        if atrasados:
+            registro.warning("se encolaron %d aviso(s) que estaban esperando a que "
+                             "hubiera un familiar, ahora para %s",
+                             atrasados, quien)
+
+        respuesta = (
             "Listo. Desde ahora te aviso aqui si hay una alerta de gas o una "
             "peticion de ayuda.\n\n"
-            + otro_destino
-            + "Comando: /alertas, para ver el estado."
+            "Comando: /alertas, para ver el estado."
         )
+        if atrasados:
+            respuesta += ("\n\n%d aviso(s) que estaban esperando tambien van para "
+                          "ti." % atrasados)
+        if nuevo and self.base.contar_familiares() > 1:
+            respuesta += ("\n\nLas alertas siguientes las recibireis todos los que "
+                          "estais registrados.")
+        await update.effective_message.reply_text(respuesta)
 
     # --- /alertas ----------------------------------------------------------
 
     async def cmd_alertas(self, update: Update,
                           contexto: ContextTypes.DEFAULT_TYPE) -> None:
-        """El estado de las alertas, para el chat registrado.
+        """El estado de las alertas, para cualquier familiar registrado.
 
         Es una LECTURA del historial de la casa: qué hay pendiente, qué se mandó,
-        qué se resolvió, y las últimas cinco con su hora. No se puede filtrar por
-        chat porque solo hay una familia destinataria, así que cualquier chat
-        privado que hable con el bot vería el mismo historial.
+        qué se resolvió, y las últimas cinco con su hora.
 
-        Por eso, y a diferencia de `/registro`, aquí no se responde a un chat que
-        no sea el registrado: se queda en silencio. Si `/alertas` contestara a
-        cualquiera, bastaría con escribir `/alertas` a un bot sospechoso para que
-        confirmara que existe, que recibe alertas y cuándo, que es justo lo que el
-        silencio de `/registro` evita.
+        Contesta a **cualquier** familiar registrado, y a nadie más. Con dos
+        familiares, las dos cosas importan: si contestara solo al primero, el
+        segundo vería sus alertas llegar y no podría preguntarle al bot qué pasó;
+        y si contestara a cualquiera, bastaría con escribir `/alertas` a un bot
+        sospechoso para confirmar que existe y qué ha pasado en la casa. Lo
+        primero es una molestia, lo segundo es una fuga.
+
+        Que la misma pregunta sea la del silencio de `/registro` y la del botón de
+        «Ya lo atendí» es lo que hace que "estar registrado" signifique una sola
+        cosa en todo el bot.
         """
         if not await self._es_privado(update):
             return
-        if not self._es_el_registrado(update):
+        if not self._es_registrado(update):
             return
         conteo = self.base.contar_por_estado()
         recientes = self.base.listar_recientes(limite=5)
         lineas = ["Estado de las alertas:", ""]
         for estado in ("pendiente", "enviada", "resuelta", "descartada"):
             lineas.append("  %s: %d" % (estado, conteo.get(estado, 0)))
+
+        #
+        # Con más de un familiar, el estado de un aviso tiene una parte que antes no
+        # existía: cuántas copias salieron y cuántas no. "Enviada" con 1 de 2 es
+        # información distinta de "enviada" con 2 de 2, y es justo el caso que hace
+        # falta cuando un móvil lleva sin cobertura: el familiar ve que le llegó,
+        # el otro no, y `/alertas` lo dice en las dos casas.
+        #
+        if self.base.contar_familiares() > 1:
+            lineas.append("")
+            lineas.append("Hay %d personas registradas." % self.base.contar_familiares())
+
         if recientes:
             lineas.append("")
             lineas.append("Ultimas cinco:")
             for fila in recientes:
-                lineas.append("  %s  %s  %s" % (
+                destinos = ""
+                if fila["enviados"] or fila["sin_mandar"]:
+                    destinos = "  (%d de %d)" % (fila["enviados"],
+                                                 fila["enviados"] + fila["sin_mandar"])
+                lineas.append("  %s  %s  %s%s" % (
                     time.strftime("%Y-%m-%d %H:%M",
                                   time.localtime(fila["creado_en"])),
-                    fila["tipo"], fila["estado"]))
+                    fila["tipo"], fila["estado"], destinos))
         else:
             lineas.append("")
             lineas.append("No hay ninguna alerta todavia.")
@@ -351,8 +386,11 @@ class ClienteBot:
                                   show_alert=True)
             return
 
-        # Que el que pulsó sea el chat registrado. Un bot de la casa no va a
-        # resolver alertas desde un grupo o desde una cuenta que no es la familia.
+        # Que el que pulsó sea un familiar registrado. Un bot de la casa no va a
+        # resolver alertas desde un grupo ni desde una cuenta que no está en la
+        # lista, aunque el mensaje le haya llegado: alguien a quien se le dio de
+        # baja puede tener el aviso viejo abierto en el móvil, y su pulsación ya no
+        # cuenta.
         #
         # El chat sale de `update.effective_chat`, NO de `consulta.effective_chat`.
         # `effective_chat` es una propiedad de `Update`, que sabe sacarlo de un
@@ -361,12 +399,13 @@ class ClienteBot:
         # attribute 'effective_chat'». Es lo que pasaba al pulsar el botón: la alerta
         # se quedaba sin resolver y el familiar no veía ningún cambio en el chat.
         chat_id = update.effective_chat.id if update.effective_chat else None
-        if chat_id is None or str(chat_id) != str(self.remitente.chat_id):
+        if chat_id is None or not self.base.familiar_registrado(chat_id):
             registro.warning("el boton 'Ya lo atendi' de la alerta %s se pulso desde "
-                             "un chat que no es el registrado; se ignora", id_alerta)
-            await consulta.answer("Este bot solo acepta el aviso de quien esta "
-                                  "registrado.", show_alert=True)
+                             "un chat que no esta registrado; se ignora", id_alerta)
+            await consulta.answer("Este bot solo acepta el aviso de los familiares "
+                                  "registrados.", show_alert=True)
             return
+        chat_id = str(chat_id)
 
         ahora = int(time.time())
         fresca = self.base.marcar_resuelta(id_alerta, ahora)
@@ -380,8 +419,12 @@ class ClienteBot:
             % (tipo, time.strftime("%H:%M:%S", time.localtime(ahora)), id_alerta)
         )
 
+        # La edicion va al chat de quien pulso, que es el único sitio donde esta el
+        # mensaje. Con dos familiares, editar en un chat por defecto dejaria al que
+        # pulso viendo el aviso viejo con el boton, y lo dejaria pulsando otra vez.
         try:
-            await self.remitente.editar_futuro(consulta.message, texto, teclado=None)
+            await self.remitente.editar_futuro(consulta.message, texto,
+                                              teclado=None, chat_id=chat_id)
         except Exception as error:  # noqa: BLE001
             # Si el mensaje es demasiado viejo para editarlo, la alerta queda
             # resuelta igual en la base y el familiar tiene la respuesta por
@@ -400,8 +443,8 @@ class ClienteBot:
         self._avisar_al_satelite(tipo, ahora)
 
         registro.warning("alerta %s (%s) marcada como resuelta por el boton 'Ya lo "
-                         "atendi' del chat %s%s",
-                         id_alerta, tipo, chat_id,
+                         "atendi' del familiar %s%s",
+                         id_alerta, tipo, db_modulo.enmascarar_chat(chat_id),
                          "" if fresca else " (ya estaba resuelta)")
 
     def _avisar_al_satelite(self, tipo: str, ahora: int) -> None:

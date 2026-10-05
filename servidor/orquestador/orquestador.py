@@ -111,20 +111,39 @@ def main() -> int:
     registro_log.info("base de datos lista en %s", base.ruta)
 
     carpeta_datos = os.path.dirname(config.RUTA_DB)
-    familia = registro.RegistroFamilia(os.path.join(carpeta_datos, "familia.json"))
-    if familia.esta_registrado():
-        registro_log.info("hay una familia registrada; las alertas van ahi")
+
+    # La migración del familiar único. `db.BaseDatos()` ya ha repartido la cola vieja
+    # en la tabla de envios, y para hacerlo necesitaba saber quien era el familiar de
+    # entonces, que es lo que lee `familia.json`. Ahora ese mismo familiar se copia a
+    # la tabla y el archivo se renombra, para que la lista de verdad sea la tabla y
+    # no un archivo con un único `chat_id`.
+    registro.migrar_familia_legacy(base)
+
+    # Atajo de instalación en frio: si hay un `TELEGRAM_CHAT_ID` en el entorno y no
+    # hay ningun familiar, ese chat se da de alta. Es la unicavia de registrar a
+    # alguien sin pasar por el bot, y existe desde antes: `Remitente` lo usaba como
+    # destino por defecto. Con el bot funcionando no hace falta, y por eso sigue
+    # siendo solo un atajo.
+    if config.TELEGRAM_CHAT_ID and base.contar_familiares() == 0:
+        base.registrar_familiar(config.TELEGRAM_CHAT_ID, nombre="")
+        registro_log.info("familiar dado de alta desde TELEGRAM_CHAT_ID (%s)",
+                          db.enmascarar_chat(config.TELEGRAM_CHAT_ID))
+
+    if base.contar_familiares():
+        registro_log.info("familiares registrados: %d",
+                          base.contar_familiares())
+    else:
+        registro_log.info("no hay ningun familiar registrado; las alertas se guardan "
+                          "y salen en cuanto uno se registra")
 
     # Los codigos de registro se cargan una vez al arrancar. El bot de comandos vive
-    # en este proceso, asi que de ahi en adelante los tiene en memoria; el archivo
-    # es la fuente de verdad y lo escribe el comando `python -m registro codigo`,
+    # en este proceso, asi que de ahí en adelante los tiene en memoria; el archivo
+    # es la fuente de verdad y lo escribe el comando `python -m registro código`,
     # que corre en otro proceso.
     registro.cargar_codigos(os.path.join(carpeta_datos, "codigos.json"))
     registro_log.info("codigos de registro cargados: %d", len(registro.CODIGOS))
 
-    remitente = telegram_cliente.Remitente(
-        chat_id=familia.datos.get("chat_id") or config.TELEGRAM_CHAT_ID
-    )
+    remitente = telegram_cliente.Remitente()
     if remitente.token:
         registro_log.info("token de Telegram presente")
         if remitente.verificar():
@@ -138,7 +157,7 @@ def main() -> int:
                            ".env del servidor y reinicia el servicio.")
 
     # `alertas.procesar` necesita la base para deduplicar, y el cliente MQTT solo
-    # recibe dos argumentos (el topico y el cuerpo). Se pasa una funcion
+    # recibe dos argumentos (el topico y el cuerpo). Se pasa una función
     # intermedia que cierre la base, en vez de cambiar la firma de una de las dos:
     # el cliente no tiene por que saber de bases de datos, y el procesador no
     # tiene por que saber de MQTT.
@@ -161,7 +180,7 @@ def main() -> int:
     # TELEGRAM_ACTIVAR_BOT=0 la rama no se ejecutaba y el bug no se veía.
     cliente_bot = None
     if config.TELEGRAM_ACTIVAR_BOT:
-        cliente_bot = bot.ClienteBot(base, remitente, familia, cliente.publicar)
+        cliente_bot = bot.ClienteBot(base, remitente, cliente.publicar)
 
     try:
         cliente.conectar()
@@ -191,7 +210,7 @@ def main() -> int:
     finally:
         registro_log.info("parando...")
         # En este orden, y no en el del `try`: primero se deja de aceptar trabajo
-        # nuevo, despues se vacia la cola, y al final se cierra el almacen.
+        # nuevo, despues se vacía la cola, y al final se cierra el almacen.
         try:
             cliente.desconectar()
             trabajador.detener()

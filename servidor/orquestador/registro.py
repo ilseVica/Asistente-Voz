@@ -1,30 +1,22 @@
 """El registro de la familia.
 
-quién recibe las alertas, y desde cuándo se sabe.
+Quién recibe las alertas, y desde cuándo se sabe.
 
-Es un archivo aparte porque es lo único de este servicio que cambia de estado
-durante la vida del proceso, y porque tiene que quedar escrito en disco: si el
-servicio se reinicia, el chat registrado tiene que seguir siendo el mismo. Si
-estuviera solo en memoria, cada reinicio dejaría las alertas sin destino hasta
-que alguien escribiera `/registro` otra vez, y en un reinicio no hay nadie
-escribiendo.
+La lista de familiares vive en SQLite, en la tabla `familiares`, y no en este
+archivo. La razón es que son varios: el plan-approved es que cada chat que se
+registra con un código válido se suma a la lista, sin quitar a los anteriores. Un
+archivo con un único `chat_id` era el diseño de "un familiar", y en cuanto hay dos
+hay que migrarlo; la tabla ya es el sitio donde vivir, porque es donde vive el
+historial y porque `alertas.py` necesita los familiares en el mismo `INSERT` que
+encola un aviso.
 
-Un solo archivo, porque un solo archivo es lo que hay: una persona mayor, sus
-familiares. No hay un sistema de usuarios ni de permisos, y esta parte del plan
-tampoco lo pide. Si algún día lo hubiera, esta clase es el sitio donde empieza.
-
-`codigo` es un código de un solo uso, de 10 minutos, para confirmar el número.
-Está en el contenedor (`python -m registro codigo`) y luego en Telegram, no al revés:
-al revés, el bot de Telegram queda verificable por cualquiera que le escriba,
-porque no hay nada que comprobar.
-
-Los códigos viven en un archivo aparte, `codigos.json`, y no en SQLite. Son de un
-solo uso y de 10 minutos, así que un archivo es suficiente y se puede leer y borrar
-a mano. Vive en el mismo directorio que `familia.json` porque los dos tienen que
-sobrevivir a un reinicio del servicio.
+Lo que sí sigue en este archivo son los **códigos** de registro, en
+`codigos.json`: son de un solo uso y de 10 minutos, así que un archivo es
+suficiente y se puede leer y borrar a mano. Vive en el mismo directorio que la base
+porque los dos tienen que sobrevivir a un reinicio del servicio.
 
 **El archivo manda, la memoria no.** El comando que genera un código
-(`docker compose exec orquestador python -m registro codigo`) corre en un proceso
+(`docker compose exec orquestador python -m registro código`) corre en un proceso
 distinto del servicio, y el bot de Telegram vive en el proceso del servicio. Si el
 servicio cargara los códigos solo al arrancar, un código generado después sería
 invisible para el bot hasta el siguiente reinicio, y `/registro` respondería «ese
@@ -38,6 +30,19 @@ pide «código de un solo uso, válido 10 minutos, con límite de intentos», y 
 límite de intentos se cuenta por código. Un código que se adivina es un código que
 se genera otro, así que el límite no protege de un atacante de verdad: protege de
 que alguien pruebe cinco veces el código que le sobra de un mensaje de Telegram.
+
+## Los dos comandos que no son `código`
+
+    docker compose exec orquestador python -m registro familiares
+    docker compose exec orquestador python -m registro baja CHAT_ID
+
+`familiares` lista los chats registrados, con su nombre y su fecha. `baja` quita
+uno y cancela lo que le quedaba por recibir.
+
+Los dos escriben a la consola del operador y NO al log, por la misma razón que el
+código: un `chat_id` de Telegram es el número de una persona, y `docker logs` se lee
+con cualquiera que tenga acceso al servidor. El `docker compose exec` lo ve quien
+está delante del servidor, que es quien tiene el shell del servidor.
 """
 
 import json
@@ -268,78 +273,249 @@ def generar_codigo(ruta: str) -> str:
     return codigo
 
 
-class RegistroFamilia:
-    def __init__(self, ruta: str):
-        self.ruta = ruta
-        self.datos = {"chat_id": "", "nombre": "", "registrado_en": None}
-        self._cargar()
+def leer_familia_legacy(carpeta: str = None) -> str:
+    """El `chat_id` del `familia.json` viejo, o `None`.
 
-    def _cargar(self) -> None:
+    Solo lo usa la migración de `db.py`. `familia.json` era el diseño de un solo
+    familiar: un archivo con un `chat_id`. Con la lista de familiares en SQLite, ese
+    archivo ya no manda sobre nada, pero su contenido es el único registro del
+    familiar que ya estaba dado de alta, y sin copiarlo sus alertas pasan a estar
+    pendientes sin nadie a quien mandárselas.
+
+    `carpeta` es dónde está ese `familia.json`, y por qué se pasa en vez de sacarlo
+    de la configuración: quien pregunta es la migración del esquema, que puede estar
+    migrando la base que se le ha pasado sin que sea `config.RUTA_DB` (una copia de
+    una prueba, una base de un servicio en otro directorio, la de otro puerto). Si
+    la ruta se sacara de `config`, la migración miraría el `familia.json` de la
+    instalación de al lado y no encontraría el suyo. En el servidor, donde las dos
+    rutas coinciden, funciona igual; es en cuanto se migra una base que no es la de
+    `config` cuando se nota, y entonces el familiar de verdad no se copia y sus
+    alertas quedan huerfanas. Por defecto se usa `config.RUTA_DB`, que es lo que
+    necesita `migrar_familia_legacy`.
+
+    Se lee sin comprobaciones extra: si el archivo no existe, no se pudo leer, o no
+    trae un `chat_id`, se devuelve `None` y la migración sigue. La migración no
+    puede fallar por un archivo huerfano: un `familia.json` corrupto no puede impedir
+    que el servicio arranque y reciba alertas.
+
+    El archivo NO se borra aquí. Lo renombra `migrar_familia_legacy`, despues de
+    copiar la fila, para que el archivo bueno siga en el disco hasta que la copia
+    este confirmada, y para que la lectura de este archivo no se repita en cada
+    arranque.
+    """
+    if carpeta is None:
+        import config
+
+        carpeta = os.path.dirname(config.RUTA_DB)
+    ruta = os.path.join(carpeta, "familia.json")
+    try:
+        with open(ruta, encoding="utf-8") as archivo:
+            datos = json.load(archivo)
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+    if not isinstance(datos, dict):
+        return None
+    chat_id = datos.get("chat_id")
+    if chat_id in (None, ""):
+        return None
+    return str(chat_id)
+
+
+def carpeta_legacy(base) -> str:
+    """La carpeta donde vive el `familia.json` de ESTA base.
+
+    Se saca de `base.ruta`, la base que se ha abierto, y no de `config.RUTA_DB`. En
+    el servidor son la misma carpeta, asi que la distinción no se ve; en cuanto se
+    abre una base que no es la de `config` (la copia de una prueba, la de otro
+    servicio) leer y renombrar el `familia.json` de `config` sería buscar el
+    registro de otra gente: o no aparece y el familiar de verdad no se copia, o
+    aparece y se renombra el archivo ajeno.
+
+    Se devuelve vacía si la ruta de la base no tiene carpeta (una base en el
+    directorio actual), que es lo mismo que decir «el archivo esta aqui».
+    """
+    return os.path.dirname(getattr(base, "ruta", "") or "")
+
+
+def migrar_familia_legacy(base) -> None:
+    """Deja el familiar del `familia.json` viejo en la tabla y aparta el archivo.
+
+    Se llama una vez al arrancar el servicio. Son dos pasos y conviene separarlos
+    porque los hace quien puede:
+
+    **La copia la hace la migración del esquema**, dentro de la misma transacción
+    que reparte los envíos de la cola vieja, y para eso necesita saber quién era el
+    familiar de entonces: eso es lo que lee `familia.json`. Al terminar, la tabla ya
+    tiene al familiar.
+
+    **El renombrado lo hace esta función**, y por eso no puede depender de que la
+    tabla esté vacía. Esa es la trampa en la que se cae fácil: si `migrar_familia_legacy`
+    empieza con «si ya hay familiares, no hay nada que migrar», en una instalación
+    que viene del diseño de un solo destino la tabla *nunca* esta vacía (la acaba de
+    rellenar la migración) y el `return` se come también el renombrado. Resultado:
+    la lista está en SQLite, que es lo importante, pero `familia.json` se queda ahí
+    para siempre, con un `chat_id` que ya nadie lee y que parece la fuente de verdad.
+
+    Así que la pregunta que hace esta función no es «¿hay algo que migrar?» sino
+    «¿queda el archivo viejo?». Si queda, se assure de que su familiar esté en la
+    tabla (el `INSERT OR IGNORE` no duplica nada) y luego aparta el archivo.
+
+    Renombrar a `familia.json.migrado`, en vez de borrar, es a propósito. Si el
+    servicio se muere entre la copia y el renombrado, el archivo sigue ahí para el
+    siguiente arranque, y como el alta es idempotente no pasa nada. Si se borrara y
+    la copia no llegara a confirmar, el familiar registrado se perdía sin ninguna
+    segunda copia.
+    """
+    chat_id = leer_familia_legacy(carpeta_legacy(base))
+    if chat_id is None:
+        return
+
+    ruta = os.path.join(carpeta_legacy(base), "familia.json")
+    destino = ruta + ".migrado"
+
+    if not base.familiar_registrado(chat_id):
         try:
-            with open(self.ruta, encoding="utf-8") as archivo:
-                self.datos = json.load(archivo)
-        except FileNotFoundError:
-            registro.info("todavia no hay nadie registrado (%s no existe)",
-                          self.ruta)
-        except (OSError, ValueError) as error:
-            # Un archivo corrupto no puede tumbar el servicio: se avisa y se
-            # empieza de cero. Perder el registro es malo; no arrancar es peor.
-            registro.error("no se pudo leer %s (%s); se empieza vacio",
-                           self.ruta, error)
+            base.registrar_familiar(chat_id, nombre="")
+        except Exception as error:  # noqa: BLE001
+            registro.error("no se pudo migrar el familiar de familia.json: %s", error)
+            return
 
-    def _guardar(self) -> None:
-        carpeta = os.path.dirname(self.ruta)
-        if carpeta:
-            os.makedirs(carpeta, exist_ok=True)
-        temporal = self.ruta + ".tmp"
-        # Se escribe a un temporal y se renombra. Si el proceso se muere a mitad,
-        # el archivo bueno sigue intacto: un `write` directo puede dejar un JSON
-        # cortado por la mitad, y un JSON cortado no se lee.
-        with open(temporal, "w", encoding="utf-8") as archivo:
-            json.dump(self.datos, archivo, indent=2, ensure_ascii=False)
-            archivo.write("\n")
-        os.replace(temporal, self.ruta)
-
-    def esta_registrado(self) -> bool:
-        return bool(self.datos.get("chat_id"))
-
-    def registrar(self, chat_id: str, nombre: str = "") -> None:
-        self.datos = {
-            "chat_id": str(chat_id),
-            "nombre": nombre,
-            "registrado_en": int(time.time()),
-        }
-        self._guardar()
-        registro.warning("familia registrada")
+    try:
+        os.replace(ruta, destino)
+    except OSError as error:
+        # El familiar ya esta en la tabla, que es lo importante. Si el archivo no se
+        # puede renombrar se avisa y se deja: el próximo arranque lo intentara otra
+        # vez, y mientras tanto el archivo no molesta porque la tabla manda.
+        registro.warning("el familiar de familia.json ya esta en la tabla pero el "
+                         "archivo no se pudo renombrar a %s: %s",
+                         os.path.basename(destino), error)
+    else:
+        registro.info("el familiar de familia.json paso a la tabla de familiares; "
+                      "el archivo quedo en %s", os.path.basename(destino))
 
 
-# --- Comando del contenedor ------------------------------------------------
+# --- Comandos del contenedor ------------------------------------------------
 #
 #   docker compose exec orquestador python -m registro codigo
+#   docker compose exec orquestador python -m registro familiares
+#   docker compose exec orquestador python -m registro baja CHAT_ID
 #
-# Imprime el código en la consola del operador y no lo escribe en ningún log.
-# Está en el contenedor y no en el panel porque el panel todavía no existe, y
-# porque quien genera el código es el que instala el sistema, que ya está en el
-# servidor.
+# Imprimen a la consola del operador y no escriben nada en el log. El código de
+# registro es lo que hay que proteger (quien lo lea puede darse de alta como
+# familiar), y un `chat_id` es el número de una persona. Los dos van a la consola,
+# que es donde está quien ya tiene el shell del servidor.
+
+USO = """Uso:
+  python -m registro código           imprime un código de un solo uso
+  python -m registro familiares       lista los familiares registrados
+  python -m registro baja CHAT_ID     da de baja a un familiar
+"""
+
+
+def _abrir_base():
+    """Abre la base. Solo la necesitan `familiares` y `baja`.
+
+    `código` no la abre, y no por ahorrar tiempo: abrir la base crea la carpeta y
+    ejecuta el esquema, y un comando que solo genera un código no necesita tocar la
+    base. En un servidor recien instalado, generar el primer código no debería crear
+    archivos.
+    """
+    import db
+
+    return db.BaseDatos()
+
+
+def _listar_familiares(base) -> int:
+    familias = base.familiares_registrados()
+    if not familias:
+        print("No hay ningun familiar registrado.")
+        print("Las alertas se encolan y no se mandan hasta que uno se registre.")
+        return 0
+
+    print("Familiares registrados: %d" % len(familias))
+    print()
+    for fila in familias:
+        nombre = fila["nombre"] or "(sin nombre)"
+        fecha = time.strftime("%Y-%m-%d %H:%M", time.localtime(fila["registrado_en"]))
+        pendientes = base.envios_sin_mandar_de(fila["chat_id"])
+        print("  chat_id   %s" % fila["chat_id"])
+        print("  nombre    %s" % nombre)
+        print("  alta      %s" % fecha)
+        print("  sin mandar %d" % pendientes)
+        print()
+    print("Para dar de baja a uno:")
+    print("  python -m registro baja CHAT_ID")
+    return 0
+
+
+def _dar_de_baja(base, chat_id: str) -> int:
+    chat_id = chat_id.strip()
+    if not chat_id:
+        print("Falta el chat_id. Mira la lista con:", file=sys.stderr)
+        print("  python -m registro familiares", file=sys.stderr)
+        return 2
+
+    if not base.familiar_registrado(chat_id):
+        print("Ese chat_id no esta registrado. No hay nada que dar de baja.")
+        return 1
+
+    pendientes = base.envios_sin_mandar_de(chat_id)
+    base.dar_de_baja(chat_id)
+
+    # El log lleva el chat enmascarado y la consola el entero. La razon es la misma
+    # que con el código: `docker logs` lo lee cualquiera con acceso al servidor, y un
+    # chat_id es el número de una persona. La consola la ve quien ya tiene el shell.
+    from db import enmascarar_chat
+
+    registro.warning("familiar %s dado de baja desde la consola del operador; %d "
+                     "aviso(s) sin mandar cancelados",
+                     enmascarar_chat(chat_id), pendientes)
+    print("Familiar %s dado de baja." % chat_id)
+    if pendientes:
+        print("Se cancelaron %d aviso(s) que no le habian llegado." % pendientes)
+        print("Los avisos ya enviados a ese chat no se pueden deshacer: esa persona")
+        print("ya los vio.")
+    return 0
 
 
 def main(argumentos) -> int:
-    import config
-
-    if not argumentos or argumentos[0] != "codigo":
-        print("Uso: python -m registro codigo", file=sys.stderr)
-        print("  Imprime un codigo de un solo uso, valido %d minutos." % MINUTOS_CODIGO,
-              file=sys.stderr)
+    if not argumentos:
+        print(USO, file=sys.stderr)
         return 2
 
-    codigo = generar_codigo(_ruta_por_defecto())
-    # A la consola, no al log: el `docker logs` lo lee cualquiera que pueda ver el
-    # contenedor, y un código de registro en un log es un código de registro
-    # filtrado.
-    print("Codigo de registro para Telegram: %s" % codigo)
-    print("Valido %d minutos, de un solo uso." % MINUTOS_CODIGO)
-    print("Enviarlo al bot con:  /registro %s" % codigo)
-    return 0
+    orden = argumentos[0]
+
+    if orden == "codigo":
+        codigo = generar_codigo(_ruta_por_defecto())
+        # A la consola, no al log: el `docker logs` lo lee cualquiera que pueda ver el
+        # contenedor, y un código de registro en un log es un código de registro
+        # filtrado.
+        print("Codigo de registro para Telegram: %s" % codigo)
+        print("Valido %d minutos, de un solo uso." % MINUTOS_CODIGO)
+        print("Enviarlo al bot con:  /registro %s" % codigo)
+        return 0
+
+    if orden == "familiares":
+        base = _abrir_base()
+        try:
+            return _listar_familiares(base)
+        finally:
+            base.cerrar()
+
+    if orden == "baja":
+        if len(argumentos) < 2:
+            print("Falta el chat_id que se quiere dar de baja.", file=sys.stderr)
+            print(USO, file=sys.stderr)
+            return 2
+        base = _abrir_base()
+        try:
+            return _dar_de_baja(base, argumentos[1])
+        finally:
+            base.cerrar()
+
+    print("No se '%s'." % orden, file=sys.stderr)
+    print(USO, file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

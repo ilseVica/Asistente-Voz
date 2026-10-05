@@ -9,39 +9,61 @@ diez segundos el broker estaría encolando alertas sin que nadie las leyera.
 El hilo es un bucle simple, sin framework de tareas ni planificador. Tres estados
 y un `time.sleep` los cubren:
 
-1. Hay alertas pendientes cuyo próximo intento ya venció: se manda una.
+1. Hay envíos pendientes cuyo próximo intento ya venció: se manda uno.
 2. Telegram falló: se anota el error y se dice cuándo volver a intentarlo.
 3. No hay nada que hacer: se duerme `PAUSA_TRABAJADOR_S` segundos.
 
-**Una alerta nunca se descarta por un fallo de red.** Se reintenta para siempre,
-con la escalera 15, 30, 60, 120 y 300 segundos, y a partir de ahí cada 300
-segundos. La versión anterior gastaba cinco intentos y marcaba la alerta como
-`descartada`, con lo que un corte de Internet de cinco minutos convertía un aviso
-de gas en algo que no se mandaba nunca: la familia se enteraba de que no le habían
-avisado, que es peor que un aviso tardío.
+## La unidad de trabajo es un envío, no una alerta
+
+Esto es lo que cambió con los familiares múltiples, y es la decisión que sostiene
+todo lo demás: el bucle toma una fila de `envios`, que es **un aviso con un familiar de destino**, y no una fila de `alertas`, que sería un aviso sin destinatario.
+
+La diferencia se ve en el fallo. Si un familiar tiene el móvil sin cobertura, su
+envío falla y se reintenta con su propia escalera de esperas, mientras el envío del
+otro familiar sale en el mismo bucle. Con los reintentos en la tabla de alertas, el
+móvil apagado haría esperar a cada aviso nuevo hasta que el otro lo encendiera, y
+un aviso de gas se retrasaría por el teléfono de una persona que no es la que está
+en casa.
+
+Cada reintento sube solo el contador de esa fila: los dos familiares llevan la
+cuenta por separado, y el que va bien no va a arrastrar al que va mal.
+
+**Un envío nunca se descarta por un fallo de red.** Se reintenta para siempre, con
+la escalera 15, 30, 60, 120 y 300 segundos, y a partir de ahí cada 300 segundos. La
+versión anterior gastaba cinco intentos y marcaba la alerta como `descartada`, con
+lo que un corte de Internet de cinco minutos convertía un aviso de gas en algo que
+no se mandaba nunca: la familia se enteraba de que no le habían avisado, que es
+peor que un aviso tardío.
 
 La contrapartida de reintentar para siempre es que nada avisa de que la cola está
-atascada, así que el bucle revisa una vez por hora si hay alertas con más de 24 h
-pendientes y, si las hay, escribe una línea de ERROR por cada una. Un fallo de red
+atascada, así que el bucle revisa una vez por hora si hay envíos con más de 24 h
+pendientes y, si los hay, escribe una línea de ERROR por cada uno. Un fallo de red
 tampoco se escribe nunca en crudo: `telegram_cliente.sanear` quita el token de
 cualquier mensaje de error antes de que llegue al log o a la base.
 
 Sobre el riesgo de doble envío, que es real y conocido:
 
-Si el proceso muere **entre** la respuesta de Telegram y el `UPDATE` que marca la
-alerta como enviada, el siguiente arranque la vuelve a encontrar pendiente y la
+Si el proceso muere **entre** la respuesta de Telegram y el `UPDATE` que marca el
+envío como enviado, el siguiente arranque lo vuelve a encontrar pendiente y lo
 manda otra vez. La ventana es de unos cientos de milisegundos: el tiempo entre
 que Telegram responde "enviado" y el siguiente `commit` de SQLite.
 
 No se puede eliminar del todo, y conviene entender por qué. Telegram no tiene
-idempotencia: no hay forma de mandarle un `id` y que diga "ya te lo mandé". Y no
-se puede marcar como enviada *antes* de mandar, porque entonces un fallo de red
-dejaría la alerta marcada como enviada sin haber llegado nunca a la familia, que
+idempotencia: no hay forma de mandarle un `id` y que diga "ya te lo mandé". Y no se
+puede marcar como enviado *antes* de mandar, porque entonces un fallo de red
+dejaría el envío marcado como enviado sin haber llegado nunca a la familia, que
 es el fallo que más duele: un aviso de gas que el sistema cree haber enviado y
 que nadie ha visto.
 
 Se eligió el lado malo a propósito: es preferible que la familia reciba dos
 avisos de gas a que no reciba ninguno.
+
+## Los chats no salen enteros al log
+
+Cada línea dice a qué familiar va el envío con `db.enmascarar_chat`, que deja los
+últimos cuatro dígitos. Con dos familiares eso basta para distinguirlos, y con uno
+basta para decir que se registró y cuándo, sin publicar el número de una persona
+en algo que se lee con cualquiera que tenga el shell del servidor.
 """
 
 import json
@@ -50,6 +72,7 @@ import threading
 import time
 
 import config
+import db as db_modulo
 import alertas
 import telegram_cliente
 from telegram_cliente import TelegramNoConfigurado
@@ -64,11 +87,15 @@ class TrabajadorTelegram:
         self.hilo = None
         self.parar = threading.Event()
         self.ultimo_aviso = 0.0
-        # Las alertas que ya se han avisado por falta de token o de chat. Sin este
-        # registro, cada alerta sin destino escribe una línea de ERROR cada
+        # Los envíos que ya se han avisado por falta de token o de destino. Sin este
+        # registro, cada envío sin destino escribe una línea de ERROR cada
         # `PAUSA_TRABAJADOR_S * 10`, que con cuatro alertas de prueba pendientes son
         # casi cinco líneas por minuto, todas iguales. El error de fondo ya está
         # dicho una vez; lo que se repite no aporta nada y tapa el resto del log.
+        #
+        # La clave es (id_alerta, chat_id) y no solo el id: con dos familiares, si
+        # uno no tiene destino y el otro sí, avisar solo por id_alerta callaría el
+        # error del primero cada vez que el segundo tuviera un problema.
         self.sin_destino_avisados = set()
 
     def arrancar(self) -> None:
@@ -99,15 +126,25 @@ class TrabajadorTelegram:
                 self.parar.wait(config.PAUSA_TRABAJADOR_S)
 
     def _intentar_uno(self) -> bool:
-        """Manda una alerta si hay alguna que toque. Devuelve si hubo trabajo."""
-        pendientes = self.base.tomar_pendientes(limite=1)
+        """Manda un envío si hay alguno que toque. Devuelve si hubo trabajo.
+
+        Coge UN envío, no todos los que toquen. Mandarlos todos en una vuelta
+        parecería más rápido, pero si Telegram está caído serían N llamadas
+        fallidas de N seguidos en lugar de una, y con la escalera de esperas el
+        primer reintento se aleja de golpe. Uno por vuelta, y el bucle vuelve a
+        mirar en `PAUSA_TRABAJADOR_S`.
+        """
+        pendientes = self.base.tomar_envios_pendientes(limite=1)
         if not pendientes:
             return False
 
         fila = pendientes[0]
-        id_alerta = fila["id"]
+        id_alerta = fila["alerta_id"]
+        chat_id = fila["chat_id"]
         tipo = fila["tipo"]
         intentos = fila["intentos"] + 1
+        quien = db_modulo.enmascarar_chat(chat_id)
+        clave = (id_alerta, chat_id)
 
         try:
             carga = json.loads(fila["carga_json"])
@@ -117,70 +154,80 @@ class TrabajadorTelegram:
             # reintentar un texto ilegible no la arregla nunca.
             registro.error("la alerta %s tiene carga_json ilegible; se descarta "
                            "para siempre (no es un fallo de red)", id_alerta)
-            self.base.marcar_descartada(id_alerta, intentos, "carga_json ilegible")
+            self.base.marcar_alerta_descartada(id_alerta, "carga_json ilegible")
             return True
 
         texto = alertas.texto_para_telegram(carga, tipo)
-        registro.info("mandando a Telegram la alerta %s (%s), intento %d",
-                      id_alerta, tipo, intentos)
+        registro.info("mandando a Telegram la alerta %s (%s) al familiar %s, "
+                      "intento %d", id_alerta, tipo, quien, intentos)
 
         try:
-            self.remitente.enviar(texto, teclado=alertas.teclado_alerta(id_alerta))
+            self.remitente.enviar(texto, teclado=alertas.teclado_alerta(id_alerta),
+                                  chat_id=chat_id)
         except TelegramNoConfigurado as error:
-            # No es un fallo de envío: es que no hay a quién enviar. La alerta se
-            # queda pendiente, SIN gastar un intento, y se vuelve a mirar más
-            # adelante. Así, si alguien pone el token dentro de una hora, las
-            # alertas que se habían acumulado salen sin haber perdido nada.
+            # No es un fallo de envío: es que no hay token, o la fila de este
+            # envío se quedó sin familiar. El envío se queda pendiente, SIN gastar
+            # un intento, y se vuelve a mirar más adelante. Así, si alguien pone el
+            # token dentro de una hora, los envíos que se habían acumulado salen sin
+            # haber perdido nada.
             #
-            # El ERROR sale una sola vez por alerta. Mientras falte el chat o el
-            # token, el mismo error se repite cada 50 segundos por alerta, y un log
+            # El ERROR sale una sola vez por envío. Mientras falte el token o el
+            # chat, el mismo error se repite cada 50 segundos por envío, y un log
             # lleno de la misma línea esconde lo que sí ha cambiado.
-            if id_alerta in self.sin_destino_avisados:
-                registro.debug("la alerta %s sigue sin destino: %s", id_alerta, error)
+            if clave in self.sin_destino_avisados:
+                registro.debug("el envio de %s a %s sigue sin destino: %s",
+                               id_alerta, quien, error)
             else:
-                self.sin_destino_avisados.add(id_alerta)
-                registro.error("la alerta %s sigue en la cola: %s", id_alerta, error)
-            self.base.marcar_fallida(id_alerta, intentos - 1,
-                                     int(time.time()) + config.PAUSA_TRABAJADOR_S * 10,
-                                     str(error))
+                self.sin_destino_avisados.add(clave)
+                registro.error("el envio de la alerta %s al familiar %s sigue en la "
+                               "cola: %s", id_alerta, quien, error)
+            self.base.marcar_envio_fallido(id_alerta, chat_id, intentos - 1,
+                                           int(time.time())
+                                           + config.PAUSA_TRABAJADOR_S * 10,
+                                           str(error))
             return True
         except Exception as error:  # noqa: BLE001
-            # Un fallo de red, o un rechazo de la API. La alerta NO se descarta:
+            # Un fallo de red, o un rechazo de la API. El envío NO se descarta:
             # se queda pendiente y se reintenta para siempre con la escalera de
             # esperas de `config.REINTENTO_SEGUNDOS`.
+            #
+            # Y no toca los envíos de los otros familiares: cada uno tiene su fila
+            # y su reloj. Este fallo es de este familiar, no de la alerta.
             #
             # El error se limpia antes de escribirse: python-telegram-bot incluye la
             # URL de la API en algunos errores, y esa URL lleva el token del bot.
             motivo = telegram_cliente.sanear("%s: %s" % (type(error).__name__, error))
             espera = espera_actual(intentos)
-            registro.warning("fallo al mandar la alerta %s (intento %d): %s; "
-                             "reintento en %d s. La alerta NO se descarta: se "
-                             "reintenta hasta que salga.",
-                             id_alerta, intentos, motivo, espera)
-            self.base.marcar_fallida(
-                id_alerta, intentos, int(time.time()) + espera, motivo,
+            registro.warning("fallo al mandar la alerta %s al familiar %s (intento "
+                             "%d): %s; reintento en %d s. Este envio NO se descarta: "
+                             "se reintenta hasta que salga. Los envios a los demas "
+                             "familiares no se ven afectados.",
+                             id_alerta, quien, intentos, motivo, espera)
+            self.base.marcar_envio_fallido(
+                id_alerta, chat_id, intentos, int(time.time()) + espera, motivo,
             )
             return True
 
         # Aquí está la ventana del riesgo de doble envío: entre esta línea y el
-        # commit de `marcar_enviada` hay unos cientos de milisegundos. Si el
-        # proceso muere ahora, el siguiente arranque mandará la alerta otra vez.
-        self.base.marcar_enviada(id_alerta)
-        self.sin_destino_avisados.discard(id_alerta)
-        registro.warning("ALERTA %s enviada a la familia (id %s, intento %d)",
-                         tipo.upper(), id_alerta, intentos)
+        # commit de `marcar_enviado` hay unos cientos de milisegundos. Si el
+        # proceso muere ahora, el siguiente arranque mandará el envío otra vez, a
+        # ESE familiar, y solo a ese.
+        self.base.marcar_enviado(id_alerta, chat_id)
+        self.sin_destino_avisados.discard(clave)
+        registro.warning("ALERTA %s enviada al familiar %s (id %s, intento %d)",
+                         tipo.upper(), quien, id_alerta, intentos)
         return True
 
     def _avisar_de_pendientes_viejas(self) -> None:
-        """Una vez por hora, dice si hay alertas que llevan más de 24 h sin salir.
+        """Una vez por hora, dice qué envíos llevan más de 24 h sin salir.
 
-        Es el otro lado de "no se descarta nunca": una alerta que no se puede mandar
+        Es el otro lado de "no se descarta nunca": un envío que no se puede mandar
         se reintenta para siempre, y si además nadie lo dice, una cola atascada
         (token caducado, chat borrado, API caída) puede llevar días sin que nadie se
-        entere. Aquí sale una línea por alerta y una con el total.
+        entere. Aquí sale una línea por envío y una con el total.
 
-        El aviso es por hora y no por intento, porque los reintentos de una alerta
-        atascada son uno cada cinco minutos: doce líneas por hora y por alerta
+        El aviso es por hora y no por intento, porque los reintentos de un envío
+        atascado son uno cada cinco minutos: doce líneas por hora y por envío
         taparían el log y no añadirían nada.
         """
         ahora = time.time()
@@ -189,26 +236,28 @@ class TrabajadorTelegram:
         self.ultimo_aviso = ahora
 
         try:
-            viejas = self.base.listar_pendientes_antigas(
+            viejas = self.base.listar_envios_pendientes_antigas(
                 config.SEGUNDOS_AVISO_PENDIENTE, int(ahora),
             )
         except Exception as error:  # noqa: BLE001
-            registro.error("no se pudo revisar si hay alertas pendientes viejas: %s",
+            registro.error("no se pudo revisar si hay envios pendientes viejos: %s",
                            error)
             return
 
         if not viejas:
             return
         for fila in viejas:
-            horas = (int(ahora) - fila["creado_en"]) // 3600
+            horas = (int(ahora) - fila["alerta_creado_en"]) // 3600
             registro.error(
-                "AVISO: la alerta %s (%s) lleva %d h pendiente y no se ha podido "
-                "mandar. Se sigue reintentando. Ultimo error: %s",
-                fila["id"], fila["tipo"], horas,
+                "AVISO: la alerta %s (%s) al familiar %s lleva %d h sin llegar. Se "
+                "sigue reintentando solo ese envio. Ultimo error: %s",
+                fila["alerta_id"], fila["tipo"],
+                db_modulo.enmascarar_chat(fila["chat_id"]), horas,
                 fila["ultimo_error"] or "ninguno",
             )
-        registro.error("AVISO: %d alertas llevan mas de %d h sin poder mandarse",
+        registro.error("AVISO: %d envios llevan mas de %d h sin poder mandarse",
                        len(viejas), config.SEGUNDOS_AVISO_PENDIENTE // 3600)
+
 
 
 def espera_actual(intentos: int) -> int:

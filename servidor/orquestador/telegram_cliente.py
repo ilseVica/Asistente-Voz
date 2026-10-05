@@ -1,8 +1,14 @@
 """Mandar las alertas a Telegram.
 
-Tres cosas: mandar el texto de una alerta, editar ese mensaje cuando la familia
-pulsa «Ya lo atendí», y no filtrar nunca el token. Los comandos del bot
+Tres cosas: mandar el texto de una alerta a un familiar, editar ese mensaje cuando
+la familia pulsa «Ya lo atendí», y no filtrar nunca el token. Los comandos del bot
 (`/registro` y `/alertas`) están en `bot.py`.
+
+**El destino lo pasa quien llama.** Esta clase no sabe cuantos familiares hay ni
+cuales son. Antes guardaba un `chat_id` fijo, y con dos familiares el mismo objeto
+tenía que mandar a dos conversaciones: el destino es ahora un argumento de `enviar`
+y de `editar_futuro`, y el que lo decide es el trabajador de la cola, que es quien
+tiene la fila del envío y sabe a quién toca.
 
 **El token no sale de aquí.** `python-telegram-bot` llama a la API por HTTPS y en
 algunos errores el texto que devuelve httpx incluye la URL completa, que lleva el
@@ -102,22 +108,30 @@ class TelegramNoConfigurado(Exception):
 
 
 class Remitente:
-    """Manda el texto de una alerta a la familia."""
+    """Manda los textos de alerta a un familiar.
 
-    def __init__(self, chat_id: str = None):
+    No guarda ningun chat: el destino lo dice quien llama. Antes esta clase tenia
+    un `chat_id` fijo y el único chat de la casa, y con dos familiares eso ya no
+    servia: el mismo remitente tiene que poder mandar el mismo texto a dos
+    conversations distintas, y decidir cual es el que se le pasa es cosa del
+    trabajador de la cola, que es quien tiene la fila del envio.
+
+    `disponible` es solo "¿hay token?". Que haya un familiar o no ya no lo decide
+    esta clase: lo decide la base, y un envio sin destino se trata aparte (ver
+    `cola.TrabajadorTelegram`), porque no es lo mismo que no poder mandar por
+    falta de token.
+    """
+
+    def __init__(self):
         self.token = config.TELEGRAM_BOT_TOKEN
-        self.chat_id = chat_id or config.TELEGRAM_CHAT_ID
         self.bot = None
-        self.disponible = bool(self.token and self.chat_id)
+        self.disponible = bool(self.token)
         self._bucle = None
         self._hilo = None
 
         if not self.token:
             registro.error("sin TELEGRAM_BOT_TOKEN: las alertas se encolan pero "
                            "no se envian. El servicio sigue funcionando.")
-        elif not self.chat_id:
-            registro.error("sin TELEGRAM_CHAT_ID: nadie se ha registrado todavia "
-                           "con /registro. Las alertas se encolan pero no se envian.")
 
         if self.token:
             self.bot = Bot(token=self.token)
@@ -182,8 +196,11 @@ class Remitente:
             asyncio.run_coroutine_threadsafe(corrutina, self._bucle)
         )
 
-    def enviar(self, texto: str, teclado=None) -> object:
-        """Manda un mensaje. Lanza excepción si no se pudo.
+    def enviar(self, texto: str, teclado=None, chat_id: str = None) -> object:
+        """Manda un mensaje a UN familiar. Lanza excepción si no se pudo.
+
+        `chat_id` es obligatorio en la práctica: no hay un chat por defecto, porque
+        hay varios y adivinar uno sería mandar un aviso de gas al movil equivocado.
 
         Devuelve el `Message` de Telegram, que es lo que permite editar el mismo
         mensaje después en vez de mandar otro. Editar y no mandar es lo que hace
@@ -191,7 +208,7 @@ class Remitente:
 
         Esta función sí propaga el error: es el trabajador de la cola quien decide
         si reintenta, cuánto espera y cuándo vuelve a mirar. Si `enviar` se tragara
-        los fallos, la alerta se marcaría como enviada sin haber salido, y eso es
+        los fallos, el envío se marcaría como hecho sin haber salido, y eso es
         exactamente el fallo que no puede pasar en una alerta de gas.
 
         Lanza `TelegramNoConfigurado` si falta el token o el chat, y un
@@ -200,36 +217,46 @@ class Remitente:
         arriba.
         """
         if not self.disponible or self.bot is None:
-            falta = "TELEGRAM_BOT_TOKEN" if not self.token else "TELEGRAM_CHAT_ID"
             raise TelegramNoConfigurado(
-                "falta %s; la alerta sigue en la cola sin consumir intentos" % falta
+                "falta TELEGRAM_BOT_TOKEN; el envio sigue en la cola sin consumir "
+                "intentos"
+            )
+        if not chat_id:
+            raise TelegramNoConfigurado(
+                "el envio no tiene familiar de destino; sigue en la cola sin "
+                "consumir intentos"
             )
 
-        mensaje = self._ejecutar(self._enviar_async(texto, teclado))
+        mensaje = self._ejecutar(self._enviar_async(texto, teclado, str(chat_id)))
         if not mensaje:
             raise TelegramError("Telegram acepto el envio pero no lo confirmo")
         return mensaje
 
-    async def _enviar_async(self, texto: str, teclado=None):
-        # No hay `except` aqui a proposito: cualquier error de Telegram sube
-        # hasta `enviar`, que lo deja pasar, y de ahi al trabajador, que decide si
-        # reintenta. Envuelto en un `try/except TelegramError: raise` seria lo
-        # mismo y ademas mas codigo.
+    async def _enviar_async(self, texto: str, teclado=None, chat_id: str = None):
+        # No hay `except` aquí a proposito: cualquier error de Telegram sube
+        # hasta `enviar`, que lo deja pasar, y de ahí al trabajador, que decide si
+        # reintenta. Envuelto en un `try/except TelegramError: raise` sería lo
+        # mismo y ademas mas código.
         return await self.bot.send_message(
-            chat_id=self.chat_id,
+            chat_id=chat_id,
             text=texto,
             parse_mode=None,  # texto plano: ver alertas.texto_para_telegram
             disable_web_page_preview=True,
             reply_markup=teclado,
         )
 
-    def editar(self, mensaje, texto: str, teclado=None) -> None:
+    def editar(self, mensaje, texto: str, teclado=None,
+               chat_id: str = None) -> None:
         """Edita un mensaje ya enviado, desde un hilo normal. Lanza si no se pudo.
 
         Se usa cuando la familia pulsa «Ya lo atendí»: el mensaje original se
         reescribe con la hora de atención y sin botones. Si en su lugar se mandara
         otro mensaje, el familiar vería el aviso de gas y debajo un «ok, ya lo
         atendiste», que parece que hay dos avisos.
+
+        El `chat_id` es el del chat donde se pulsó, no un chat por defecto: con dos
+        familiares, editar en el chat equivocado deja al que pulsó viendo el aviso
+        viejo y le devuelve un error de Telegram que no explica nada.
 
         Si el mensaje es demasiado viejo para editarlo, Telegram devuelve un error
         y aquí se propaga al manejador del botón, que lo avisa con una frase. No es
@@ -238,9 +265,11 @@ class Remitente:
         if not self.disponible or self.bot is None or mensaje is None:
             raise TelegramNoConfigurado("no se puede editar: falta el token, el "
                                         "chat o el mensaje")
-        self._ejecutar(self._editar_async(mensaje, texto, teclado))
+        self._ejecutar(self._editar_async(mensaje, texto, teclado,
+                                          chat_id or getattr(mensaje, "chat_id", None)))
 
-    def editar_futuro(self, mensaje, texto: str, teclado=None):
+    def editar_futuro(self, mensaje, texto: str, teclado=None,
+                      chat_id: str = None):
         """Como `editar`, pero devuelve un future para esperar con `await`.
 
         Es la que usa el botón del bot, que ya corre dentro de un bucle de eventos.
@@ -255,11 +284,13 @@ class Remitente:
         if not self.disponible or self.bot is None or mensaje is None:
             raise TelegramNoConfigurado("no se puede editar: falta el token, el "
                                         "chat o el mensaje")
-        return self._futuro(self._editar_async(mensaje, texto, teclado))
+        return self._futuro(self._editar_async(mensaje, texto, teclado,
+                                               chat_id or getattr(mensaje, "chat_id", None)))
 
-    async def _editar_async(self, mensaje, texto: str, teclado=None) -> None:
+    async def _editar_async(self, mensaje, texto: str, teclado=None,
+                            chat_id: str = None) -> None:
         await self.bot.edit_message_text(
-            chat_id=self.chat_id,
+            chat_id=chat_id,
             message_id=mensaje.message_id,
             text=texto,
             parse_mode=None,

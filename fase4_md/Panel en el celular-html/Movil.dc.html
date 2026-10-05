@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Panel de la sala — celular</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F5F2; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; display: flex; flex-direction: column; overflow: hidden">
+
+<div style="flex: 1; overflow: auto; padding: 24px 20px 20px; display: flex; flex-direction: column; gap: 16px">
+
+<header style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+<div>
+<div style="font-size: 14px; color: #4A524F">Asistente de Voz</div>
+<h1 style="margin: 0; font-size: 26px">Sala principal</h1>
+</div>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-weight: 700; font-size: 14px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #0E5E5A"></span>Conectada</span>
+</header>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 18px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 8px; color: #4A524F; font-size: 15px; font-weight: 700">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"></path></svg>Luz de la sala</div>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+<div>
+<div style="font-size: 30px; font-weight: 700">{{luzTexto}}</div>
+<div style="font-size: 15px; color: #4A524F">{{luzDetalle}}</div>
+</div>
+</div>
+<button type="button" onClick="{{toggleLuz}}" style="min-height: 52px; border-radius: 14px; border: none; background: #0E5E5A; color: #FFFFFF; font-family: inherit; font-size: 18px; font-weight: 700; cursor: pointer">{{luzBoton}}</button>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 16px">
+<div style="font-size: 14px; color: #4A524F">Temperatura</div>
+<div style="font-size: 26px; font-weight: 700">24.5 °C</div>
+</section>
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 16px">
+<div style="font-size: 14px; color: #4A524F">Humedad</div>
+<div style="font-size: 26px; font-weight: 700">60 %</div>
+</section>
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 16px">
+<div style="font-size: 14px; color: #4A524F">Gas</div>
+<div style="font-size: 26px; font-weight: 700; color: #0E5E5A">Normal</div>
+</section>
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 16px">
+<div style="font-size: 14px; color: #4A524F">Movimiento</div>
+<div style="font-size: 18px; font-weight: 700; line-height: 1.25">Hace 4 min</div>
+</section>
+</div>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 16px 18px; display: flex; align-items: center; gap: 14px">
+<div style="width: 44px; flex: none; text-align: center">
+<div style="font-size: 18px; font-weight: 700">20:00</div>
+</div>
+<div style="flex: 1; min-width: 0">
+<div style="font-size: 14px; color: #4A524F">Próximo recordatorio</div>
+<div style="font-size: 17px; font-weight: 700">Tomar el medicamento de la noche</div>
+</div>
+</section>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<h2 style="margin: 0; font-size: 18px">Última alerta</h2>
+<a href="MovilAlerta.dc.html" style="font-size: 15px">Ver ejemplo de alerta</a>
+</div>
+<div style="display: flex; align-items: center; gap: 12px">
+<div style="flex: 1; min-width: 0"><div style="font-size: 16px; font-weight: 700">Ayuda solicitada</div><div style="font-size: 14px; color: #4A524F">Por voz con Alexa · ayer, 18:42</div></div>
+<span style="padding: 5px 10px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-size: 13px; font-weight: 700">Atendida</span>
+</div>
+</section>
+
+</div>
+
+<nav aria-label="Secciones" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #DADFDB; padding: 8px 6px 14px">
+<a href="#" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #0E5E5A; font-size: 13px; font-weight: 700">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"></path></svg>Inicio</a>
+<a href="#" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 13px">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0"></path></svg>Alertas</a>
+<a href="#" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 13px">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Recordatorios</a>
+<a href="#" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 13px">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"></path></svg>Mensajes</a>
+</nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const s = this.state || {};
+const on = s.luzOn !== undefined ? s.luzOn : true;
+const origen = s.origen || 'voz';
+const cuando = s.cuando || 'hace 2 min';
+const origenTexto = origen === 'panel' ? 'desde el panel' : 'por voz';
+return {
+luzTexto: on ? 'Encendida' : 'Apagada',
+luzDetalle: origenTexto.charAt(0).toUpperCase() + origenTexto.slice(1) + ' · ' + cuando,
+luzBoton: on ? 'Apagar la luz' : 'Encender la luz',
+toggleLuz: () => this.setState({ luzOn: !on, origen: 'panel', cuando: 'justo ahora' })
+};
+}
+}
+</script>
+</body>
+</html>

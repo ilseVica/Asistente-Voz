@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de la sala — escritorio</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}a{color:#0E5E5A}a:hover{color:#0A4441}</style>
+</head>
+<body>
+
+<div style="min-height: 100vh; background: #F4F5F2; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; box-sizing: border-box; padding: 32px 24px 48px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px">
+<div style="display: flex; align-items: center; gap: 14px">
+<div style="width: 48px; height: 48px; border-radius: 14px; background: #0E5E5A; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 12v0M8 8v8M12 5v14M16 8v8M20 12v0"></path></svg>
+</div>
+<div>
+<div style="font-size: 15px; color: #4A524F">Asistente de Voz</div>
+<h1 style="margin: 0; font-size: 30px; line-height: 1.1">Sala principal</h1>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px">
+
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-weight: 700; font-size: 16px"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0E5E5A"></span>Sala conectada</span>
+
+
+
+<span style="font-size: 15px; color: #4A524F">Actualizado hace 5 s</span>
+</div>
+</header>
+
+<nav aria-label="Secciones" style="display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #DADFDB; padding-bottom: 12px">
+<a href="#" style="padding: 10px 16px; border-radius: 10px; background: #1B1F1E; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 16px">Panel</a>
+<a href="#" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Historial de alertas</a>
+<a href="#" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Recordatorios</a>
+<a href="#" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Familiares</a>
+</nav>
+
+
+
+
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 20px">
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 10px; color: #4A524F; font-size: 16px; font-weight: 700">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"></path></svg>Luz de la sala</div>
+<div style="font-size: 34px; font-weight: 700">Encendida</div>
+<div style="font-size: 16px; color: #4A524F">Encendida por voz · hace 2 min</div>
+<button type="button" style="min-height: 52px; border-radius: 12px; border: none; background: #0E5E5A; color: #FFFFFF; font-family: inherit; font-size: 18px; font-weight: 700; cursor: pointer">Apagar la luz</button>
+</section>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 10px; color: #4A524F; font-size: 16px; font-weight: 700">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0z"></path></svg>Ambiente</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div><div style="font-size: 34px; font-weight: 700">24.5 °C</div><div style="font-size: 16px; color: #4A524F">Temperatura</div></div>
+<div><div style="font-size: 34px; font-weight: 700">60 %</div><div style="font-size: 16px; color: #4A524F">Humedad</div></div>
+</div>
+<div style="font-size: 15px; color: #4A524F">Actualizado hace 40 s</div>
+</section>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 10px; color: #4A524F; font-size: 16px; font-weight: 700">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M12 3c1 3 4 4.5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"></path></svg>Gas</div>
+<div style="font-size: 34px; font-weight: 700; color: #0E5E5A">Normal</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="position: relative; height: 10px; border-radius: 5px; background: #E7EAE8">
+<div style="height: 10px; border-radius: 5px; width: 8%; background: #0E5E5A"></div>
+<div style="position: absolute; left: 44%; top: -4px; width: 2px; height: 18px; background: #1B1F1E"></div>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 15px; color: #4A524F"><span>Lectura: 312</span><span>Umbral: 1800</span></div>
+</div>
+</section>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 10px; color: #4A524F; font-size: 16px; font-weight: 700">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="13" cy="4.5" r="1.5"></circle><path d="M10 21l2-6 3 3v3M8 12l3-4 3 2 2 3M11 8l-1 5"></path></svg>Movimiento</div>
+<div style="font-size: 34px; font-weight: 700">Sin movimiento</div>
+<div style="font-size: 16px; color: #4A524F">Último movimiento hace 4 min</div>
+<div style="font-size: 15px; color: #4A524F">Aviso de inactividad a los 120 min · <a href="#">Cambiar</a></div>
+</section>
+
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px">
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<h2 style="margin: 0; font-size: 21px">Alertas recientes</h2>
+<a href="#" style="font-size: 16px">Ver todas</a>
+</div>
+<div style="display: flex; flex-direction: column">
+
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid #E7EAE8">
+<div style="width: 40px; height: 40px; border-radius: 12px; background: #E3F0EE; color: #0E5E5A; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0"></path></svg></div>
+<div style="flex: 1; min-width: 0"><div style="font-size: 17px; font-weight: 700">Ayuda solicitada</div><div style="font-size: 15px; color: #4A524F">Por voz con Alexa · ayer, 18:42</div></div>
+<span style="padding: 6px 12px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-size: 14px; font-weight: 700">Atendida</span>
+</div>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 0">
+<div style="width: 40px; height: 40px; border-radius: 12px; background: #E3F0EE; color: #0E5E5A; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="13" cy="4.5" r="1.5"></circle><path d="M10 21l2-6 3 3v3M8 12l3-4 3 2 2 3M11 8l-1 5"></path></svg></div>
+<div style="flex: 1; min-width: 0"><div style="font-size: 17px; font-weight: 700">Inactividad prolongada</div><div style="font-size: 15px; color: #4A524F">120 min sin movimiento · 1 oct, 15:10</div></div>
+<span style="padding: 6px 12px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-size: 14px; font-weight: 700">Atendida</span>
+</div>
+</div>
+</section>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<h2 style="margin: 0; font-size: 21px">Recordatorios</h2>
+<button type="button" style="min-height: 44px; padding: 0 16px; border-radius: 10px; border: 2px solid #0E5E5A; background: #FFFFFF; color: #0E5E5A; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Nuevo</button>
+</div>
+<div style="display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid #E7EAE8">
+<div style="width: 64px; flex: none; font-size: 19px; font-weight: 700">20:00</div>
+<div style="flex: 1; min-width: 0"><div style="font-size: 17px; font-weight: 700">Tomar el medicamento de la noche</div><div style="font-size: 15px; color: #4A524F">Hoy · todos los días</div></div>
+</div>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid #E7EAE8">
+<div style="width: 64px; flex: none; font-size: 19px; font-weight: 700">10:30</div>
+<div style="flex: 1; min-width: 0"><div style="font-size: 17px; font-weight: 700">Cita médica</div><div style="font-size: 15px; color: #4A524F">Mañana · una vez</div></div>
+</div>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 0">
+<div style="width: 64px; flex: none; font-size: 19px; font-weight: 700">08:00</div>
+<div style="flex: 1; min-width: 0"><div style="font-size: 17px; font-weight: 700">Medir la presión</div><div style="font-size: 15px; color: #4A524F">Lunes, miércoles y viernes</div></div>
+</div>
+</div>
+<div style="font-size: 15px; color: #4A524F">El asistente los dice en voz alta a su hora.</div>
+</section>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 21px">Mensaje para la sala</h2>
+<div style="background: #F4F5F2; border-radius: 12px; padding: 12px 14px; font-size: 16px; line-height: 1.4"><span style="font-weight: 700">Tú, 17:05:</span> Llego a las 6, no te preocupes por la cena.</div>
+<div style="background: #E3F0EE; border-radius: 12px; padding: 12px 14px; font-size: 16px; line-height: 1.4"><span style="font-weight: 700">Respuesta por voz, 17:06:</span> Está bien, aquí te espero.</div>
+<label for="mensaje" style="font-size: 16px; font-weight: 700">Escribe un mensaje</label>
+<textarea id="mensaje" rows="2" placeholder="El asistente lo dirá en voz alta" style="font-family: inherit; font-size: 17px; padding: 12px; border-radius: 12px; border: 1px solid #B9C1BC; resize: vertical"></textarea>
+<button type="button" style="min-height: 48px; border-radius: 12px; border: none; background: #0E5E5A; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 700; cursor: pointer">Enviar y decir en voz alta</button>
+</section>
+
+</div>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 20px 24px; display: flex; flex-wrap: wrap; gap: 24px 40px; align-items: center">
+<h2 style="margin: 0; font-size: 18px; flex: 1 1 100%">Equipos</h2>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 16px"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0E5E5A"></span><span style="font-weight: 700">Nodo de la sala</span><span style="color: #4A524F">Conectado</span></div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 16px"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0E5E5A"></span><span style="font-weight: 700">Asistente de voz</span><span style="color: #4A524F">Conectado</span></div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 16px"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0E5E5A"></span><span style="font-weight: 700">Servidor</span><span style="color: #4A524F">En línea</span></div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 16px"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0E5E5A"></span><span style="font-weight: 700">Alexa</span><span style="color: #4A524F">Vinculada</span></div>
+</section>
+
+<footer style="font-size: 15px; color: #4A524F; display: flex; flex-wrap: wrap; gap: 16px">
+<a href="#">Aviso de privacidad</a><span>Asistente de Voz · prototipo</span>
+</footer>
+
+</div>
+</div>
+</body>
+</html>

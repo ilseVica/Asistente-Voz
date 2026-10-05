@@ -1,0 +1,12 @@
+# Dependencias del nodo simulado.
+#
+# Se fija la versión exacta, sin rangos, porque este simulador existe para probar
+# cosas, y una actualización automática de la librería un martes a las ocho de la
+# noche es justo el tipo de cosa que rompe una prueba un martes a las ocho de la
+# noche.
+#
+# paho-mqtt 2.x cambia la firma de los callbacks: en la 1.x era
+# on_connect(client, userdata, flags, rc) y en la 2.x es
+# on_connect(client, userdata, flags, reason_code, properties). Por eso la versión
+# se fija: el código está escrito para la 2.x, con `CallbackAPIVersion.VERSION2`.
+paho-mqtt==2.1.0

@@ -1,0 +1,14 @@
+# Dependencias del orquestador.
+#
+# Versiones fijadas, sin rangos. Dos razones: el servicio corre en un servidor
+# donde no hay nadie mirando cuando se actualiza, y una actualización automática
+# un martes por la noche es la forma mas rapida de descobrir un fallo de
+# compatibilidad a las tres de la manana.
+
+# Cliente MQTT. La 2.x cambia la firma de los callbacks a
+# on_connect(client, userdata, flags, reason_code, properties), y el codigo usa
+# `CallbackAPIVersion.VERSION2`, que es lo que hace falta para esa firma.
+paho-mqtt==2.1.0
+
+# Cliente de Telegram.
+python-telegram-bot==22.8

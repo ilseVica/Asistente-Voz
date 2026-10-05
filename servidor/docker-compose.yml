@@ -96,8 +96,81 @@ services:
       retries: 3
       start_period: 20s
 
+  # Orquestador. Recibe las alertas de gas y de ayuda, las guarda en SQLite y
+  # avisa a la familia por Telegram.
+  #
+  # Decisiones ya aplicadas:
+  #   - Tambien con network_mode: host. No es por capricho ni por descuido: es la
+  #     misma razon que el broker. El orquestador tiene que alcanzar al broker en
+  #     127.0.0.1, y con una red propia de Compose, "localhost" dentro del
+  #     contenedor seria el propio contenedor. Se podria usar el nombre del
+  #     servicio, pero entonces el MQTT_HOST del .env tendria que cambiar segun
+  #     donde corra, y la conexion de Telegram es saliente y da igual.
+  #   - restart: unless-stopped. Si el proceso muere, vuelve solo. Una alerta de
+  #     gas que se pierde porque el proceso se cayera y nadie lo notara es
+  #     exactamente el fallo que este servicio existe para evitar.
+  #   - Volumen en /datos. SIN este volumen, cada "up" que recree el contenedor
+  #     perderia los ids ya procesados, y con ellos la deduplicacion: se volveria
+  #     a avisar a la familia de alertas que ya se habian mandado.
+  #   - El usuario "orquestador" del MQTT lo lee del .env, y es OBLIGATORIO. Sin
+  #     password el proceso muere al arrancar. Es a proposito: mejor que arranque
+  #     y no pueda conectarse.
+  #   - El token de Telegram NO es obligatorio. Sin token el servicio arranca,
+  #     recibe alertas y las guarda; en cuanto se anada y se reinicie el
+  #     servicio, salen todas.
+  #   - Sin depends_on con condition: service_healthy. El orquestador arranca
+  #     aunque el broker todavia este levantandose: paho reconecta solo con su
+  #     propio mecanismo, y esperar aqui solo retrasaria el arranque.
+
+  orquestador:
+    build:
+      context: ./orquestador
+      dockerfile: Dockerfile
+    image: asistente-orquestador:1.0
+
+    container_name: asistente-orquestador
+
+    restart: unless-stopped
+    network_mode: host
+    stop_grace_period: 20s
+
+    environment:
+      MQTT_HOST: 127.0.0.1
+      MQTT_PUERTO: "1883"
+      MQTT_USUARIO: orquestador
+      MQTT_ORQUESTADOR_PASSWORD: ${MQTT_ORQUESTADOR_PASSWORD:?falta MQTT_ORQUESTADOR_PASSWORD en servidor/.env}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_ACTIVAR_BOT: ${TELEGRAM_ACTIVAR_BOT:-0}
+      PANEL_URL: ${PANEL_URL:-}
+      ORQUESTADOR_DB: /datos/orquestador.sqlite3
+      NIVEL_LOG: ${NIVEL_LOG:-INFO}
+
+    volumes:
+      # La base de datos y el registro de la familia. Ver la nota de arriba.
+      - orquestador_datos:/datos
+
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+    mem_limit: 256m
+    cpus: 0.50
+    pids_limit: 100
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   # El proyecto se llama "asistente" (name: arriba), asi que el volumen real se
   # llama asistente_mosquitto_data. La clave va sin el prefijo para que el
   # nombre final no quede "asistente_asistente_...".
   mosquitto_data:
+
+  # La base del orquestador. Sin este volumen, reiniciar el servicio borra los ids
+  # procesados y se vuelven a mandar alertas ya avisadas.
+  orquestador_datos:

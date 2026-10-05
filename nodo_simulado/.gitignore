@@ -1,0 +1,8 @@
+# El estado que el simulador escribe al arrancar. Se regenera solo, no tiene nada
+# que ver en el repositorio.
+estado.json
+
+# Entorno virtual y archivos de Python que se generan al trabajar.
+.venv/
+__pycache__/
+*.pyc

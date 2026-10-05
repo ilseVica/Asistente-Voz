@@ -69,6 +69,10 @@ int64_t hora_epoch() {
   return static_cast<int64_t>(time(nullptr));
 }
 
+int64_t hora_epoch_o_desconocida() {
+  return hora_valida ? hora_epoch() : -1;
+}
+
 String hora_iso_utc() {
   if (!hora_valida) {
     return String("");

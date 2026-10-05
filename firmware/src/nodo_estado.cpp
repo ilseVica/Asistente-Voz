@@ -26,7 +26,17 @@ void nodo_estado_iniciar() {
 String nodo_estado_json() {
   String carga = "{";
   carga += "\"conectado\":true";
-  carga += ",\"ts\":\"" + hora_iso_para_will() + "\"";
+  // El ts va como ENTERO epoch en segundos, el mismo tipo que llevan luz/set y
+  // satelite/decir. Antes iba como texto ISO 8601, y con eso el mismo campo era un
+  // entero en un topico y una cadena en otro: el consumidor tenia que ramificar
+  // segun de donde saliera. Sin hora valida sale null, que es un valor explicito de
+  // "todavia no lo se" y se distingue de un 0 (que en epoch es 1970).
+  const int64_t ts = hora_epoch_o_desconocida();
+  if (ts < 0) {
+    carga += ",\"ts\":null";
+  } else {
+    carga += ",\"ts\":" + String(static_cast<long long>(ts));
+  }
   carga += ",\"ip\":\"" + red_ip() + "\"";
   carga += ",\"fw\":\"" + String(NODO_ESTADO_CAMPO_VERSION) + "\"";
   carga += ",\"gas_adc\":" + String(gas_ultima_lectura());

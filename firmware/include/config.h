@@ -56,9 +56,26 @@
 // ---------------------------------------------------------------------------
 // Identidad
 // ---------------------------------------------------------------------------
-// client id del broker. Se combina con el MAC para que sea unico en la red.
-#define MQTT_CLIENT_ID_BASE "nodo-esp32-"
+// Client id del broker. FIJO, sin partes aleatorias ni derivadas del MAC ni del
+// hostname: es el que pide el contrato. Con uno aleatorio, cada reinicio dejaria
+// una sesion abierta en el broker durante 2 dias (persistent_client_expiration).
+//
+// Consecuencia asumida: solo puede haber un nodo por broker con este id. Si algum
+// dia hubiera dos ESP32, el segundo expulsaria al primero de su sesion MQTT. El
+// nodo simulado de Python usa "nodo-simulado" por eso.
+#define MQTT_CLIENT_ID_BASE "nodo-sala"
 #define MQTT_PORTO 1883
+
+// Espera creciente entre intentos de ARRANQUE del cliente MQTT, que es lo unico
+// que este firmware controla: una vez que ESP32MQTTClient arranca, la libreria
+// reconecta sola con su propio mecanismo.
+//
+// Antes el reintento era cada vuelta del loop (50 ms). Con el broker todavia sin
+// resolver eso son 20 lineas de ERROR por segundo, y el buffer del monitor serie
+// se llena en menos de un minuto. Con esto son 2, 4, 8, 16, 30, 30... segundos,
+// y se vuelve a 2 s en cuanto el arranque tiene exito.
+#define MQTT_REINTENTO_INICIAL_MS 2000UL
+#define MQTT_REINTENTO_MAXIMO_MS 30000UL
 
 // Zona horaria de la casa. El firmware guarda UTC y convierte al publicar.
 #define ZONA_HORARIA "America/Mazatlan"
@@ -109,8 +126,16 @@
 #define MS_60S (60UL * MS_1S)
 #define MS_3MIN (180UL * MS_1S)
 
-// Gas: el episodio abre con la lectura mayor o igual al umbral, y cierra cuando
-// la lectura baja de (umbral menos histeresis) durante GAS_CIERRE_SOSTENIDO_S.
+// Gas: el episodio abre con la lectura mayor o igual al umbral de apertura, y
+// cierra cuando la lectura baja del umbral de CIERRE durante
+// GAS_CIERRE_SOSTENIDO_S.
+//
+// Los dos umbrales son numeros propio, y el de cierre no se calcula como «el
+// umbral menos 150». Antes se hacia, y quedaba en 1650 en vez de los 1550 del
+// contrato: un numero que no sale de ningun lado y que el nodo/config no puede
+// cambiar. Con un valor derivado, cambiar el umbral de apertura movia el de
+// cierre sin querer, y dos maquinas con distinto gas_on_adc cerraban distinto.
+// Ahora son los dos del contrato y los dos los puede fijar nodo/config.
 //
 // El plan dice que el aviso sale "a los ~3 s, con 3 lecturas seguidas" (5.9), asi
 // que el muestreo del MQ-2 es de 1 Hz. No puede ser la cadencia del loop (50 ms):
@@ -118,9 +143,15 @@
 // episodio.
 #define PERIODO_LECTURA_GAS_MS MS_1S
 #define GAS_UMBRAL_APERTURA 1800
-#define GAS_HISTERESIS 150
+#define GAS_UMBRAL_CIERRE 1550
 #define GAS_LECTURAS_PARA_ABRIR 3
 #define GAS_CIERRE_SOSTENIDO_S 10
+
+// Rango del ADC del MQ-2 con atenuacion de 11 dB. Es el mismo rango que acepta el
+// orquestador (servidor/orquestador/config.py, ADC_MINIMO..ADC_MAXIMO) y el mismo
+// que comprueba nodo_simulado/contrato.py. Si cambia en un sitio, cambia en los
+// tres: el nodo no puede publicar un valor que el servidor vaya a rechazar.
+#define GAS_ADC_MAXIMO 4095
 
 // Luz. El plan define luz/set con {"estado":"on"|"off","origen":...,"ts":epoch} y
 // luz/estado con {"estado":"on"|"off","origen":...}. El ESP32 hace eco del origen

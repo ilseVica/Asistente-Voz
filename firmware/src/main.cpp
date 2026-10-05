@@ -128,13 +128,40 @@ void loop() {
   // mqtt_iniciar se llama hasta que arranque de verdad. Si se marcaba el intento
   // como hecho ANTES de llamar, un fallo de resolucion (mDNS sin propagar todavia,
   // broker levantandose) dejaba al nodo sin MQTT para siempre, sin reintento: la
-  // bandera ya estaba en false y mqtt_iniciar no volvia a llamarse nunca. Ahora solo
-  // se da por bueno cuando loopStart() si arranco el cliente. Una vez arrancado, si
-  // la sesion se cae, la libreria reconecta sola.
+  // bandera ya estaba en false y mqtt_iniciar no volvia a llamarse nunca.
+  //
+  // Y ahora ademas con espera creciente, porque antes se reintentaba en cada vuelta
+  // del loop (50 ms): con el broker todavia sin resolver eran 20 lineas de ERROR por
+  // segundo, y el buffer del monitor serie se llenaba en menos de un minuto.
+  //
+  // Esto solo cubre el ARRANQUE. Una vez que ESP32MQTTClient arranca, la libreria
+  // reconecta sola con su propio mecanismo, que no es lo que se controla desde aqui.
   if (!mqtt_conectado()) {
     static bool arranque_pendiente = true;
+    static uint32_t proximo_intento_ms = 0;
+    static uint32_t espera_ms = MQTT_REINTENTO_INICIAL_MS;
+
+    if (arranque_pendiente && proximo_intento_ms != 0 &&
+        (int32_t)(ahora - proximo_intento_ms) < 0) {
+      return;  // todavia no toca reintentar
+    }
     if (arranque_pendiente) {
-      arranque_pendiente = !mqtt_iniciar();
+      if (mqtt_iniciar()) {
+        arranque_pendiente = false;
+        proximo_intento_ms = 0;
+        espera_ms = MQTT_REINTENTO_INICIAL_MS;  // la proxima caida arranca rapido
+      } else {
+        // Un solo log por intento, con la espera que viene. El motivo concreto ya
+        // lo escribio mqtt_iniciar() a nivel de depuracion.
+        log_info("mqtt", "no se pudo arrancar; reintento en %lu s",
+                 static_cast<unsigned long>(espera_ms / 1000));
+        proximo_intento_ms = ahora + espera_ms;
+        if (espera_ms * 2 > MQTT_REINTENTO_MAXIMO_MS) {
+          espera_ms = MQTT_REINTENTO_MAXIMO_MS;
+        } else {
+          espera_ms *= 2;
+        }
+      }
     }
   }
 

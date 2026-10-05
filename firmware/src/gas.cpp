@@ -43,8 +43,9 @@ void gas_iniciar() {
   pinMode(GPIO_PIN_BUZZER, OUTPUT);
   digitalWrite(GPIO_PIN_BUZZER, LOW);
 #endif
-  log_info(ETIQUETA, "vigilando, umbral=%d histeresis=%d lectura_sostenida=%d s",
-           GAS_UMBRAL_APERTURA, GAS_HISTERESIS, static_cast<int>(GAS_CIERRE_SOSTENIDO_S));
+  log_info(ETIQUETA, "vigilando, apertura=%d cierre=%d lectura_sostenida=%d s",
+           GAS_UMBRAL_APERTURA, GAS_UMBRAL_CIERRE,
+           static_cast<int>(GAS_CIERRE_SOSTENIDO_S));
 }
 
 void gas_fijar_lectura_forzada(int valor_adc) {
@@ -141,8 +142,12 @@ void gas_tarea() {
 
   ultima_lectura = sensores_leer().gas_adc;
 
+  // Los dos umbrales se leen de la persistencia, y el de cierre es un numero
+  // propio. Antes era `umbral - GAS_HISTERESIS`, o sea 1650 en vez de los 1550 del
+  // contrato, y no lo podia cambiar nodo/config: el servidor podia pedir un
+  // cierre en 1600 y el nodo seguia cerrando en 1650, en silencio.
   const int umbral = persistencia_umbral_gas();
-  const int umbral_cierre = umbral - GAS_HISTERESIS;
+  const int umbral_cierre = persistencia_umbral_cierre_gas();
 
   if (!episodio_abierto) {
     // Apertura: cuenta lecturas seguidas sobre el umbral. Asi un pico suelto de una

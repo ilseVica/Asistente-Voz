@@ -168,7 +168,7 @@ void sensores_tarea() {
 
   // El limite de una publicacion cada 10 s manda sobre todo lo demas. Con el gas
   // simulado constante nunca se llega aqui, pero con el MQ-2 real un cambio
-  // grande followed de otroodn no puede llenar el topic.
+  // grande seguido de otro no puede llenar el topic.
   if (proxima_publicacion_minima_ms != 0 && (int32_t)(ahora - proxima_publicacion_minima_ms) < 0) {
     return;
   }

@@ -17,7 +17,14 @@ void hora_tarea();
 bool hora_es_valida();
 int64_t hora_epoch();
 
-// ISO 8601 en UTC, para nodo/estado. Vacio si la hora no es valida.
+// Epoch en segundos, o -1 si todavia no hay hora valida. Es lo que va en el campo
+// "ts" de nodo/estado, para que sea el MISMO tipo que usan luz/set y
+// satelite/decir (epoch entero). Devolver -1 y no 0 es a proposito: 0 en epoch
+// significa 1970, que es una hora valida, y no "sin hora".
+int64_t hora_epoch_o_desconocida();
+
+// ISO 8601 en UTC. Solo para el registro local del monitor serie. Vacio si la hora
+// no es valida.
 String hora_iso_utc();
 
 // "2026-10-03T17:42:11Z", para el Last Will, que el broker publica retenido.

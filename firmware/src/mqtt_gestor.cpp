@@ -37,7 +37,10 @@ const char *construir_will() {
 bool mqtt_iniciar() {
   const String broker = red_resolver_broker(String(MQTT_HOST));
   if (broker.isEmpty()) {
-    log_error(ETIQUETA, "sin broker resoluble, se reintentara en la tarea");
+    // A nivel de depuracion: el motivo concreto. En nivel Info, quien lo ve es el
+    // log de espera de main.cpp, que es una sola linea por intento y no se repite
+    // cada 50 ms.
+    log_depurar(ETIQUETA, "sin broker resoluble");
     return false;
   }
   broker_usado = broker;
@@ -84,7 +87,7 @@ bool mqtt_iniciar() {
   });
 
   if (!cliente.loopStart()) {
-    log_error(ETIQUETA, "loopStart fallo, se reintentara en la tarea");
+    log_depurar(ETIQUETA, "loopStart fallo");
     return false;
   }
   log_info(ETIQUETA, "iniciado contra %s:%d como %s (%s, keepalive 30)", broker.c_str(), MQTT_PORTO,

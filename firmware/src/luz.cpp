@@ -15,9 +15,9 @@ uint32_t ultimo_cambio_ms = 0;
 // reintentar mas tarde, y hay que reintentarlo con el mismo origen.
 const char *origen_actual = LUZ_ORIGEN_PANEL;
 
-// El cambio se aplico pero no se pudo publicar (no habia broker). While this is set,
-// luz_tarea() reintenta el retained en cuanto haya sesion, para que el broker no
-// quede con el valor viejo.
+// El cambio se aplico pero no se pudo publicar (no habia broker). Mientras este
+// indicador siga en true, luz_tarea() reintenta el retained en cuanto haya sesion,
+// para que el broker no quede con el valor viejo.
 bool publicacion_pendiente = false;
 
 // El rele y el LED leen del MISMO estado (2.5). Por eso quien escribe el estado

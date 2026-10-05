@@ -104,36 +104,88 @@ void manejar_luz_set(const String &payload) {
   luz_aplicar_orden(es_encendido, origen);
 }
 
-// nodo/config: retained, lo manda el servidor. Solo se acepta el umbral de apertura.
+// nodo/config: retained, lo manda el servidor. Se aceptan los dos umbrales del gas,
+// el de apertura y el de cierre.
 void manejar_nodo_config(const String &payload) {
   JsonDocument documento;
   if (deserializeJson(documento, payload)) {
     log_aviso(ETIQUETA, "nodo/config con JSON ilegible, se descarta");
     return;
   }
+  // El de cierre se fija ANTES que el de apertura. Al reves, un nodo/config que
+  // subiera la apertura por encima del cierre que ya tiene seria rechazado por
+  // `persistencia_fijar_umbral_cierre_gas`, y el servidor creeria que el gas ya no
+  // puede bajar de 1550 cuando el problema es que se le pidio otra cosa.
+  if (documento["gas_off_adc"].is<int>()) {
+    persistencia_fijar_umbral_cierre_gas(documento["gas_off_adc"].as<int>());
+  }
   if (documento["gas_on_adc"].is<int>()) {
     persistencia_fijar_umbral_gas(documento["gas_on_adc"].as<int>());
   }
-  if (documento["gas_off_adc"].is<int>()) {
-    log_info(ETIQUETA, "nodo/config trae gas_off_adc=%d (la histeresis sale de config.h)",
-             documento["gas_off_adc"].as<int>());
-  }
 }
 
-// nodo/prueba_gas: la suscripcion a este topico solo existe con PRUEBAS=1. El valor
-// forzado llega como texto plano, no JSON.
+// El payload es un entero y nada mas: opcional menos y solo digitos. Sirve para
+// distinguir el texto plano del JSON y de un mensaje corrupto.
+bool es_entero(const String &texto) {
+  if (texto.length() == 0) {
+    return false;
+  }
+  int inicio = texto[0] == '-' ? 1 : 0;
+  if (inicio >= texto.length()) {
+    return false;
+  }
+  for (int i = inicio; i < texto.length(); ++i) {
+    if (!isDigit(texto[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// nodo/prueba_gas: la suscripcion a este topico solo existe con PRUEBAS=1.
+//
+// El payload es el JSON del contrato, {"gas_adc":3000}, el mismo que manda el
+// nodo_simulado y el mismo formato de las alertas. Antes se leia como texto plano
+// con `toInt()`, y el firmware era el unico de los tres que no entendia el
+// contrato: mandarle el JSON del contrato no hacia nada y habia que mandar un
+// numero a pelo.
+//
+// El texto plano se sigue aceptando, como numero entero y nada mas, para no
+// romper a quien lo mande asi. Se avisa en el log, porque es la forma antigua y
+// la que hay que arreglar, no la que hay que aprender.
 void manejar_prueba_gas(const String &payload) {
   if (payload.isEmpty()) {
     log_aviso(ETIQUETA, "prueba_gas vacio, se descarta");
     return;
   }
-  const int valor = payload.toInt();
-  if (valor <= 0) {
-    log_aviso(ETIQUETA, "prueba_gas '%s' no es un numero valido, se descarta", payload.c_str());
+
+  int valor = 0;
+  bool desde_json = false;
+
+  JsonDocument documento;
+  if (!deserializeJson(documento, payload) && documento[JSON_CLAVE_GAS].is<int>()) {
+    valor = documento[JSON_CLAVE_GAS].as<int>();
+    desde_json = true;
+  } else if (es_entero(payload)) {
+    // `String::toInt()` del core 2.0.17 no admite el puntero de "he conversionado
+    // algo", asi que el formato se comprueba antes: un payload como "12ab" tambien
+    // devuelve 12, y forzar el gas a 12 porque el mensaje traia basura seria peor que
+    // rechazar el mensaje.
+    valor = payload.toInt();
+    log_aviso(ETIQUETA,
+              "prueba_gas en texto plano; el contrato es {\"%s\":N}",
+              JSON_CLAVE_GAS);
+  }
+
+  if (valor <= 0 || valor > GAS_ADC_MAXIMO) {
+    log_aviso(ETIQUETA, "prueba_gas '%s' fuera de 1..%d, se descarta",
+              payload.c_str(), GAS_ADC_MAXIMO);
     return;
   }
-  log_info(ETIQUETA, "prueba_gas: gas forzado a %d (umbral %d)", valor,
-           persistencia_umbral_gas());
+
+  log_info(ETIQUETA, "prueba_gas (%s): gas forzado a %d (abre %d, cierra %d)",
+           desde_json ? "json" : "texto plano", valor, persistencia_umbral_gas(),
+           persistencia_umbral_cierre_gas());
   sensores_fijar_gas_prueba(valor);
 }
 

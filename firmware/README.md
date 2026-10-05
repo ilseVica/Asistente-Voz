@@ -1,8 +1,12 @@
 # Firmware del nodo ESP32
 
 Firmware del nodo `casa/sala` del Asistente-Voz. El diseño completo está en
-`resultados de prompt/2026-10-03 - Propuesta Firmware ESP32 - Diseño del firmware del nodo ESP32 v3.txt`;
+`../../Archivos_text/Asistente-Voz/resultados/2026-10-03 - Propuesta Firmware ESP32 - Diseño del firmware del nodo ESP32 v3.txt`;
 esto es solo cómo compilarlo, cargarlo y probarlo.
+
+Los informes de cada tarea se archivaron fuera del repositorio, en
+`Servidores/Archivos_text/Asistente-Voz/`, para que el proyecto se clone sin
+cargarse de documentos de 700 KB.
 
 ## Compilar
 

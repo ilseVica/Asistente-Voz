@@ -30,8 +30,10 @@ es. El tópico es lo que el broker aplica y lo que la ACL controla.
 import json
 import logging
 import re
+import time
 
 import config
+import sanear as sanear_modulo
 
 registro = logging.getLogger("alertas")
 
@@ -266,6 +268,101 @@ def teclado_alerta(id_alerta: str):
     """
     import bot
     return bot.teclado_alerta(id_alerta)
+
+
+def texto_atendido(tipo: str, cuando: int, id_alerta: str) -> str:
+    """El texto con el que se reescribe un aviso de Telegram ya atendido.
+
+    En un sitio y no en dos. El botón «Ya lo atendí» del chat y la tarea que
+    reescribe los avisos atendidos desde el panel tienen que dejar el mensaje
+    IGUAL, o el familiar vería dos redacciones distintas de lo mismo según por dónde
+    hubiera atendido. De aquí sale la que usa `bot.cmd_atendi`, que antes la tenía
+    escrita a mano.
+
+    `cuando` es `alertas.resuelto_en`, la hora en que se atendió, y no la del envío
+    ni la de la reescritura: es la que responde a «¿a qué hora atendiste?».
+    """
+    return (
+        "ATENDIDO.\n\n"
+        "La alerta de %s se marco como atendida a las %s.\n\n"
+        "Id de la alerta: %s"
+        % (tipo, time.strftime("%H:%M:%S", time.localtime(cuando)), id_alerta)
+    )
+
+
+def resolver(base, publicar, id_alerta: str, ahora: int = None,
+             quien: str = "desconocido", origen: str = "") -> tuple:
+    """Atiende una alerta. Devuelve `(fila, fresca)`.
+
+    Esta función es la ÚNICA que resuelve una alerta, y la usan dos llamadores: el
+    botón «Ya lo atendí» del bot y el botón del panel web. Vive aquí, y no en
+    `bot.py`, porque el panel es un proceso aparte que no importa `telegram` y no
+    tiene por qué saber nada de Telegram.
+
+    Hace tres cosas, y el orden importa:
+
+    1. `base.marcar_resuelta()`, que es lo que impide que la cola vuelva a mandar
+       el aviso y cancela los envíos que quedaban pendientes de los demás
+       familiares. Va primero porque es lo que evita el reenvío.
+    2. Avisar al satélite en `satelite/decir`, para que el sitio deje de llamar.
+    3. Escribir en el log.
+
+    **El aviso al satélite sale SOLO si la alerta estaba sin resolver.** Ese `if
+    fresca` es el arreglo de un desacuerdo que tenía el código y el README: el
+    README decía que una segunda pulsación «no vuelve a avisar al satélite», y el
+    código no lo cumplía, porque `bot.cmd_atendi` llamaba a `_avisar_al_satelite`
+    sin mirar el resultado de `marcar_resuelta`.
+
+    Con un solo botón eso era un detalle. Con dos, resolver dos veces es lo
+    NORMAL: el familiar lo atiende en el panel y luego pulsa el botón de Telegram
+    que tenía abierto, o lo pulsan dos familiares a la vez. Sin este `if`, cada
+    pulsación publicaba en `satelite/decir` y el sitio oía «ya atendiste la
+    alerta» tantas veces como se pulsara.
+
+    Que avise solo la primera vez no pierde información: el sitio solo necesita
+    saber que ya hay alguien con el aviso. Volver a decirlo es ruido, y en una
+    casa el ruido en voz alta es un molesto.
+
+    `publicar` puede ser `None` (el bot arranca sin cliente MQTT) o fallar. En los
+    dos casos se registra y NO se lanza: la alerta ya está resuelta en la base, y
+    eso no se deshace porque no se haya podido avisar al satélite.
+
+    `quien` y `origen` van solo al log, para poder decir quién atendió y desde
+    dónde. `quien` debe venir ya enmascarado (`db.enmascarar_chat`) si es un
+    `chat_id`.
+    """
+    if ahora is None:
+        ahora = int(time.time())
+
+    fresca = base.marcar_resuelta(id_alerta, ahora)
+    fila = base.obtener_alerta(id_alerta)
+    tipo = fila["tipo"] if fila is not None else "alerta"
+
+    if fresca:
+        if publicar is None:
+            registro.info("alerta %s resuelta; no hay cliente MQTT, no se avisa a "
+                          "satelite/decir", id_alerta)
+        else:
+            texto = ("Ya atendiste la alerta de %s." % tipo)
+            try:
+                publicar(
+                    config.TOPICO_SATELITE_DECIR,
+                    {"texto": texto, "tipo": "aviso", "ts": ahora},
+                    qos=1, retain=False,
+                )
+                registro.info("publicado en satelite/decir: %s", texto)
+            except Exception as error:  # noqa: BLE001
+                registro.error("no se pudo publicar en satelite/decir: %s",
+                               sanear_modulo.sanear(error))
+    else:
+        registro.info("alerta %s (%s): ya estaba resuelta, no se vuelve a avisar al "
+                      "satelite", id_alerta, tipo)
+
+    registro.warning("alerta %s (%s) marcada como resuelta por %s desde %s%s",
+                     id_alerta, tipo, quien, origen or "el panel",
+                     "" if fresca else " (ya estaba resuelta)")
+
+    return fila, fresca
 
 
 def procesar(topico: str, cuerpo: str, base) -> bool:

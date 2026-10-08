@@ -1,12 +1,14 @@
 """Los comandos y los botones del bot de Telegram.
 
-Abre el bot de comandos en el chat privado de la familia. Hay dos comandos y un
+Abre el bot de comandos en el chat privado de la familia. Hay tres comandos y un
 botón:
 
 - `/registro <código>`: da de alta ese chat en la lista de quienes reciben las
   alertas. Los que ya estaban siguen estándolo.
 - `/alertas`: cuántas hay en la cola, cuántas se han mandado y cuáles son las
   últimas cinco. Contesta a cualquier familiar registrado.
+- `/panel`: un enlace de un solo uso al panel web, en un botón. Solo para un
+  familiar registrado, y solo si `PANEL_URL` está puesta.
 - Botón **«Ya lo atendí»**: marca la alerta como resuelta, edita el mensaje de
   Telegram para que el familiar vea uno solo con la hora, y publica en
   `casa/sala/satelite/decir` el aviso de que alguien ya está con el aviso (P17).
@@ -92,8 +94,10 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
                           CommandHandler, ContextTypes)
 
+import alertas as alertas_modulo
 import config
 import db as db_modulo
+import panel_acceso
 import registro as registro_modulo
 import telegram_cliente
 
@@ -125,6 +129,32 @@ def teclado_alerta(id_alerta: str) -> InlineKeyboardMarkup:
                              callback_data=PREFIJO_CODIGO + id_alerta)
     )
     return InlineKeyboardMarkup([[boton] for boton in botones])
+
+
+def texto_pedir_registro(base) -> str:
+    """El texto que contesta a un chat que no está registrado.
+
+    Lo usan `/registro` sin código **y** `/panel`, y tienen que ser el MISMO texto,
+    por eso está aquí y no escrito dos veces.
+
+    Es lo que hace que `/panel` no revele nada nuevo: si un chat que no está
+    registrado escribiera `/panel` y recibiera «para el panel necesitas estar
+    registrado», sabría que esta casa tiene un panel; con este texto, que es el
+    mismo que ya recibe por `/registro`, no aprende nada que no supiera. Escribir
+    la respuesta «de no registrado» dos veces, una para cada comando, es la forma
+    de que un día una diga «panel» y la otra no, y esa diferencia es medio punto de
+    entrada a lo que sea que haya detrás.
+    """
+    ya_hay = base.contar_familiares()
+    plural = "persona" if ya_hay == 1 else "personas"
+    aviso = ""
+    if ya_hay:
+        aviso = ("\n\nAhora mismo hay %d %s registrado(s). Si te registras, "
+                 "recibireis las alertas los dos." % (ya_hay, plural))
+    return ("Falta el codigo.\n\n"
+            "Escribe:\n"
+            "/registro CODIGO\n\n"
+            "El codigo te lo da quien instalo el asistente." + aviso)
 
 
 class ClienteBot:
@@ -161,6 +191,9 @@ class ClienteBot:
             )
             self.aplicacion.add_handler(
                 CommandHandler("alertas", self.cmd_alertas)
+            )
+            self.aplicacion.add_handler(
+                CommandHandler("panel", self.cmd_panel)
             )
             self.aplicacion.add_handler(
                 CallbackQueryHandler(self.cmd_atendi, pattern="^" + PREFIJO_CODIGO)
@@ -234,18 +267,8 @@ class ClienteBot:
 
         argumentos = contexto.args or []
         if not argumentos:
-            ya_hay = self.base.contar_familiares()
-            plural = "persona" if ya_hay == 1 else "personas"
-            aviso = ""
-            if ya_hay:
-                aviso = ("\n\nAhora mismo hay %d %s registrado(s). Si te registras, "
-                         "recibireis las alertas los dos." % (ya_hay, plural))
             await update.effective_message.reply_text(
-                "Falta el codigo.\n\n"
-                "Escribe:\n"
-                "/registro CODIGO\n\n"
-                "El codigo te lo da quien instalo el asistente."
-                + aviso
+                texto_pedir_registro(self.base)
             )
             return
 
@@ -349,6 +372,76 @@ class ClienteBot:
             lineas.append("No hay ninguna alerta todavia.")
         await update.effective_message.reply_text("\n".join(lineas))
 
+    # --- /panel: el enlace al panel web -------------------------------------
+
+    async def cmd_panel(self, update: Update,
+                        contexto: ContextTypes.DEFAULT_TYPE) -> None:
+        """Manda un enlace de un solo uso al panel web.
+
+        El enlace lleva un código que vale 10 minutos y que se gasta el primero que
+        lo abre. El botón se manda como botón de Telegram y no como texto: un botón
+        con `url=` abre el navegador sin que el familiar tenga que seleccionar y
+        copiar 40 caracteres de un mensaje.
+
+        Tres rechazos antes de generar nada, y el orden importa:
+
+        1. **No es un chat privado.** En un grupo saldría el número de la persona.
+        2. **No está registrado.** Contesta EXACTAMENTE lo mismo que `/registro` sin
+           código, sin decir que el panel existe. `/registro` ya le responde ese
+           texto a cualquier chat privado, así que aquí no se revela nada nuevo; y
+           un bot de la casa que dice «para el panel hay que estar registrado» a
+           cualquiera que lo encuentre ya es medio punto de entrada.
+        3. **`PANEL_URL` está vacía.** No se manda un enlace roto nunca. Un botón
+           que lleva a una página en blanco hace que el familiar pulse lo que sea
+           en la próxima alerta de gas, que es el momento exacto en que un botón
+           falso se paga caro.
+
+        Lo que sale del log: el familiar, enmascarado, y que se ha creado un enlace.
+        Nunca el código. `docker logs` lo lee cualquiera que tenga acceso al
+        servidor, y un código en claro ahí es una entrada al panel de la familia.
+        """
+        if not await self._es_privado(update):
+            return
+
+        chat_id = str(update.effective_chat.id)
+        quien = db_modulo.enmascarar_chat(chat_id)
+
+        if not self.base.familiar_registrado(chat_id):
+            registro.warning("/panel desde el chat %s, que no esta registrado; no se "
+                             "le manda ningun enlace", quien)
+            await update.effective_message.reply_text(
+                texto_pedir_registro(self.base)
+            )
+            return
+
+        if not config.PANEL_URL:
+            registro.warning("/panel sin PANEL_URL en el entorno: no se manda ningun "
+                             "enlace. El panel todavia no esta desplegado.")
+            await update.effective_message.reply_text(
+                "El panel todavia no esta disponible.\n\n"
+                "Sigue con /alertas: por ahi te aviso igual."
+            )
+            return
+
+        ahora = int(time.time())
+        codigo = panel_acceso.crear_enlace(self.base, chat_id, ahora)
+        url = panel_acceso.enlace_de(config.PANEL_URL, codigo)
+        registro.warning("enlace del panel creado para el familiar %s; vale hasta "
+                         "las %s", quien,
+                         time.strftime("%H:%M:%S",
+                                       time.localtime(ahora + registro_modulo.SEGUNDOS_CODIGO)))
+
+        teclado = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Abrir panel", url=url)]]
+        )
+        await update.effective_message.reply_text(
+            "Tu enlace al panel.\n\n"
+            "Abrelo y entras. Vale 10 minutos y es de un solo uso: si se lo "
+            "abres a alguien mas, al otro le dira que ya no sirve.\n\n"
+            "El enlace abre este panel, no la pagina principal del sitio.",
+            reply_markup=teclado,
+        )
+
     # --- Botón "Ya lo atendí" (P17) -----------------------------------------
 
     async def cmd_atendi(self, update: Update,
@@ -408,20 +501,33 @@ class ClienteBot:
         chat_id = str(chat_id)
 
         ahora = int(time.time())
-        fresca = self.base.marcar_resuelta(id_alerta, ahora)
-        fila = self.base.obtener_alerta(id_alerta)
+        # La resolución va por `alertas.resolver()`, la MISMA función que usa el
+        # panel web. Ver su comentario: avisa al satélite solo si la alerta estaba
+        # sin resolver, que es lo que el README de este archivo dice desde hace
+        # tiempo y lo que el código no cumplía.
+        fila, fresca = alertas_modulo.resolver(
+            self.base, self.publicar, id_alerta, ahora,
+            quien="el familiar %s" % db_modulo.enmascarar_chat(chat_id),
+            origen="el boton del bot",
+        )
         tipo = fila["tipo"] if fila is not None else "alerta"
 
-        texto = (
-            "ATENDIDO.\n\n"
-            "La alerta de %s se marco como atendida a las %s.\n\n"
-            "Id de la alerta: %s"
-            % (tipo, time.strftime("%H:%M:%S", time.localtime(ahora)), id_alerta)
-        )
+        # La hora que sale en el texto es `resuelto_en`, la de cuando se atendio, y
+        # no la de ahora: si este familiar pulsa el boton DESPUES de que la hubiera
+        # atendido otro desde el panel, el mensaje tiene que decir la hora real de
+        # atencion, que es la que ya estaba en la base.
+        cuando = (fila["resuelto_en"] if fila is not None and fila["resuelto_en"]
+                  else ahora)
+        texto = alertas_modulo.texto_atendido(tipo, cuando, id_alerta)
 
         # La edicion va al chat de quien pulso, que es el único sitio donde esta el
         # mensaje. Con dos familiares, editar en un chat por defecto dejaria al que
         # pulso viendo el aviso viejo con el boton, y lo dejaria pulsando otra vez.
+        #
+        # `marcar_editado` se llama en los DOS caminos, tambien si la edicion
+        # fallo: lo que hace es decirle a `cola._editar_resueltas` que este aviso ya
+        # tiene dueño y no lo reescriba el, y una fila que no se pudo editar no va
+        # a poderse editar dentro de cinco segundos (ver `db.marcar_editado`).
         try:
             await self.remitente.editar_futuro(consulta.message, texto,
                                               teclado=None, chat_id=chat_id)
@@ -432,46 +538,15 @@ class ClienteBot:
             # resuelto, no.
             registro.error("no se pudo editar el mensaje de la alerta %s: %s",
                            id_alerta, telegram_cliente.sanear(error))
+            self.base.marcar_editado(id_alerta, chat_id, ahora)
             await consulta.answer(
                 "Anotado. El mensaje viejo no se pudo editar.", show_alert=True
             )
         else:
+            self.base.marcar_editado(id_alerta, chat_id, ahora)
             await consulta.answer(
-                "Ya esta attendida." if fresca else "Esta alerta ya estaba atendida."
+                "Ya esta atendida." if fresca else "Esta alerta ya estaba atendida."
             )
-
-        self._avisar_al_satelite(tipo, ahora)
-
-        registro.warning("alerta %s (%s) marcada como resuelta por el boton 'Ya lo "
-                         "atendi' del familiar %s%s",
-                         id_alerta, tipo, db_modulo.enmascarar_chat(chat_id),
-                         "" if fresca else " (ya estaba resuelta)")
-
-    def _avisar_al_satelite(self, tipo: str, ahora: int) -> None:
-        """Publica en `casa/sala/satelite/decir` que alguien ya atendió la alerta.
-
-        Es lo que pide el P17: el sitio tiene que enterarse de que ya hay alguien
-        con el aviso, para que no siga llamando. El `ts` va como entero epoch, que
-        es lo que exige la regla de antigüedad del contrato, y el mensaje va SIN
-        retención, porque es un hecho que pasó en un momento.
-
-        Si la publicación falla se registra y no se lanza: el pulsador ya resolvió
-        la alerta, y no se puede deshacer por no haber podido avisar al satélite.
-        """
-        if self.publicar is None:
-            registro.info("no hay cliente MQTT en el bot; no se avisa a satelite/decir")
-            return
-        texto = ("Ya atendiste la alerta de %s." % tipo)
-        try:
-            self.publicar(
-                config.TOPICO_SATELITE_DECIR,
-                {"texto": texto, "tipo": "aviso", "ts": ahora},
-                qos=1, retain=False,
-            )
-            registro.info("publicado en satelite/decir: %s", texto)
-        except Exception as error:  # noqa: BLE001
-            registro.error("no se pudo publicar en satelite/decir: %s",
-                           telegram_cliente.sanear(error))
 
     # --- Utilidades --------------------------------------------------------
 

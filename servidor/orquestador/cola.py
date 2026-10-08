@@ -114,6 +114,7 @@ class TrabajadorTelegram:
             try:
                 trabajo = self._intentar_uno()
                 self._avisar_de_pendientes_viejas()
+                self._editar_resueltas()
             except Exception as error:  # noqa: BLE001
                 # Un fallo inesperado en el trabajador no puede tumbar el
                 # servicio: las alertas seguirían llegando a MQTT y la cola
@@ -162,8 +163,10 @@ class TrabajadorTelegram:
                       "intento %d", id_alerta, tipo, quien, intentos)
 
         try:
-            self.remitente.enviar(texto, teclado=alertas.teclado_alerta(id_alerta),
-                                  chat_id=chat_id)
+            mensaje = self.remitente.enviar(
+                texto, teclado=alertas.teclado_alerta(id_alerta),
+                chat_id=chat_id,
+            )
         except TelegramNoConfigurado as error:
             # No es un fallo de envío: es que no hay token, o la fila de este
             # envío se quedó sin familiar. El envío se queda pendiente, SIN gastar
@@ -212,11 +215,57 @@ class TrabajadorTelegram:
         # commit de `marcar_enviado` hay unos cientos de milisegundos. Si el
         # proceso muere ahora, el siguiente arranque mandará el envío otra vez, a
         # ESE familiar, y solo a ese.
-        self.base.marcar_enviado(id_alerta, chat_id)
+        # El `message_id` viaja aqui y no en otro sitio: es lo que luego permite
+        # reescribir ESTE mensaje si la alerta se atiende desde el panel, que no
+        # tiene token para hacerlo en el momento.
+        self.base.marcar_enviado(
+            id_alerta, chat_id,
+            mensaje_id=getattr(mensaje, "message_id", None),
+        )
         self.sin_destino_avisados.discard(clave)
         registro.warning("ALERTA %s enviada al familiar %s (id %s, intento %d)",
                          tipo.upper(), quien, id_alerta, intentos)
         return True
+
+    def _editar_resueltas(self) -> None:
+        """Reescribe en Telegram los avisos de alertas atendidas fuera del bot.
+
+        El panel y el bot resuelven por el MISMO camino (`alertas.resolver`), pero
+        solo el bot puede editar el mensaje mientras lo hace: tiene el objeto
+        `Message` en la mano y es su proceso el que lleva el token. El panel es otro
+        proceso, resuelve en la base y se queda sin más. Esta tarea es la otra
+        mitad: mira los avisos ya enviados cuya alerta está resuelta y a los que les
+        falta la reescritura, y los deja como los deja el botón («ATENDIDO», sin
+        botones), para que la familia no vea un aviso con los botones puestos mientras
+        ya hay alguien con el aviso.
+
+        No hace falta saber quién la resolvió. La condición es solo «está resuelta y
+        todavía no se ha reescrito», y cuando la resolución salió del botón ese
+        mismo botón ya marcó `editado_en`, con lo que lo suyo no se toca dos veces.
+
+        Marca la fila aunque la edición falle, y esa decisión está comentada en
+        `db.marcar_editado`: el único fallo real es que Telegram rechace editar ese
+        mensaje (aviso de más de 48 horas, chat borrado), y reintentarlo cada cinco
+        segundos para siempre no lo arregla y tapa el log.
+        """
+        for fila in self.base.envios_a_editar(limite=10):
+            texto = alertas.texto_atendido(fila["tipo"], fila["resuelto_en"],
+                                           fila["alerta_id"])
+            quien = db_modulo.enmascarar_chat(fila["chat_id"])
+            try:
+                self.remitente.editar_mensaje(fila["chat_id"], fila["mensaje_id"],
+                                              texto)
+            except Exception as error:  # noqa: BLE001
+                # El mismo saneado que el resto: un error de la API de Telegram
+                # puede traer la URL de la API, y esa URL lleva el token.
+                registro.warning("no se pudo reescribir el aviso de la alerta %s "
+                                 "para %s: %s", fila["alerta_id"], quien,
+                                 telegram_cliente.sanear(error))
+            else:
+                registro.info("aviso de la alerta %s reescrito como ATENDIDO para "
+                              "%s (atendida desde el panel)",
+                              fila["alerta_id"], quien)
+            self.base.marcar_editado(fila["alerta_id"], fila["chat_id"])
 
     def _avisar_de_pendientes_viejas(self) -> None:
         """Una vez por hora, dice qué envíos llevan más de 24 h sin salir.

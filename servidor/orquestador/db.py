@@ -64,10 +64,22 @@ RUTA_ESQUEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # Antes no hacia falta: el único cambio de esquema era agregar `resuelta_en`, que se
 # hacia con un `ALTER TABLE` idempotente ("si no existe la columna, agregala"). Eso
 # bastaba mientras las migraciones fueran de una columna. Esta vez el cambio es de
-# otra forma: hay una tabla nueva y hay que REPARTIR las filas que ya havia entre
+# otra forma: hay una tabla nueva y hay que REPARTIR las filas que ya habia entre
 # dos, y eso no se puede repetir sin duplicar. Un número de versión lo dice sin
 # ambigüedad, y no necesita una tabla nueva ni una convención con la base.
-VERSION_ESQUEMA = 1
+#
+# La version 2 (panel web) no reparte nada: son dos tablas nuevas que crea
+# `esquema.sql` con `CREATE TABLE IF NOT EXISTS`, asi que en una base que ya estaba
+# en la 1 se crean igual y no hay ni datos que mover. Aun asi sube la version, para
+# que quede escrito cuando paso y para que el log de arranque diga la verdad.
+#
+# La version 3 agrega `mensaje_id` y `editado_en` a `envios`, que es con lo que el
+# aviso de Telegram se reescribe cuando la alerta se atiende desde el panel. Como
+# son dos columnas nuevas en una tabla vieja, si hace falta el `ALTER TABLE` idem-
+# potente de siempre: en una base que ya esta en la 2, `esquema.sql` no toca nada
+# (`CREATE TABLE IF NOT EXISTS` sobre una tabla que ya existe) y las columnas solo
+# pueden salir de ahi.
+VERSION_ESQUEMA = 3
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -193,6 +205,27 @@ class BaseDatos:
         if version == 0:
             self._migrar_a_familiares_multiples()
 
+        # De la 1 a la 2 (panel web) no hay nada que hacer aqui, y es a proposito:
+        # `panel_enlaces` y `panel_tokens` las crea `esquema.sql` con su `CREATE
+        # TABLE IF NOT EXISTS`, que ya se ejecuto entero ANTES de llegar aqui, tanto
+        # en una base nueva como en una que ya estaba en la 1. Por eso esta version
+        # no tiene funcion propia: si le pusieramos una, acabaria haciendo en codigo
+        # un `CREATE TABLE` que el archivo de esquema ya garantiza, y habria dos
+        # sitios donde el panel se puede desincronizar del esquema.
+        #
+        # Lo que si tiene que quedar escrito es la version, para que el proximo
+        # arranque no vuelva a pasar por aqui.
+
+        # De la 2 a la 3: `envios` gana `mensaje_id` y `editado_en`. A diferencia
+        # de la tabla del panel, estas columnas van DENTRO de una tabla que ya
+        # existe, asi que `esquema.sql` no las puede crear en una base vieja y hace
+        # falta el `ALTER TABLE` idempotente. En una base nueva no se entra aqui
+        # (el `CREATE TABLE` del fichero ya trajo las columnas) y en una vieja el
+        # `PRAGMA table_info` decide, con lo que la funcion se puede llamar las
+        # veces que haga falta sin duplicar nada.
+        if version < 3:
+            self._migrar_envios_mensajes()
+
         # El indice de las alertas que esperan a un familiar se crea AQUI y no en
         # `esquema.sql`, y el motivo es el orden: `esquema.sql` se ejecuta entero
         # ANTES de migrar, y sobre una base ya existente su `CREATE TABLE IF NOT
@@ -211,6 +244,26 @@ class BaseDatos:
         self.conexion.execute("PRAGMA user_version = %d" % VERSION_ESQUEMA)
         registro.info("base de datos migrada a la versión %d del esquema",
                       VERSION_ESQUEMA)
+
+    def _migrar_envios_mensajes(self) -> None:
+        """La migración de la versión 2 a la 3: las dos columnas de la reescritura.
+
+        `mensaje_id` y `editado_en` en `envios`. No hay datos que mover: las dos
+        columnas nacen vacias, que es donde tienen que empezar, porque ninguna fila
+        de una base vieja tiene todavia un mensaje reescrito.
+
+        El `PRAGMA table_info` es lo que hace que sea segura. En una base creada en
+        limpio, `esquema.sql` ya puso las columnas antes de llegar aqui (su
+        `CREATE TABLE` es el nuevo), y un segundo `ALTER TABLE` sobre columnas que
+        existen fallaria con «duplicate column name» y dejaria la base a medias.
+        """
+        columnas = {fila["name"] for fila in
+                    self.conexion.execute("PRAGMA table_info(envios)").fetchall()}
+        for nombre in ("mensaje_id", "editado_en"):
+            if nombre not in columnas:
+                self.conexion.execute(
+                    "ALTER TABLE envios ADD COLUMN %s INTEGER" % nombre
+                )
 
     def _migrar_a_familiares_multiples(self) -> None:
         """La migración de la versión 0 a la 1.
@@ -533,6 +586,23 @@ class BaseDatos:
                 "SELECT COUNT(*) AS total FROM familiares"
             ).fetchone()["total"]
 
+    def nombre_de(self, chat_id: str) -> str:
+        """El nombre de un familiar, o una cadena vacía.
+
+        La fila de `familiares` guarda el nombre, y el token del panel NO: el token es
+        una credencial y no lleva un nombre dentro. Así que el saludo de la cabecera del
+        panel («Hola, Ana») sale de aquí y no del token, y cambiar el nombre en la base
+        se ve sin tener que volver a hacer `/panel`.
+
+        Cadena vacía y no `None` para que quien lo pinte no tenga que tratar el caso
+        «no hay nombre» por separado del de «el nombre está en blanco».
+        """
+        with _candado:
+            fila = self.conexion.execute(
+                "SELECT nombre FROM familiares WHERE chat_id = ?", (str(chat_id),)
+            ).fetchone()
+        return (fila["nombre"] or "") if fila is not None else ""
+
     def dar_de_baja(self, chat_id: str) -> bool:
         """Quita un familiar y cancela lo que le quedaba por recibir.
 
@@ -542,6 +612,12 @@ class BaseDatos:
         acaba de dar de baja, y el único rastro sería un envio sin destino en una
         tabla sin nombre al lado. Dar de baja es quitar el aviso, no quitar el
         nombre de la lista.
+
+        Borra tambien sus tokens y sus enlaces del panel. Sin esto, dar de baja a
+        alguien lo dejaria dentro del panel: su token en el navegador seguiria
+        valiendo, porque la comprobacion de sesion tendria que mirar `familiares`
+        para enterarse. Se comprueba, si, pero es una comprobacion de mas en cada
+        peticion para tapar un olvido que aqui se resuelve de una vez.
 
         Se devuelven los envios cancelados para que el operador vea cuantos
         avisos se quedaron sin mandar, que es el número que le dice si la baja
@@ -556,8 +632,180 @@ class BaseDatos:
                 "DELETE FROM envios WHERE chat_id = ? AND enviado_en IS NULL",
                 (chat,),
             ).rowcount
+            sesiones = self.conexion.execute(
+                "DELETE FROM panel_tokens WHERE chat_id = ?", (chat,)
+            ).rowcount
+            enlaces = self.conexion.execute(
+                "DELETE FROM panel_enlaces WHERE chat_id = ?", (chat,)
+            ).rowcount
+            self.conexion.commit()
+            if sesiones or enlaces:
+                registro.info("al dar de baja al familiar %s se han borrado %d "
+                              "sesion(es) y %d enlace(s) del panel",
+                              enmascarar_chat(chat), sesiones, enlaces)
+            return cursor.rowcount == 1
+
+    # --- Panel web: enlaces de un solo uso y sesiones ------------------------
+
+    def crear_enlace_panel(self, codigo_hash: str, chat_id: str, expira_en: int,
+                           ahora: int = None) -> None:
+        """Guarda el hash de un codigo de acceso del panel.
+
+        `codigo_hash` viene ya hasheado por quien lo genera (`panel/acceso.py`).
+        Aqui solo se guarda, porque hashear es cosa del que conoce el formato del
+        codigo y no de la base de datos.
+        """
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "INSERT OR REPLACE INTO panel_enlaces "
+                "(codigo_hash, chat_id, creado_en, expira_en, intentos, usado_en) "
+                "VALUES (?, ?, ?, ?, 0, NULL)",
+                (codigo_hash, str(chat_id), ahora, int(expira_en)),
+            )
+            self.conexion.commit()
+
+    def tomar_enlace_panel(self, codigo_hash: str, ahora: int = None) -> dict:
+        """Canjea un codigo de un solo uso, y devuelve la fila si sirve.
+
+        Devuelve `None` si el codigo no existe, ya se uso, caduco, o se paso del
+        limite de intentos. El `SELECT` de comprobacion es solo informativo: quien
+        decide si el canje se llevo a cabo es el `rowcount` del `UPDATE` de abajo.
+
+        **El canje tiene que ser atomico, y por eso decide el `UPDATE`.** Comprobar
+        con un `SELECT` y despues marcar con un `UPDATE` deja un hueco entre las dos
+        cosas: dos peticiones a la vez, las dos leen `usado_en IS NULL` y las dos
+        crean un token. Como el token dura 30 dias, eso no es un doble aviso que se
+        ve y se corrige: son dos sesiones abiertas para el mismo enlace.
+
+        Por eso el `UPDATE` lleva la condicion en su propio `WHERE` y el `rowcount`
+        es la respuesta a «me lo quedo yo».
+
+        Sobre `intentos`, para que no se lea mas de lo que es: un codigo equivocado
+        NO aparece en la tabla (solo se guarda su hash), asi que no cuenta intento, y
+        un codigo correcto se canjea a la primera y se consume. En la practica el
+        limite de 5 casi no se alcanza nunca, y no hay que venderlo como una defensa
+        contra adivinar: esa defensa es que 16 caracteres de un alfabeto de 31 son
+        unos 8x10^23 combinaciones. `intentos` esta para que un cambio futuro en el
+        alfabeto, o un endpoint que admita mas de un intento sobre un codigo
+        conocido, no se quede sin techo.
+        """
+        import registro as registro_modulo
+
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            fila = self.conexion.execute(
+                "SELECT * FROM panel_enlaces WHERE codigo_hash = ?", (codigo_hash,)
+            ).fetchone()
+            # El codigo que no existe no cuenta intento: no hay nada que
+            # adivinar, y un `SELECT` sobre un hash aleatorio es solo ruido.
+            if fila is None:
+                return None
+            if fila["usado_en"] is not None:
+                return None
+            if fila["expira_en"] <= ahora:
+                return None
+            if fila["intentos"] >= registro_modulo.MAX_INTENTOS_CODIGO:
+                return None
+
+            self.conexion.execute(
+                "UPDATE panel_enlaces SET intentos = intentos + 1 "
+                "WHERE codigo_hash = ?",
+                (codigo_hash,),
+            )
+            cursor = self.conexion.execute(
+                "UPDATE panel_enlaces SET usado_en = ? "
+                "WHERE codigo_hash = ? AND usado_en IS NULL",
+                (ahora, codigo_hash),
+            )
+            self.conexion.commit()
+            if cursor.rowcount != 1:
+                return None
+            return dict(fila)
+
+    def crear_token_panel(self, token_hash: str, chat_id: str, caduca_en: int,
+                          ahora: int = None) -> None:
+        """Guarda una sesión nueva del panel a partir de su hash."""
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "INSERT INTO panel_tokens "
+                "(token_hash, chat_id, creado_en, caduca_en, ultimo_uso_en, "
+                " revocado_en) VALUES (?, ?, ?, ?, NULL, NULL)",
+                (token_hash, str(chat_id), ahora, int(caduca_en)),
+            )
+            self.conexion.commit()
+
+    def sesion_panel(self, token_hash: str, ahora: int = None):
+        """La fila del token si la sesión vale, o `None`.
+
+        Valen las cuatro cosas a la vez: que el hash exista, que el familiar siga
+        registrado, que no este revocada y que no haya caducado.
+
+        La de `familiares` es la que evita que un token sobreviva a una baja: al
+        borrar al familiar, `dar_de_baja` limpia sus tokens, pero si ese borrado se
+        queda sin hacer, esta comprobacion sigue cierrando la puerta.
+        """
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            fila = self.conexion.execute(
+                "SELECT t.* FROM panel_tokens t "
+                "WHERE t.token_hash = ? "
+                "  AND t.revocado_en IS NULL "
+                "  AND t.caduca_en > ? "
+                "  AND EXISTS (SELECT 1 FROM familiares f "
+                "              WHERE f.chat_id = t.chat_id)",
+                (token_hash, ahora),
+            ).fetchone()
+            return dict(fila) if fila is not None else None
+
+    def marcar_token_usado(self, token_hash: str, ahora: int = None) -> None:
+        """Anota el ultimo uso de una sesión.
+
+        Se llama una vez por sesion y no en cada peticion. El dato va para que el
+        operador vea «llego a usarlo el martes», no para decidir nada: decidir
+        caducidad es cosa del `caduca_en` de la fila, que no se renueva.
+        """
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "UPDATE panel_tokens SET ultimo_uso_en = ? WHERE token_hash = ?",
+                (ahora, token_hash),
+            )
+            self.conexion.commit()
+
+    def revocar_token_panel(self, token_hash: str, ahora: int = None) -> bool:
+        """Cierra una sesión («salir»). `True` si estaba viva.
+
+        Se marca `revocado_en` y no se borra la fila, para que `salir` no sea
+        idempotente por accidente: la segunda vez que se llama ya no hay sesion que
+        cerrar y quien llama lo puede decir. La p96 se lleva despues la fila.
+        """
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            cursor = self.conexion.execute(
+                "UPDATE panel_tokens SET revocado_en = ? "
+                "WHERE token_hash = ? AND revocado_en IS NULL",
+                (ahora, token_hash),
+            )
             self.conexion.commit()
             return cursor.rowcount == 1
+
+    def sesiones_panel_de(self, chat_id: str) -> list:
+        """Las sesiones vivas de un familiar. Para el operador, no para la API."""
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT token_hash, creado_en, caduca_en, ultimo_uso_en "
+                "FROM panel_tokens WHERE chat_id = ? AND revocado_en IS NULL "
+                "ORDER BY creado_en",
+                (str(chat_id),),
+            ))
 
     # --- Cola de alertas ---------------------------------------------------
 
@@ -673,12 +921,64 @@ class BaseDatos:
             ))
 
     def marcar_enviado(self, id_alerta: str, chat_id: str,
-                       ahora: int = None) -> None:
+                       ahora: int = None, mensaje_id: int = None) -> None:
+        """Marca un envio como hecho y guarda el `message_id` con el que salio.
+
+        `mensaje_id` es lo que permite reescribir ese mensaje despues si la alerta
+        se atiende desde el panel. Se guarda con `COALESCE` y no a pelo: si un
+        reintento devolviera un `None` (un remitente de prueba, o una libreria que
+        no confirmara el mensaje), lo que hay se conserva en vez de perderse.
+        """
         if ahora is None:
             ahora = int(time.time())
         with _candado:
             self.conexion.execute(
-                "UPDATE envios SET enviado_en = ?, ultimo_error = NULL "
+                "UPDATE envios SET enviado_en = ?, ultimo_error = NULL, "
+                "mensaje_id = COALESCE(?, mensaje_id) "
+                "WHERE alerta_id = ? AND chat_id = ?",
+                (ahora, mensaje_id, id_alerta, str(chat_id)),
+            )
+            self.conexion.commit()
+
+    def envios_a_editar(self, limite: int = 10) -> list:
+        """Los avisos ya enviados cuya alerta esta resuelta y aun no se reescribieron.
+
+        Es la cola de trabajo de `cola._editar_resueltas`: lo que falto hacerle al
+        aviso cuando la alerta se atendio desde el panel (o desde cualquier sitio
+        que no fuera el boton de Telegram de ese chat).
+
+        Sale solo lo que tiene `mensaje_id`: sin mensaje no hay nada que editar, y
+        meterlo aqui seria un intento de edicion fallido en cada vuelta para toda la
+        vida. `editado_en IS NULL` es lo que hace que cada aviso se reescriba una
+        sola vez, y tambien es lo que aparta los avisos que el propio boton del bot
+        ya habia reescrito.
+        """
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT e.alerta_id, e.chat_id, e.mensaje_id, a.tipo, "
+                "       a.resuelto_en "
+                "FROM envios e JOIN alertas a ON a.id = e.alerta_id "
+                "WHERE a.resuelto_en IS NOT NULL AND e.mensaje_id IS NOT NULL "
+                "  AND e.editado_en IS NULL "
+                "ORDER BY a.resuelto_en LIMIT ?",
+                (limite,),
+            ))
+
+    def marcar_editado(self, id_alerta: str, chat_id: str,
+                       ahora: int = None) -> None:
+        """Anota que el aviso de esta fila ya no hace falta reescribirlo.
+
+        Se llama tanto si la edicion salio como si no. La razon de marcar tambien
+        el fallo es que el unico fallo posible real es que Telegram no acepte editar
+        ese mensaje (aviso de mas de 48 horas, chat borrado), y eso no se arregla
+        reintentando: un reintento cada cinco segundos para siempre, con su linea de
+        ERROR encima, no arregla nada y tapa el resto del log.
+        """
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "UPDATE envios SET editado_en = ? "
                 "WHERE alerta_id = ? AND chat_id = ?",
                 (ahora, id_alerta, str(chat_id)),
             )
@@ -889,6 +1189,21 @@ class BaseDatos:
         Los envios ya enviados tambien se purgan, y no solo los pendientes: son la
         parte mas grande de la tabla y guardan lo mismo que la alerta que ya esta en
         el historial.
+
+        Las dos tablas del panel se purgan aqui tambien, y no lo hace el servicio del
+        panel: la purga corre cada hora en el orquestador, y meterse en la base desde
+        dos procesos para la misma tarea son dos relojes que se pisan. Los plazos son
+        cortos porque son cosas que ya no sirven para nada:
+
+          - Los enlaces de un solo uso, un dia despues de usados o caducados. No
+            hace falta esperar 30 dias para algo que, como mucho, vale 10 minutos:
+            el unico caso en que un enlace caducado sirve de algo es que alguien
+            este mirando el historico del navegador dentro de un mes, y a ese
+            familiar le va a llegar un `/panel` nuevo.
+          - Los tokens, 30 dias despues de caducar o de revocarse. Aqui si se
+            espera el plazo entero, porque un token caducado es la prueba de que
+            esa sesion existio, y el operador lo necesita para saber si una baja
+            funciono.
         """
         if ahora is None:
             ahora = int(time.time())
@@ -907,5 +1222,23 @@ class BaseDatos:
                 "DELETE FROM alertas WHERE purgable_en < ?", (ahora,)
             )
             borrados_alertas = cursor_alertas.rowcount
+            cursor_enlaces = self.conexion.execute(
+                "DELETE FROM panel_enlaces WHERE "
+                "  (usado_en IS NOT NULL AND usado_en < ?) OR "
+                "  (usado_en IS NULL AND expira_en < ?)",
+                (ahora - config.DIAS_PURGA_PANEL_ENLACES * 86400,
+                 ahora - config.DIAS_PURGA_PANEL_ENLACES * 86400),
+            )
+            borrados_enlaces = cursor_enlaces.rowcount
+            cursor_tokens = self.conexion.execute(
+                "DELETE FROM panel_tokens WHERE "
+                "  caduca_en < ? OR (revocado_en IS NOT NULL AND revocado_en < ?)",
+                (ahora - config.DIAS_PURGA_PANEL_TOKENS * 86400,
+                 ahora - config.DIAS_PURGA_PANEL_TOKENS * 86400),
+            )
+            borrados_tokens = cursor_tokens.rowcount
             self.conexion.commit()
+        if borrados_enlaces or borrados_tokens:
+            registro.info("purgados del panel: %d enlace(s) y %d sesion(es)",
+                          borrados_enlaces, borrados_tokens)
         return borrados_ids, borrados_alertas

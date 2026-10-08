@@ -182,6 +182,16 @@ CREATE INDEX IF NOT EXISTS idx_alertas_tipo
 -- `enviado_en` es lo que marca el envio como hecho. Mientras sea nulo, la fila se
 -- reintenta, y da igual cuantos intentos lleve: un fallo de red no descarta nunca
 -- un aviso de gas (ver `cola.TrabajadorTelegram`).
+--
+-- `mensaje_id` y `editado_en` son los dos campos con los que el aviso de Telegram
+-- se reescribe cuando la alerta se atiende DESDE EL PANEL. El que pulsa el boton
+-- del bot edita su propio mensaje alla mismo (tiene el objeto `Message` en la mano
+-- y el token), pero el panel es otro proceso: resuelve en la base y no puede tocar
+-- Telegram. Lo que queda aqui es lo que le permite al orquestador hacerlo despues.
+-- Sin `mensaje_id` no habria manera de saber que mensaje reescribir (con dos
+-- familiares son dos mensajes distintos en dos chats distintos), y sin
+-- `editado_en` la tarea de reescritura volveria a editar el mismo mensaje en cada
+-- vuelta.
 
 CREATE TABLE IF NOT EXISTS envios (
     alerta_id          TEXT NOT NULL,
@@ -191,6 +201,12 @@ CREATE TABLE IF NOT EXISTS envios (
     enviado_en         INTEGER,
     ultimo_error       TEXT,
     creado_en          INTEGER NOT NULL,
+    -- El `message_id` de Telegram del aviso, en su chat. Nulo mientras el envio
+    -- no haya salido: solo hay mensaje que editar cuando lo hay.
+    mensaje_id         INTEGER,
+    -- Cuando se reescribio como ATENDIDO. Nulo = sigue con el aviso y los
+    -- botones, y es la condicion que mira `db.envios_a_editar`.
+    editado_en         INTEGER,
     PRIMARY KEY (alerta_id, chat_id)
 );
 
@@ -203,3 +219,86 @@ CREATE INDEX IF NOT EXISTS idx_envios_pendientes
 -- Para dar de baja a alguien y ver cuantos envios sueltos tiene.
 CREATE INDEX IF NOT EXISTS idx_envios_chat
     ON envios (chat_id, enviado_en);
+
+
+-- --- panel_enlaces ---------------------------------------------------------
+--
+-- Los codigos de un solo uso que el bot manda en `/panel`. Una fila por codigo
+-- emitido, y son de UN SOLO USO: el que lo canjea por un token se queda sin
+-- Poder volver a usarlo, y el codigo se marca con `usado_en`.
+--
+-- Se guarda el HASH del codigo, no el codigo. Un `SELECT` sobre esta tabla, o
+-- una copia del volumen, no entrega nada con lo que entrar al panel. El codigo
+-- viaja entero por Telegram y por la URL, asi que en algun momento existe en
+-- claro, pero en la base no.
+--
+-- El alfabeto y la longitud son los de `registro.py` (16 caracteres sin 0/O ni
+-- 1/l/I), reutilizados a proposito: un codigo que se teclea o se dicta no puede
+-- confundirse entre un cero y una o. Un enlace con el codigo pegado al final
+-- son 16 caracteres mas el dominio, y sigue siendo corto.
+--
+-- `intentos` lleva el limite de 5, y va EN LA FILA y no en memoria porque el que
+-- genera el codigo es el bot y el que lo cuenta es la API: son dos procesos, y un
+-- contador en memoria de uno de los dos no lo veria el otro.
+--
+-- Para que no se lea mas de lo que es: un codigo equivocado no esta en la tabla
+-- (solo se guarda su hash), asi que no cuenta intento, y uno correcto se canjea a
+-- la primera. La defensa contra adivinar no es esta columna, son los 16 caracteres
+-- de un alfabeto de 31. `intentos` es un techo por si algun dia el codigo deja de
+-- ser de un solo intento.
+--
+-- NO hay llave foranea con `panel_tokens` ni con `familiares`: esta tabla esta
+-- para borrar, no para impedir nada. Si un familiar se da de baja, sus tokens se
+-- borran y sus enlaces dejan de servir porque el canje comprueba `familiares`.
+
+CREATE TABLE IF NOT EXISTS panel_enlaces (
+    codigo_hash  TEXT NOT NULL PRIMARY KEY,
+    chat_id      TEXT NOT NULL,
+    creado_en    INTEGER NOT NULL,
+    expira_en    INTEGER NOT NULL,
+    intentos     INTEGER NOT NULL DEFAULT 0,
+    usado_en     INTEGER
+);
+
+-- Para la purga: lo que ya esta usado o caducado y se puede ir.
+CREATE INDEX IF NOT EXISTS idx_panel_enlaces_expira
+    ON panel_enlaces (expira_en);
+
+
+-- --- panel_tokens ----------------------------------------------------------
+--
+-- Las sesiones del panel web. Un token por dispositivo (mas bien, por navegador y
+-- origen), y el token es lo que va en `Authorization: Bearer`.
+--
+-- El token NO se guarda en claro, solo su sha256. A diferencia del codigo, aqui
+-- no hay ninguna excusa para guardarlo: el token no lo teclea nadie y no viaja en
+-- ninguna URL que el usuario pueda leer, y son 32 bytes de `secrets`, asi que un
+-- hash no se puede invertir.
+--
+-- No hay columna `nombre`: sale de `familiares` con un `SELECT`. Copiarlo aqui
+-- seria un segundo sitio donde puede estar equivocado, y no se usa para decidir
+-- nada.
+--
+-- `chat_id` es lo que permite cerrar el acceso de un familiar concreto sin tocar
+-- nada mas: `db.dar_de_baja()` borra sus filas de aqui, y a partir de ahi su
+-- token da 401 aunque el navegador lo siga teniendo guardado.
+--
+-- `caduca_en` son 30 dias, el mismo plazo que el historial de alertas. No se
+-- renueva solo por usar el panel: se renueva haciendo `/panel` de nuevo. Un token
+-- que se renueva solo es un token que nunca se va.
+
+CREATE TABLE IF NOT EXISTS panel_tokens (
+    token_hash    TEXT NOT NULL PRIMARY KEY,
+    chat_id       TEXT NOT NULL,
+    creado_en     INTEGER NOT NULL,
+    caduca_en     INTEGER NOT NULL,
+    ultimo_uso_en INTEGER,
+    revocado_en   INTEGER
+);
+
+-- Para la purga y para dar de baja a alguien: quien tiene una sesion abierta.
+CREATE INDEX IF NOT EXISTS idx_panel_tokens_chat
+    ON panel_tokens (chat_id);
+
+CREATE INDEX IF NOT EXISTS idx_panel_tokens_caduca
+    ON panel_tokens (caduca_en);

@@ -30,6 +30,7 @@ import db
 import cola
 import mqtt_cliente
 import registro
+import sanear as sanear_modulo
 import telegram_cliente
 
 registro_log = logging.getLogger("orquestador")
@@ -48,9 +49,22 @@ def configurar_log() -> None:
     logging.basicConfig(level=nivel, format=formato, datefmt="%H:%M:%S")
     # paho y python-telegram-bot son muy verbosos en DEBUG y no aportan nada aquí.
     logging.getLogger("paho").setLevel(max(nivel, logging.WARNING))
-    logging.getLogger("httpx").setLevel(max(nivel, logging.WARNING))
     logging.getLogger("telegram.ext").setLevel(max(nivel, logging.WARNING))
     logging.getLogger("apscheduler").setLevel(max(nivel, logging.WARNING))
+    # httpx y httpcore, en cambio, callan al importar `telegram_cliente`, y
+    # `configurar_log()` no los repite a proposito. Motivo: si el token puede
+    # filtrarse por un log de INFO de httpx, la unica garantia buena es que estar
+    # importado el modulo que habla con Telegram ya imponga el silencio, sin
+    # depender de que el proceso pasara por aqui. Este servicio si pasa, pero el
+    # 2026-10-05 filtro un token justo por un script que no lo hizo.
+    import telegram_cliente  # noqa: F401
+    telegram_cliente.silenciar_loggers_de_red()
+
+    # Y despues el filtro en los manejadores, que es la red de seguridad: aunque un
+    # nivel se vuelva a bajar, o una libreria nueva escriba el token por su cuenta,
+    # lo que llegue al manejador sale sin el. Va aqui y no antes del `basicConfig`
+    # porque sin manejador no hay nada que filtrar.
+    sanear_modulo.instalar_filtro_secretos()
 
 
 def log_resumen() -> None:

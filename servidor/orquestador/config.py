@@ -43,13 +43,26 @@ MQTT_ORQUESTADOR_PASSWORD = os.environ.get("MQTT_ORQUESTADOR_PASSWORD", "")
 # sesión y el broker le entrega los mensajes pendientes al segundo. Es el
 # comportamiento estándar de MQTT, y es preferible a un id aleatorio, que
 # acumularía sesiones muertas durante 2 días (`persistent_client_expiration`).
-MQTT_CLIENT_ID = os.environ.get("MQTT_CLIENT_ID", "orquestador")
+MQTT_CLIENT_ID = os.environ.get("MQTT_CLIENT_ID", os.environ.get("MQTT_CLIENT_ID_PANEL", os.environ.get("PANEL_MQTT_CLIENT_ID", "orquestador")))
 
 # `clean_session=False` es lo que habilita la cola del broker. Sin esto, las
 # alertas de gas que llegan durante un corte se pierden, y el aviso nunca llega a
 # Telegram. No es un detalle: es la diferencia entre que la familia se entere o
 # no.
-MQTT_SESION_LIMPIA = False
+#
+# La sesión se decide POR CLIENT ID y por la variable explícita del compose, en
+# ese orden, para que los dos servicios no puedan expulsarse mutuamente (P26).
+# - orquestador: client id "orquestador", sesión persistente (`false`), que es
+#   la que hace que el broker le guarde las alertas mientras está detenido.
+# - panel: client id "panel-api", sesión limpia (`true`): no tiene sesión que
+#   recuperar y no debe heredar la del orquestador.
+# El valor por defecto del código sigue siendo el del orquestador, pero el
+# compose lo fija en los dos servicios, así que lo que manda es la variable.
+_env_clean = os.environ.get("MQTT_SESION_LIMPIA")
+if _env_clean is not None:
+    MQTT_SESION_LIMPIA = _env_clean.lower() == "true"
+else:
+    MQTT_SESION_LIMPIA = (MQTT_CLIENT_ID == "panel-api")
 
 MQTT_KEEPALIVE = int(os.environ.get("MQTT_KEEPALIVE", "60"))
 
@@ -96,11 +109,147 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 # alerta sabría a qué número mandar.
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-# El botón "Abrir panel". Vacío está bien y confirmado: el panel todavía no
-# existe, y un botón que lleva a `about:blank` es peor que no tenerlo.
-PANEL_URL = os.environ.get("PANEL_URL", "")
+# `PANEL_URL` (el botón "Abrir panel" y los enlaces de acceso) se declara mas
+# abajo, en la sección del panel web, con el resto de sus variables.
 
 TELEGRAM_ACTIVAR_BOT = os.environ.get("TELEGRAM_ACTIVAR_BOT", "0") == "1"
+
+# El client id del panel. Fijo, como el del orquestador y por el mismo motivo: si
+# hubiera dos instancias, el broker expulsa a la primera y queda una sola, en vez
+# de acumular dos conexiones con el mismo estado en memoria.
+MQTT_CLIENT_ID_PANEL = os.environ.get("MQTT_CLIENT_ID_PANEL", "panel-api")
+
+# `clean_session=True` para el panel, que es lo contrario que para el orquestador y
+# por el mismo motivo de siempre: la sesión persistente existe para que el broker
+# guarde lo que llega mientras el proceso está caído, y el panel no tiene nada que
+# recuperar. Sus retenidos (`luz/estado`, `nodo/estado`, `satelite/estado`) le
+# llegan al suscribirse, que es de donde los saca, y lo que se publica mientras está
+# caído son órdenes y alertas que ya están en la base y en la cola del orquestador.
+# Pedirle al broker que guarde mensajes para el panel sería ocupar espacio sin que
+# nadie los lea.
+MQTT_SESION_LIMPIA_PANEL = True
+
+# Los tópicos que lee el panel. Los cuatro primeros los publica el nodo (la luz, los
+# sensores y su propio estado) y el satélite (su estado); el quinto lo escribe el
+# puente al conectarse, dentro de `$SYS`.
+#
+# Duplicar los nombres aquí es lo que hace que un cambio en el contrato se note en
+# un solo sitio: si el ESP32 cambia uno, estas cuatro líneas son las que hay que
+# cambiar con él, y si no, el panel se queda mirando un tópico que ya no existe y
+# muestra «sin datos» sin decir por qué.
+TOPICO_LUZ_ESTADO = "casa/sala/luz/estado"
+TOPICO_SENSORES = "casa/sala/sensores"
+TOPICO_NODO_ESTADO = "casa/sala/nodo/estado"
+TOPICO_SATELITE_ESTADO = "casa/sala/satelite/estado"
+TOPICO_ENLACE_SITIO = "$SYS/broker/connection/+/state"
+
+# El WebSocket. El servidor manda `latido` cada 20 s y espera un `pong`; si pasan
+# 45 s sin `pong`, cierra. Los dos lados tienen latido porque el navegador no puede
+# mandar un ping de protocolo, y un móvil con la pantalla apagada deja de contestar
+# sin avisar de nada.
+SEGUNDOS_LATIDO_WS = 20
+SEGUNDOS_PONG_WS = 45
+
+# Cuántos eventos caben en la cola de UN cliente antes de darle con la puerta (1013).
+# Acotada a propósito: un panel abierto en un móvil con la pantalla apagada es una
+# fuga de memoria con forma de intermitencia, y el 1013 hace que al reconectar le
+# llegue la instantánea completa en vez de una lista de parches que se perdió.
+COLA_EVENTOS_WS = 64
+
+# El límite por IP de `/api/acceso`, como red de seguridad. Con 16 caracteres de un
+# alfabeto de 31 (unos 8x10^23) adivinar el código no es viable, así que este límite
+# no protege el código: protege de un fallo de programación que convierta el endpoint
+# en otra cosa.
+INTENTOS_ACCESO_POR_IP = 20
+SEGUNDOS_LIMITE_ACCESO = 600
+
+# Las esperas de reconexión del WebSocket del cliente, en segundos. La última se
+# repite para siempre: un panel que deja de reintentar no es un panel que espera, es
+# un panel que se ha caído. El desorden aleatorio de ±20 % lo pone el cliente, para
+# que dos teléfonos no reintenten a la vez después de un corte del servidor.
+ONDAS_RECONEXION_S = (1, 2, 4, 8, 15, 30)
+
+# El panel NO usa sesión persistente (`clean_session=True`). No hay nada que
+# recuperar: los retenidos (`luz/estado`, `nodo/estado`) llegan al suscribirse, y lo
+# que se publica mientras el panel está caído son órdenes y alertas que ya están
+# en SQLite y en la cola del orquestador. Pedirle al broker que guarde mensajes
+# para el panel sería ocupar espacio sin que nadie los lea.
+
+# --- Panel web --------------------------------------------------------------
+#
+# Lo que hay aquí son las variables del SERVICIO DEL PANEL. El bot solo necesita
+# `PANEL_URL`, que ya estaba. El resto lo lee `panel/api.py`, que es quien abre
+# los sockets.
+
+# La URL que va en el botón y en los enlaces de acceso. Tiene que ser la COMPLETA
+# de Tailscale (`villaca.tail722206.ts.net`): Telegram rechaza en el envío una URL
+# sin dominio, con «wrong http url», así que un nombre corto funcionaría en el
+# panel y nunca se publicaría en el botón. Verificado el 2026-10-05.
+PANEL_URL = os.environ.get("PANEL_URL", "")
+
+# Dónde ESCUCHA el panel, como lista de direcciones IP separadas por espacios.
+# Por defecto, solo la de Tailscale: el panel lo pueden abrir los familiares de
+# la lista y nadie más. En modo instalación se añade la IP de la casa, para que un
+# familiar que esté en casa sin Tailscale pueda abrirlo.
+#
+# Es una lista y no un valor único porque `network_mode: host` no admite varios
+# `--host`: `panel/api.py` abre un socket por dirección y se los pasa a uvicorn.
+# `0.0.0.0` no está en ninguna parte a propósito.
+#
+# Sin valor, la lista es `127.0.0.1`: si alguien arranca el panel sin configurando nada,
+# lo único que escucha es el propio servidor y nadie más. Lo contrario, un valor por
+# defecto que abriera a la red, haría que olvidar una variable abriese el panel de la
+# familia a cualquiera que llegara al puerto.
+PANEL_DIRECCIONES = [
+    d for d in os.environ.get("PANEL_DIRECCIONES", "").replace(",", " ").split()
+    if d
+] or ["127.0.0.1"]
+
+PANEL_PUERTO = int(os.environ.get("PANEL_PUERTO", "8080"))
+
+# El modo decide de dónde sale el estado del sitio (4.4 de la propuesta):
+#
+#   instalacion  -> el sitio es el nodo, y su estado sale de `nodo/estado`. Es el
+#                   modo en que está el sistema hoy: el ESP32 está en la misma red
+#                   y publica directo al broker, sin puente.
+#   demostracion -> el sitio es la conexión del sitio, y su estado sale del
+#                   retained que escribe el puente al conectarse.
+#
+# Sin esta variable el panel mostraría «sitio sin conexión» para siempre en modo
+# instalación, porque `$SYS/broker/connection/puente-sitio/state` no lo escribe
+# nadie cuando no hay puente. Un cartel de alarma que nunca se apaga es peor que
+# no tenerlo.
+MODOS_SITIO = ("instalacion", "demostracion")
+MODO_SITIO = os.environ.get("MODO_SITIO", "instalacion").strip().lower()
+if MODO_SITIO not in MODOS_SITIO:
+    MODO_SITIO = "instalacion"
+
+# Cuánto pasa sin lectura para que un componente se dé por caído (P22, P23).
+SEGUNDOS_VISTO_S = int(os.environ.get("PANEL_SEGUNDOS_VISTO_S", "90"))
+
+# Cuánto vive una sesión del panel, y cuánto se guarda lo que ya no sirve.
+#
+# 30 dias es el plazo que aprobó el usuario para el token, y coincide con el del
+# historial de alertas: es el tiempo que el familiar se queda «dentro» sin volver
+# a hacer `/panel`. Caduca SOLO por tiempo, nunca por usar el panel, porque un
+# token que se renueva solo cada vez que lo tocas es un token que no caduca nunca.
+DIAS_TOKEN_PANEL = 30
+
+# Los plazos de purga de las dos tablas del panel. Los leen `db.purgar()`, que
+# corre cada hora en el orquestador.
+#
+# El enlace, un dia. Caduca a los 10 minutos, y esperar 30 dias a tirarlo solo
+# ocupa sitio. El token, 30 dias despues de cerrarse: se conserva el rastro el
+# mismo tiempo que dura la sesion, para que el operador pueda ver si una baja
+# funciono.
+DIAS_PURGA_PANEL_ENLACES = 1
+DIAS_PURGA_PANEL_TOKENS = 30
+
+# El usuario MQTT del panel. Lo pone el compose; aquí solo se lee. La contraseña
+# tiene su propia variable porque el panel NO es el orquestador y no debe poder
+# leer `nodo/config` ni publicar `alerta/inactividad`.
+MQTT_USUARIO_PANEL = os.environ.get("MQTT_USUARIO", "panel")
+MQTT_PANEL_PASSWORD = os.environ.get("MQTT_PANEL_PASSWORD", "")
 
 # Cuánto se espera entre reintentos de envío, y cuántas veces.
 #
@@ -128,6 +277,74 @@ SEGUNDOS_ENTRE_AVISOS = 3600
 # Cuánto se espera entre un fallo de red de Telegram y el siguiente intento del
 # bucle principal, para no martillear la API.
 PAUSA_TRABAJADOR_S = 5.0
+
+# --- Secretos ---------------------------------------------------------------
+#
+# Los valores que NO pueden salir en un log. `sanear()` los lee de aquí, y por eso
+# esta lista es el UNICO sitio donde hay que declarar un secreto nuevo.
+#
+# Antes de estos tres bloques, `sanear()` conocía dos valores: el token de Telegram
+# y la contraseña del panel. Escribirlos uno a uno en el filtro es exactamente la
+# forma de que el próximo secreto se quede fuera sin que nadie se entere, y el
+# coste de ese olvido es alto: una contraseña en `docker logs` es una contraseña
+# que se copia, se pega y acaba en un chat.
+#
+# Por eso aquí NO hay una lista cerrada. Cualquier variable del entorno cuyo
+# nombre acabe en `_PASSWORD` o en `_TOKEN` se considera un secreto y se tapa, se
+# haya escrito o no en este archivo. `.env` ya cumple el patrón en los seis casos
+# (`MQTT_NODO_PASSWORD`, `MQTT_PUERTE_PASSWORD`, `MQTT_ORQUESTADOR_PASSWORD`,
+# `MQTT_SATELITE_PASSWORD`, `MQTT_SALUD_PASSWORD`, `MQTT_PANEL_PASSWORD` y
+# `TELEGRAM_BOT_TOKEN`), así que un secreto nuevo queda cubierto por añadir la
+# línea al `.env` y no al código.
+#
+# `VARIABLES_SECRETAS_EXPLICITAS` queda para lo que no siga el patrón, y hoy está
+# vacía a propósito: está para que exista el sitio donde declarar ese caso en vez
+# de volver a escribir la lista en el filtro.
+#
+# El filtro solo ve lo que hay en `os.environ`, así que cada contenedor tapa lo que
+# tiene: el orquestador la contraseña del orquestador, el panel la suya. Cada uno
+# recibe por el `compose` solo la que le hace falta, y por eso un servicio no puede
+# filtrar un secreto que no tiene.
+SUFIJOS_DE_SECRETO = ("_PASSWORD", "_TOKEN", "_SECRET", "_SECRETO", "_CLAVE")
+
+# Lo que NO se tapa por no acabar en nada de lo de arriba. Ver `secretos()`.
+VARIABLES_SECRETAS_EXPLICITAS = ()
+
+# Por debajo de esta longitud no se tapa nada. Un secreto de dos o tres letras no es
+# una contraseña: es una bandera, y tapar «on» o «si» en cada línea del log deja el
+# log ilegible, que es como se acaba sin leer un log que sí tenía un secreto. Las
+# contraseñas que genera `mosquitto/crear-usuarios.sh` tienen 24 caracteres o más, así
+# que el umbral no deja pasar ninguna de verdad.
+LARGO_MINIMO_DE_SECRETO = 4
+
+
+def secretos() -> tuple:
+    """Los valores secretos del entorno, de más largo a más corto.
+
+    Lo devuelve `sanear()`, y no al revés, porque la lista se DECLARA aquí y se USA
+    allí. Al revés (que `sanear.py` Diazara los nombres) el filtro volvería a ser
+    una lista que hay que mantener en dos sitios, que es el problema que esto
+    arregla.
+
+    De más largo a más corto, y no en el orden del entorno, por un motivo concreto:
+    si un secreto es prefijo de otro, tapar el corto primero deja el final del
+    largo a la vista. Ordenando por longitud descendente, el largo se tapa entero
+    antes de que se intente el corto.
+
+    Solo los valores. Los nombres no se devuelven porque quien los necesita para
+    escribir un log es `config.resumen()`, que lo tiene por su cuenta.
+    """
+    encontrados = set()
+    for nombre, valor in os.environ.items():
+        if not valor:
+            continue
+        if not (nombre.endswith(SUFIJOS_DE_SECRETO)
+                or nombre in VARIABLES_SECRETAS_EXPLICITAS):
+            continue
+        if len(valor) < LARGO_MINIMO_DE_SECRETO:
+            continue
+        encontrados.add(valor)
+    return tuple(sorted(encontrados, key=len, reverse=True))
 
 # --- Base de datos ---------------------------------------------------------
 
@@ -165,5 +382,6 @@ def resumen() -> dict:
         "telegram": "configurado" if TELEGRAM_BOT_TOKEN else "SIN TOKEN",
         "bot": "activo" if TELEGRAM_ACTIVAR_BOT else "inactivo",
         "panel": PANEL_URL if PANEL_URL else "vacio",
+        "modo_sitio": MODO_SITIO,
         "db": RUTA_DB,
     }

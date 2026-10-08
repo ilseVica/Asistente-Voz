@@ -63,8 +63,72 @@ from telegram import Bot
 from telegram.error import TelegramError
 
 import config
+from sanear import sanear as _sanear
 
 registro = logging.getLogger("telegram")
+
+# --- Los loggers de la red, callados ANTES de que nada pueda hablar ----------
+#
+# `httpx` escribe una linea de INFO por cada peticion, y es esta:
+#
+#   HTTP Request: POST https://api.telegram.org/bot<TOKEN>/sendMessage ...
+#
+# El token va DENTRO de la URL, porque la API de Telegram lo lleva ahi. O sea que la
+# libreria de Telegram escribe el token en el log de INFO de `httpx` por su cuenta,
+# sin que nadie lo pase por ningun sitio, y `sanear()` no ayuda con eso: sanear
+# limpia los textos que le pasemos nosotros, no lo que las librerias escriben solas.
+#
+# Por eso esto va AQUI, al IMPORTAR el modulo, y no en `configurar_log()`. La
+# version anterior lo tenia en `configurar_log()`, que solo llama el arranque del
+# servicio. Cualquier otra cosa que importase este modulo (un script suelto, una
+# prueba, una sesion de depuracion dentro del contenedor) se quedaba con `httpx` en
+# su nivel por defecto, y ahi se cuajo el token el 2026-10-05. Importar el modulo
+# que habla con Telegram es lo unico que hace falta para poder filtrarlo, asi que
+# la garantia tiene que venir con el import, no con el arranque.
+#
+# Se baja a WARNING, no a ERROR: `httpx` no registra errores aqui (los reporta
+# python-telegram-bot por su cuenta, ya saneados) y silenciarlo entero taparia
+# problemas de red que si hay que ver.
+#
+# `httpcore` esta aqui aunque NO haga falta: loguea `host='api.telegram.org'` y
+# eventos de conexion, nunca la ruta ni las cabeceras, asi que no filtra el token.
+# Se calla por otra razon: son decenas de lineas por peticion y ninguna aporta.
+#
+# Los de `telegram` son por el chat_id, que es OTRO agujero y del mismo tipo. En
+# cuanto se pone el servicio a DEBUG, `telegram.Bot` escupe esto entero:
+#
+#   Calling Bot API endpoint `sendMessage` with parameters
+#   `{'chat_id': '...2570', 'text': '...'}`   <-- enmascarado a proposito
+#
+# El token lo tapa `sanear()`, que se comprobó el 2026-10-05 mandando un mensaje de
+# verdad a DEBUG y mirando el log. El `chat_id` no: no hay ningun filtro que lo
+# toque, porque no es un secreto que este proyecto guarde en ningun sitio al que
+# mirar. Y un `chat_id` es el numero de una persona, que se parece mucho a un
+# telefono y se puede usar para escribirle por Telegram a quien sea. Este proyecto
+# tiene `db.enmascarar_chat()` justo para eso, pero esa funcion solo protege las
+# lineas que escribimos nosotros, no las de la libreria.
+#
+# Asi que tambien se bajan a WARNING. Se pierden de DEBUG el volcado de cada
+# llamada, que es util cuando se depura la libreria y no cuando se depura la casa:
+# para eso estan los logs propios, que llevan el chat_id enmascarado.
+LOGGERS_DE_RED = ("httpx", "httpcore",
+                  "telegram.Bot", "telegram.request", "telegram.ext.Application",
+                  "apscheduler", "apscheduler.executors.default")
+
+
+def silenciar_loggers_de_red() -> None:
+    """Baja los loggers de las librerias de red a WARNING. Idempotente.
+
+    Se puede llamar cuando quieras y en cuanto quieras: el nivel nunca baja, solo
+    sube, de modo que llamarla con `NIVEL_LOG=DEBUG` no deshace nada.
+    """
+    for nombre in LOGGERS_DE_RED:
+        logger = logging.getLogger(nombre)
+        if logger.level < logging.WARNING or logger.level == logging.NOTSET:
+            logger.setLevel(logging.WARNING)
+
+
+silenciar_loggers_de_red()
 
 # Cuánto se espera a que responda Telegram antes de darse por vencido. Es alto a
 # propósito: una alerta de gas que se da por perdida y se reintenta dentro de tres
@@ -77,20 +141,12 @@ TIMEOUT_SEGUNDOS = 20.0
 def sanear(texto: str) -> str:
     """Quita el token de Telegram de un texto antes de escribirlo.
 
-    Sustituye el valor de `TELEGRAM_BOT_TOKEN` por `***`. Es la única defensa: el
-    token permite leer y escribir como el bot, así que un token en un log es un
-    token filtrado, y los logs se copian, se pegan y se comparten.
-
-    Se hace una sustitución literal y no una expresión regular. El token es una
-    cadena fija y conocida, así que buscar el texto exacto no puede fallar ni
-    tener falsos positivos con algo que se le parezca.
-
-    Si el token está vacío la función devuelve el texto tal cual: sin token no hay
-    nada que filtrar, y así una prueba puede usarla sin inventar un token falso.
+    Ya no vive aqui: esta en `sanear.py`, su modulo propio, para que `alertas.py`
+    (que usan el bot Y el servicio del panel) pueda registrar un error sin
+    importar `python-telegram-bot`. Se reexporta con el mismo nombre para que los
+    llamadores de siempre, `telegram_cliente.sanear(...)`, no cambien.
     """
-    if not config.TELEGRAM_BOT_TOKEN:
-        return texto
-    return str(texto).replace(config.TELEGRAM_BOT_TOKEN, "***")
+    return _sanear(texto)
 
 
 class TelegramNoConfigurado(Exception):
@@ -287,11 +343,36 @@ class Remitente:
         return self._futuro(self._editar_async(mensaje, texto, teclado,
                                                chat_id or getattr(mensaje, "chat_id", None)))
 
+    def editar_mensaje(self, chat_id, message_id, texto: str,
+                       teclado=None) -> None:
+        """Edita un mensaje por su `chat_id` y su `message_id`, desde un hilo normal.
+
+        Es la que usa la cola para reescribir el aviso cuando la alerta se atiende
+        desde el panel. Ahi no hay objeto `Message`: el mensaje lo mandó el mismo
+        trabajador en una vuelta anterior, y de el solo quedo el id en la base.
+
+        Lanza, igual que `editar`, y quien decide qué hacer con el fallo es el que
+        llama. El `teclado` por defecto es `None`, que es lo que quita los botones.
+        """
+        if not self.disponible or self.bot is None:
+            raise TelegramNoConfigurado("no se puede editar: falta el token")
+        if not chat_id or not message_id:
+            raise TelegramNoConfigurado(
+                "no se puede editar: falta el chat o el message_id"
+            )
+        self._ejecutar(self._editar_ids_async(str(chat_id), int(message_id), texto,
+                                              teclado))
+
     async def _editar_async(self, mensaje, texto: str, teclado=None,
                             chat_id: str = None) -> None:
+        destino = chat_id or getattr(mensaje, "chat_id", None)
+        await self._editar_ids_async(destino, mensaje.message_id, texto, teclado)
+
+    async def _editar_ids_async(self, chat_id, message_id: int,
+                                texto: str, teclado=None) -> None:
         await self.bot.edit_message_text(
             chat_id=chat_id,
-            message_id=mensaje.message_id,
+            message_id=message_id,
             text=texto,
             parse_mode=None,
             reply_markup=teclado,

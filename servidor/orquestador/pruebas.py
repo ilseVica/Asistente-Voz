@@ -35,6 +35,7 @@ import io
 import json
 import logging
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -55,6 +56,7 @@ import bot as bot_modulo  # noqa: E402
 import cola as cola_modulo  # noqa: E402
 import config  # noqa: E402
 import db as db_modulo  # noqa: E402
+import panel_acceso as panel_acceso_modulo  # noqa: E402
 import registro as registro_modulo  # noqa: E402
 
 FALLOS = []
@@ -1032,8 +1034,842 @@ base.cerrar()
 
 
 # =============================================================================
-# Resumen
+# 14. Panel web: enlaces de un solo uso y sesiones
 # =============================================================================
+print("\n14. Panel web")
+print("-------------")
+
+import hashlib  # noqa: E402
+
+
+def hash_(texto):
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
+
+
+base = db_modulo.BaseDatos(os.path.join(datos, "panel.sqlite3"))
+ahora = int(time.time())
+
+prueba("la base nueva queda en la última versión del esquema",
+       base.conexion.execute("PRAGMA user_version").fetchone()[0]
+       == db_modulo.VERSION_ESQUEMA)
+
+tablas = {f[0] for f in base.conexion.execute(
+    "SELECT name FROM sqlite_master WHERE type='table'")}
+prueba("existen las dos tablas del panel",
+       {"panel_enlaces", "panel_tokens"} <= tablas)
+
+indices = {f[0] for f in base.conexion.execute(
+    "SELECT name FROM sqlite_master WHERE type='index'")}
+prueba("y sus tres índices",
+       {"idx_panel_enlaces_expira", "idx_panel_tokens_chat",
+        "idx_panel_tokens_caduca"} <= indices)
+
+# --- La migración desde una base que ya estaba en la versión 1 -------------
+ruta_v1 = os.path.join(datos, "panel-v1.sqlite3")
+con = sqlite3.connect(ruta_v1)
+con.executescript(db_modulo.leer_esquema())
+con.execute("DROP TABLE panel_enlaces")
+con.execute("DROP TABLE panel_tokens")
+con.execute("PRAGMA user_version = 1")
+con.commit()
+con.close()
+
+base_v1 = db_modulo.BaseDatos(ruta_v1)
+prueba("una base en la versión 1 sube a la última",
+       base_v1.conexion.execute("PRAGMA user_version").fetchone()[0]
+       == db_modulo.VERSION_ESQUEMA)
+prueba("y las tablas se crean también al migrar, no solo al instalar de nuevo",
+       {"panel_enlaces", "panel_tokens"} <= {
+           f[0] for f in base_v1.conexion.execute(
+               "SELECT name FROM sqlite_master WHERE type='table'")})
+base_v1.cerrar()
+
+# --- Alta y canje ----------------------------------------------------------
+base.registrar_familiar("1001", nombre="Del panel")
+prueba("el familiar queda registrado", base.familiar_registrado("1001"))
+
+base.crear_enlace_panel(hash_("codigo1"), "1001", ahora + 600, ahora)
+prueba("un código válido se canjea",
+       base.tomar_enlace_panel(hash_("codigo1"), ahora) is not None)
+prueba("y NO se puede canjear dos veces: es de un solo uso",
+       base.tomar_enlace_panel(hash_("codigo1"), ahora) is None)
+
+base.crear_enlace_panel(hash_("vencido"), "1001", ahora - 1, ahora - 3600)
+prueba("un código caducado no se canjea",
+       base.tomar_enlace_panel(hash_("vencido"), ahora) is None)
+prueba("ni uno que no existe",
+       base.tomar_enlace_panel(hash_("nada"), ahora) is None)
+
+# --- Sesiones --------------------------------------------------------------
+base.crear_token_panel(hash_("tok1"), "1001", ahora + 86400, ahora)
+prueba("la sesión nueva vale", base.sesion_panel(hash_("tok1"), ahora) is not None)
+prueba("un hash que no existe no vale",
+       base.sesion_panel(hash_("otro"), ahora) is None)
+
+base.marcar_token_usado(hash_("tok1"), ahora + 10)
+prueba("se anota el último uso",
+       base.conexion.execute(
+           "SELECT ultimo_uso_en FROM panel_tokens WHERE token_hash = ?",
+           (hash_("tok1"),)).fetchone()[0] == ahora + 10)
+
+prueba("revocar una sesión viva lo dice", base.revocar_token_panel(hash_("tok1"), ahora + 20))
+prueba("revocarla otra vez no", not base.revocar_token_panel(hash_("tok1"), ahora + 21))
+prueba("y un token revocado ya no vale",
+       base.sesion_panel(hash_("tok1"), ahora + 30) is None)
+
+base.crear_token_panel(hash_("cad"), "1001", ahora - 10, ahora - 20)
+prueba("un token caducado no vale", base.sesion_panel(hash_("cad"), ahora) is None)
+
+# --- La baja cierra también el panel --------------------------------------
+base.crear_token_panel(hash_("vivo"), "1001", ahora + 86400, ahora)
+prueba("dar de baja funciona", base.dar_de_baja("1001"))
+prueba("y el token de esa persona deja de servir",
+       base.sesion_panel(hash_("vivo"), ahora) is None)
+
+# --- La purga --------------------------------------------------------------
+base.registrar_familiar("2002", nombre="Segundo")
+base.crear_enlace_panel(hash_("usado"), "2002", ahora + 600, ahora)
+base.tomar_enlace_panel(hash_("usado"), ahora)
+base.crear_enlace_panel(hash_("muerto"), "2002", ahora - 10, ahora - 20)
+base.crear_token_panel(hash_("t1"), "2002", ahora - 40 * 86400, ahora - 41 * 86400)
+base.crear_token_panel(hash_("t2"), "2002", ahora + 86400, ahora)
+base.revocar_token_panel(hash_("t2"), ahora - 40 * 86400)
+
+base.purgar(ahora)
+prueba("la purga respeta un enlace usado hace un segundo",
+       base.conexion.execute(
+           "SELECT COUNT(*) FROM panel_enlaces WHERE codigo_hash = ?",
+           (hash_("usado"),)).fetchone()[0] == 1)
+
+base.purgar(ahora + 2 * 86400)
+
+
+def queda(clave, tabla="panel_enlaces"):
+    # La columna se llama distinto en las dos tablas, y pasarla a mano es mejor que
+    # adivinar: si las dos usaran `hash`, el error se veria aqui y no en la purga.
+    columna = "token_hash" if tabla == "panel_tokens" else "codigo_hash"
+    return base.conexion.execute(
+        "SELECT COUNT(*) FROM %s WHERE %s = ?" % (tabla, columna),
+        (clave,)).fetchone()[0]
+
+
+prueba("la purga se lleva el enlace usado hace más de un día",
+       queda(hash_("usado")) == 0)
+prueba("y el que caducó sin usarse, que si no se acumularían para siempre",
+       queda(hash_("muerto")) == 0)
+prueba("se lleva el token caducado hace más de 30 días",
+       queda(hash_("t1"), "panel_tokens") == 0)
+prueba("y el revocado hace más de 30 días",
+       queda(hash_("t2"), "panel_tokens") == 0)
+
+base.crear_token_panel(hash_("t3"), "2002", ahora + 86400, ahora)
+base.purgar(ahora)
+prueba("pero NO se lleva una sesión viva", queda(hash_("t3"), "panel_tokens") == 1)
+
+base.cerrar()
+
+
+# =============================================================================
+# 15. Resolver una alerta avisa al satélite UNA vez
+# =============================================================================
+print("\n15. Resolver una alerta")
+print("----------------------")
+
+base = db_modulo.BaseDatos(os.path.join(datos, "resolver.sqlite3"))
+base.registrar_familiar("3003", nombre="Atiende")
+base.insertar_alerta("al1", "gas", '{"valor": 400}', chat_ids=["3003"])
+
+publicados = []
+
+
+def publicar_falso(topico, carga, qos=0, retain=False):
+    publicados.append((topico, carga, qos, retain))
+
+
+fila, fresca = alertas.resolver(base, publicar_falso, "al1", ahora,
+                                quien="el familiar ...3003", origen="el panel")
+prueba("la primera resolución es fresca", fresca)
+prueba("y avisa al satélite", len(publicados) == 1, len(publicados))
+if publicados:
+    topico, carga, qos, retain = publicados[0]
+    prueba("en satelite/decir", topico == config.TOPICO_SATELITE_DECIR, topico)
+    prueba("con el ts en epoch", carga.get("ts") == ahora, carga.get("ts"))
+    prueba("sin retención", retain is False)
+    prueba("con qos 1", qos == 1)
+    prueba("y nombrando el tipo de alerta", "gas" in carga.get("texto", ""))
+prueba("la alerta queda resuelta en la base",
+       base.obtener_alerta("al1")["resuelto_en"] is not None)
+
+# La segunda, que es el caso real: el familiar lo atiende en el panel y luego
+# pulsa el botón de Telegram que tenía abierto.
+publicados.clear()
+_, fresca2 = alertas.resolver(base, publicar_falso, "al1", ahora + 5,
+                              quien="el familiar ...3003", origen="el boton del bot")
+prueba("la segunda resolución no es fresca", not fresca2)
+prueba("y NO vuelve a avisar al satélite: es lo que el bot hacía mal",
+       len(publicados) == 0, len(publicados))
+
+# Sin cliente MQTT, y con el broker caído, no se rompe nada.
+_, fresca3 = alertas.resolver(base, None, "al1", ahora + 6, origen="el panel")
+prueba("sin cliente MQTT no hay excepción", not fresca3)
+
+
+def publicar_roto(topico, carga, qos=0, retain=False):
+    raise RuntimeError("el broker no está")
+
+
+_, fresca4 = alertas.resolver(base, publicar_roto, "al1", ahora + 7, origen="el panel")
+prueba("y si el broker falla, la resolución tampoco se deshace", not fresca4)
+
+pendientes = base.conexion.execute(
+    "SELECT COUNT(*) FROM envios WHERE alerta_id = ? AND enviado_en IS NULL",
+    ("al1",)).fetchone()[0]
+prueba("resolver cancela los envíos pendientes de los demás", pendientes == 0)
+
+base.cerrar()
+
+
+# =============================================================================
+# 16. El token de Telegram NO puede salir al log
+# =============================================================================
+print("\n16. El token no se filtra")
+print("-------------------------")
+
+import http.server  # noqa: E402
+import threading  # noqa: E402
+
+import httpx  # noqa: E402
+
+import sanear as sanear_modulo  # noqa: E402
+
+TOKEN = config.TELEGRAM_BOT_TOKEN
+prueba("la prueba tiene un token de mentira, no el de verdad",
+       bool(TOKEN) and "NO-REAL" in TOKEN, "<no hay token de pruebas>")
+
+# Un servidor HTTP de verdad, en un hilo, en 127.0.0.1 con un puerto que nos da el
+# sistema. Se usa uno de verdad en vez de `MockTransport` por una razon concreta:
+# `MockTransport` no loguea. El registro que filtra el token lo escribe httpx al
+# RECIBIR una respuesta, y con el transporte simulado no llega ninguna. Es decir:
+# con `MockTransport` esta prueba pasaria siempre, mirara lo que mirara.
+peticiones = []
+
+
+class _Contador(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        peticiones.append(self.path)
+        cuerpo = b'{"ok": true, "result": {"id": 1, "is_bot": true, ' \
+                 b'"first_name": "x", "username": "x"}}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(cuerpo)))
+        self.end_headers()
+        self.wfile.write(cuerpo)
+
+    def log_message(self, formato, *args):
+        pass  # el access log del servidor no, que tambien ensuciaria la prueba
+
+
+servidor = http.server.HTTPServer(("127.0.0.1", 0), _Contador)
+hilo = threading.Thread(target=servidor.serve_forever, daemon=True)
+hilo.start()
+PUERTO = servidor.server_address[1]
+
+captura = []
+maneja_real = logging.getLogger().handlers[:]
+
+# Esto es lo que hace el arranque del servicio (`orquestador.configurar_log`), y
+# esta prueba lo repite a proposito: si el filtro no esta puesto, el token sale, y
+# eso es justo lo que hay que comprobar. Sin esta linea la prueba mediria que no
+# se ha puesto, no que el filtro funciona.
+sanear_modulo.instalar_filtro_secretos()
+
+
+class _Recoge(logging.Handler):
+    def emit(self, registro_emitido):
+        # Se guarda el TEXTO que se escribiria de verdad, no el registro sin
+        # formatear: el token puede estar en `args` y no salir nunca en `msg`.
+        captura.append(registro_emitido.getMessage())
+
+
+recoge = _Recoge()
+recoge.setLevel(logging.DEBUG)
+logging.getLogger().addHandler(recoge)
+
+# El peor caso a proposito: `httpx` hablado a DEBUG. Si la proteccion es solo
+# subir el nivel del logger, aqui se ve. Ademas se hace una peticion al bot que se
+# llama "telegram", para que la linea que sale sea la misma que filtro el 2026-10-05.
+httpx_antes = logging.getLogger("httpx").level
+logging.getLogger("httpx").setLevel(logging.DEBUG)
+try:
+    url = "http://127.0.0.1:%d/bot%s/getMe" % (PUERTO, TOKEN)
+    with httpx.Client() as cliente:
+        cliente.get(url)
+finally:
+    logging.getLogger("httpx").setLevel(httpx_antes)
+    logging.getLogger().removeHandler(recoge)
+
+servidor.shutdown()
+
+texto = "\n".join(captura)
+prueba("la petición llegó al servidor (si no, la prueba no probaría nada)",
+       len(peticiones) == 1, peticiones)
+prueba("y la URL que llegó llevaba el token, que es justo lo que hay que cazar",
+       peticiones and TOKEN in peticiones[0], peticiones)
+prueba("httpx sí escribió la línea con la URL",
+       any("api.telegram.org/bot" in l or "/bot" in l for l in captura),
+       captura[:3])
+prueba("pero en el log el token NO aparece",
+       TOKEN not in texto, [l for l in captura if TOKEN in l][:2])
+prueba("y sale tapado con asteriscos", "bot***" in texto, captura[:3])
+prueba("y no hubo ningún «Logging error» por el filtro",
+       "Logging error" not in texto and "TypeError" not in texto,
+       [l for l in captura if "TypeError" in l][:2])
+
+# El caso que rompio la primera version del filtro: un `%d` con un entero. Si el
+# filtro convierte los numeros a texto, el `%d` revienta, y el «Logging error» que
+# sale lleva el registro entero dentro, con el token.
+captura.clear()
+recoge = _Recoge()
+recoge.setLevel(logging.DEBUG)
+logging.getLogger().addHandler(recoge)
+prueba_filtro = logging.getLogger("prueba-filtro")
+nivel_antes = prueba_filtro.level
+prueba_filtro.setLevel(logging.DEBUG)  # sin esto, root en WARNING se come el .info
+try:
+    prueba_filtro.info("codigo %d y url %s", 200, url)
+finally:
+    logging.getLogger().removeHandler(recoge)
+    prueba_filtro.setLevel(nivel_antes)
+prueba("un entero con %d sobrevive al filtro (no se convierte a texto)",
+       any("codigo 200" in l for l in captura), captura)
+captura.clear()
+
+# Y que el token siga saliendo en el sitio que debe: no tiene que estar callado
+# entero, solo tapado.
+captura.clear()
+recoge = _Recoge()
+logging.getLogger().addHandler(recoge)
+try:
+    prueba_filtro.setLevel(logging.DEBUG)
+    prueba_filtro.info("token %s y otro %s", TOKEN, TOKEN)
+finally:
+    logging.getLogger().removeHandler(recoge)
+    prueba_filtro.setLevel(nivel_antes)
+prueba("un token escrito a mano también sale tapado",
+       len(captura) == 1 and TOKEN not in captura[0] and "***" in captura[0],
+       captura)
+captura.clear()
+
+prueba("y `sanear()` a pelo también funciona",
+       sanear_modulo.sanear("dentro " + TOKEN) == "dentro ***")
+prueba("sin token configurado, `sanear()` no toca nada",
+       sanear_modulo.sanear("texto normal") == "texto normal")
+
+# --- 17. `sanear()` tapa los secretos del `.env`, no solo dos ----------------
+#
+# El filtro tapaba el token de Telegram y la contraseña del panel, los dos
+# escritos a mano en `sanear.py`. Con la contraseña del orquestador, la del nodo y
+# las demás en el mismo `.env`, esa lista era un sitio más donde olvidarse: la
+# contraseña del orquestador salía entera en el log de su propio servicio.
+#
+# Aquí se comprueba lo que pedía el arreglo: que la lista se lea de un solo sitio
+# (`config.secretos()`) y que una variable NUEVA quede tapada sin tocar el código.
+print("\n17. Los secretos del entorno, todos")
+print("-----------------------------------")
+
+# Se inventan valores de mentira para poder comprobar que se tapan sin depender de
+# las contraseñas de verdad, que esta prueba no debe leer ni escribir.
+inventados = {
+    "MQTT_ORQUESTADOR_PASSWORD": "clave-de-prueba-orquestador-0001",
+    "MQTT_PANEL_PASSWORD": "clave-de-prueba-panel-0002",
+    "MQTT_NODO_PASSWORD": "clave-de-prueba-nodo-0003",
+    "TELEGRAM_BOT_TOKEN": "987654:CLAVE-DE-PRUEBA-NO-REAL",
+}
+# Una clave que NO se escribe en ninguna parte del código, solo en el entorno: es
+# el caso que falla si `sanear.py` vuelve a llevar su propia lista.
+inventados["MQTT_FUTURO_PASSWORD"] = "clave-de-prueba-futuro-0004"
+# Un valor corto: no es un secreto, y taparlo dejaria el log ilegible.
+inventados["CLAVE_CORTA_TOKEN"] = "si"
+
+antes = {nombre: os.environ.get(nombre) for nombre in inventados}
+os.environ.update(inventados)
+try:
+    for nombre, valor in inventados.items():
+        tapado = sanear_modulo.sanear("conexion %s con %s" % (nombre, valor))
+        if len(valor) >= config.LARGO_MINIMO_DE_SECRETO:
+            prueba("se tapa %s (no estaba en ninguna lista del código)" % nombre,
+                   valor not in tapado and "***" in tapado, tapado)
+        else:
+            prueba("un valor de %d caracteres se deja como estaba (%s)"
+                   % (len(valor), nombre), tapado.endswith(valor), tapado)
+
+    prueba("y la contraseña del orquestador también, que es la que faltaba",
+           sanear_modulo.sanear(inventados["MQTT_ORQUESTADOR_PASSWORD"])
+           == "***")
+
+    # El caso que hace necesaria la lista en `config`: un secreto que es PREFIJO de
+    # otro. Tapal el corto primero deja el final del largo a la vista, y con una
+    # contraseña de verdad eso es medio secreto en el log.
+    os.environ["MQTT_CORTO_PASSWORD"] = "prefijo-1234"
+    os.environ["MQTT_LARGO_PASSWORD"] = "prefijo-1234-sufijo-5678"
+    with_prefijo = sanear_modulo.sanear(
+        "clave larga prefijo-1234-sufijo-5678 y corta prefijo-1234")
+    del os.environ["MQTT_CORTO_PASSWORD"], os.environ["MQTT_LARGO_PASSWORD"]
+    prueba("un secreto que es prefijo de otro se tapa entero",
+           "prefijo" not in with_prefijo, with_prefijo)
+
+    prueba("`config.secretos()` ve los del entorno y no las variables normales",
+           set(inventados.values()) - {"si"}
+           <= set(config.secretos()))
+    prueba("y no inventa secretos de los que no están",
+           "no-existe-esta-variable" not in config.secretos())
+finally:
+    for nombre, valor in antes.items():
+        if valor is None:
+            os.environ.pop(nombre, None)
+        else:
+            os.environ[nombre] = valor
+
+# --- 18. `/panel`: el enlace es de un solo uso y solo para los registrados ----
+#
+# El enlace es la puerta de entrada al panel, así que sus tres reglas se comprueban
+# una a una: quién puede pedirlo, qué pasa si no hay `PANEL_URL`, y que el código
+# valga una vez y solo esa.
+print("\n18. El comando /panel")
+print("---------------------")
+
+base_panel, ruta_panel = base_nueva("panel-cmd-")
+base_panel.registrar_familiar("111", nombre="Marta")
+bot_panel = bot_modulo.ClienteBot(base_panel, RemitenteFalso())
+
+
+class MensajeConTeclado(MensajeFalso):
+    """El de `MensajeFalso`, pero guardando también el teclado del botón."""
+
+    async def reply_text(self, texto, **kw):
+        self.respuestas.append(texto)
+        self.teclado = kw.get("reply_markup")
+
+
+PANEL_URL_DE_PRUEBA = "http://villaca.tail722206.ts.net:8080"
+url_antes = config.PANEL_URL
+config.PANEL_URL = PANEL_URL_DE_PRUEBA
+try:
+    # Un chat que no está registrado no recibe ningún enlace, y el texto que recibe
+    # es el de `/registro` sin código: el mismo, para no confirmar que el panel
+    # existe a cualquiera que encuentre el bot.
+    u = UpdateFalso("999")
+    u.effective_message = MensajeConTeclado()
+    asyncio.run(bot_panel.cmd_panel(u, ContextoFalso([])))
+    prueba("un chat NO registrado no recibe enlace",
+           getattr(u.effective_message, "teclado", None) is None, u.contestado)
+    prueba("y el texto es EXACTAMENTE el de /registro sin código (nada nuevo)",
+           u.contestado
+           and u.contestado[0] == bot_modulo.texto_pedir_registro(base_panel),
+           u.contestado)
+    prueba("y no menciona el panel, que es lo que no hay que confirmar",
+           "panel" not in " ".join(u.contestado).lower(), u.contestado)
+    import sqlite3  # noqa: E402
+
+    def _enlaces_guardados():
+        con = sqlite3.connect(ruta_panel)
+        try:
+            return con.execute("SELECT codigo_hash FROM panel_enlaces").fetchall()
+        finally:
+            con.close()
+
+    prueba("y no se creó ningún enlace para él", _enlaces_guardados() == [],
+           _enlaces_guardados())
+
+    # Sin PANEL_URL no se manda un enlace roto. Es el caso de hoy si se olvida la
+    # variable, y un botón que lleva a una página en blanco hace que el familiar
+    # pulse lo que sea en la próxima alerta de gas.
+    config.PANEL_URL = ""
+    u = UpdateFalso("111")
+    u.effective_message = MensajeConTeclado()
+    asyncio.run(bot_panel.cmd_panel(u, ContextoFalso([])))
+    prueba("sin PANEL_URL el bot lo dice y no manda botón",
+           getattr(u.effective_message, "teclado", None) is None
+           and u.contestado and "no esta disponible" in u.contestado[0],
+           u.contestado)
+    config.PANEL_URL = PANEL_URL_DE_PRUEBA
+
+    # El caso normal: botón con la URL completa, y el código solo en el hash.
+    u = UpdateFalso("111")
+    u.effective_message = MensajeConTeclado()
+    asyncio.run(bot_panel.cmd_panel(u, ContextoFalso([])))
+    teclado = getattr(u.effective_message, "teclado", None)
+    prueba("a un familiar registrado sí le llega un botón", teclado is not None,
+           u.contestado)
+    botones = teclado.inline_keyboard if teclado is not None else []
+    url_boton = botones[0][0].url if botones else ""
+    prueba("el botón lleva PANEL_URL completa, con dominio (Telegram lo exige)",
+           url_boton.startswith(PANEL_URL_DE_PRUEBA + "/acceso/")
+           and "." in url_boton, url_boton)
+    codigo = url_boton.rsplit("/", 1)[-1]
+    prueba("el código son 16 caracteres del alfabeto sin 0/O ni 1/l/I",
+           len(codigo) == 16
+           and all(c in panel_acceso_modulo.ALFABETO for c in codigo), codigo)
+
+    con = sqlite3.connect(ruta_panel)
+    hashes = [f[0] for f in con.execute("SELECT codigo_hash FROM panel_enlaces")]
+    expires = [f[0] for f in con.execute("SELECT expira_en FROM panel_enlaces")]
+    con.close()
+    prueba("en la base solo está el hash, nunca el código",
+           panel_acceso_modulo.hash_de(codigo) in hashes
+           and codigo not in hashes, hashes)
+    prueba("y el enlace caduca a los 10 minutos",
+           expires and 595 <= expires[0] - int(time.time()) <= 600, expires)
+
+    # Un solo uso: el primero que canjea entra y el segundo no.
+    fila = base_panel.tomar_enlace_panel(panel_acceso_modulo.hash_de(codigo))
+    prueba("el primer canje entra", fila is not None and fila["chat_id"] == "111",
+           fila)
+    prueba("el segundo canje NO entra (de un solo uso)",
+           base_panel.tomar_enlace_panel(panel_acceso_modulo.hash_de(codigo)) is None)
+
+    # Un código inventado no cuenta como intento ni abre nada: en la tabla solo hay
+    # hashes, así que adivinar es recorrer 8x10^23 combinaciones.
+    prueba("un código que no existe no abre nada",
+           base_panel.tomar_enlace_panel(panel_acceso_modulo.hash_de("nada-de-eso"))
+           is None)
+
+    # Dos `/panel` seguidos dan dos enlaces distintos, y caducan por separado.
+    u2 = UpdateFalso("111")
+    u2.effective_message = MensajeConTeclado()
+    asyncio.run(bot_panel.cmd_panel(u2, ContextoFalso([])))
+    codigo2 = u2.effective_message.teclado.inline_keyboard[0][0].url.rsplit("/", 1)[-1]
+    prueba("dos /panel seguidos dan dos códigos distintos", codigo != codigo2,
+           (codigo, codigo2))
+
+    # El token de sesión: 32 bytes, y solo su hash en la base.
+    token, caduca_en = panel_acceso_modulo.crear_token(base_panel, "111")
+    prueba("el token de sesión existe y no es el código",
+           bool(token) and token != codigo, token[:6] + "...")
+    prueba("vale 30 días", 29 * 86400 <= caduca_en - int(time.time()) <= 30 * 86400,
+           caduca_en)
+    sesion = base_panel.sesion_panel(panel_acceso_modulo.hash_de(token))
+    prueba("la sesión nueva vale y trae su chat", sesion is not None
+           and sesion["chat_id"] == "111", sesion)
+    con = sqlite3.connect(ruta_panel)
+    hashes = [f[0] for f in con.execute("SELECT token_hash FROM panel_tokens")]
+    con.close()
+    prueba("y en la base solo está su hash", token not in hashes, hashes)
+
+    # `db.nombre_de` es lo que saluda en la cabecera del panel. Se prueba aquí y no en
+    # la sección del panel porque es un método de `db`: si el nombre sale vacío, la
+    # cabecera dice «Hola, » y no se ve de dónde viene el fallo.
+    prueba("el nombre del familiar sale de la tabla, no del token",
+           db_modulo.BaseDatos is not None
+           and base_panel.nombre_de("111") == "Marta",
+           base_panel.nombre_de("111"))
+    prueba("y un chat_id que no existe da cadena vacía y no revienta",
+           base_panel.nombre_de("999") == "", base_panel.nombre_de("999"))
+finally:
+    config.PANEL_URL = url_antes
+    base_panel.cerrar()
+
+# --- 19. `panel_acceso.canjear()` y `panel_acceso.revocar()` -------------------
+#
+# Son los dos ayudantes que usa la API, y viven aquí y no en `panel/api.py` porque los
+# necesita el proceso de la web y no solo el. Lo que se comprueba es lo que la API da
+# por hecho: que `canjear` devuelve la fila con el `chat_id` y que el canje no se
+# puede repetir, y que `revocar` cierra UNA sesión y deja vivas las demás del mismo
+# familiar.
+print("\n19. El canje y la revocación del panel")
+print("------------------------------------")
+
+base_panel2, ruta_panel2 = base_nueva("panel-canje-")
+try:
+    base_panel2.registrar_familiar("111", nombre="Marta")
+    base_panel2.registrar_familiar("222", nombre="Luis")
+
+    codigo_ok = panel_acceso_modulo.crear_enlace(base_panel2, "111")
+    exito, fila = panel_acceso_modulo.canjear(base_panel2, codigo_ok)
+    prueba("canjear un enlace bueno devuelve la fila con su chat_id",
+           exito and fila.get("chat_id") == "111", fila)
+    prueba("y el código en claro no está en la fila que devuelve",
+           codigo_ok not in str(fila), sorted(fila))
+
+    exito2, _ = panel_acceso_modulo.canjear(base_panel2, codigo_ok)
+    prueba("canjear el MISMO enlace otra vez no entra", not exito2)
+
+    exito3, fila3 = panel_acceso_modulo.canjear(base_panel2, "codigo-que-no-existe")
+    prueba("canjear un código que no existe no entra y no revienta",
+           not exito3 and fila3 == {}, fila3)
+
+    # Un código caducado tampoco entra. Se adelanta el reloj de la base, que es lo
+    # mismo que esperar 10 minutos sin esperar 10 minutos.
+    caducado = panel_acceso_modulo.crear_enlace(base_panel2, "222",
+                                                ahora=int(time.time()) - 3600)
+    exito4, _ = panel_acceso_modulo.canjear(base_panel2, caducado)
+    prueba("canjear un enlace caducado no entra", not exito4)
+
+    # Dos sesiones del mismo familiar, y revocar una deja viva la otra.
+    token_a, _ = panel_acceso_modulo.crear_token(base_panel2, "111")
+    token_b, _ = panel_acceso_modulo.crear_token(base_panel2, "111")
+    prueba("las dos sesiones valen antes de revocar",
+           base_panel2.sesion_panel(panel_acceso_modulo.hash_de(token_a)) is not None
+           and base_panel2.sesion_panel(panel_acceso_modulo.hash_de(token_b))
+           is not None)
+
+    revocada = panel_acceso_modulo.revocar(
+        base_panel2, panel_acceso_modulo.hash_de(token_a))
+    prueba("revocar devuelve True si la sesión estaba viva", revocada)
+    prueba("revocada queda cerrada",
+           base_panel2.sesion_panel(panel_acceso_modulo.hash_de(token_a)) is None)
+    prueba("pero la OTRA sesión del mismo familiar sigue viva",
+           base_panel2.sesion_panel(panel_acceso_modulo.hash_de(token_b)) is not None)
+    prueba("y revocar dos veces la misma devuelve False",
+           not panel_acceso_modulo.revocar(base_panel2,
+                                           panel_acceso_modulo.hash_de(token_a)))
+
+    # La baja de un familiar cierra el panel entero, y se comprueba por los DOS
+    # caminos por los que puede pasar.
+    #
+    # El primero es `dar_de_baja`, que borra sus filas de `panel_tokens`. El segundo es
+    # la condición de `sesion_panel`, que además exige que el `chat_id` siga en
+    # `familiares`: por eso aquí se mete un token a mano DESPUÉS de la baja, para
+    # comprobar que la puerta se sigue cerrando aunque el borrado se quedara sin
+    # hacer. Si esa comprobación desapareciera de `sesion_panel`, la baja seguiría
+    # pareciendo correcta en el uso normal y dejaría sesiones abiertas justo cuando
+    # el operador cree que ha cerrado el acceso.
+    base_panel2.dar_de_baja("111")
+    prueba("dar de baja borra sus sesiones",
+           base_panel2.sesion_panel(panel_acceso_modulo.hash_de(token_b)) is None)
+    colado, _ = panel_acceso_modulo.crear_token(base_panel2, "111")
+    prueba("y aunque se cuele un token después, la sesión no vale",
+           base_panel2.sesion_panel(panel_acceso_modulo.hash_de(colado)) is None)
+    prueba("las sesiones del otro familiar no se tocan",
+           base_panel2.nombre_de("222") == "Luis")
+finally:
+    base_panel2.cerrar()
+
+# =============================================================================
+# 20. El aviso de Telegram se reescribe cuando se atiende desde el panel
+# =============================================================================
+print("\n20. Reescribir el aviso atendido desde el panel")
+print("---------------------------------------------")
+
+# El panel resuelve por `alertas.resolver`, pero no puede editar el mensaje de
+# Telegram: es otro proceso y no lleva el token. Lo que hace que el familiar vea
+# «ATENDIDO» igualmente es que el trabajador de la cola reescriba los avisos de
+# alertas resueltas que todavia no se hayan reescrito. Aquí se prueba ese camino
+# de punta a punta, con el MISMO `resolver` que llama la API del panel.
+
+base, _ = base_nueva("reescribir-")
+columnas_envios = {f["name"] for f in base.conexion.execute(
+    "PRAGMA table_info(envios)").fetchall()}
+prueba("`envios` tiene `mensaje_id` y `editado_en`",
+       {"mensaje_id", "editado_en"} <= columnas_envios, sorted(columnas_envios))
+prueba("la base abre ya en la version 3 del esquema",
+       base.conexion.execute("PRAGMA user_version").fetchone()[0]
+       == db_modulo.VERSION_ESQUEMA)
+
+# Una base que ya estaba en la 2 (las columnas NO existian) las gana al abrirla.
+# Es el caso que le pasa a la instalación real: `esquema.sql` no puede tocar una
+# tabla que ya existe, asi que las columnas nuevas solo salen del `ALTER TABLE` de
+# la migración.
+ruta_v2 = os.path.join(tempfile.mkdtemp(prefix="v2-"), "o.sqlite3")
+con = sqlite3.connect(ruta_v2)
+con.executescript(db_modulo.leer_esquema())
+con.execute("ALTER TABLE envios DROP COLUMN mensaje_id")
+con.execute("ALTER TABLE envios DROP COLUMN editado_en")
+con.execute("PRAGMA user_version = 2")
+con.commit()
+con.close()
+
+base_v2 = db_modulo.BaseDatos(ruta_v2)
+columnas_v2 = {f["name"] for f in base_v2.conexion.execute(
+    "PRAGMA table_info(envios)").fetchall()}
+prueba("una base en la versión 2 gana las dos columnas al abrirla",
+       {"mensaje_id", "editado_en"} <= columnas_v2, sorted(columnas_v2))
+prueba("y sube a la versión 3",
+       base_v2.conexion.execute("PRAGMA user_version").fetchone()[0] == 3)
+base_v2.cerrar()
+
+base.registrar_familiar("551999991", nombre="Marta")
+
+
+class RemitenteConId:
+    """Un `Remitente` que devuelve `Message` de verdad (con `message_id`).
+
+    Los remitentes de prueba anteriores devolvían `len(texto)`, y eso está bien
+    mientras nada dependa del id. Aquí sí depende: sin `message_id` no hay manera
+    de saber qué mensaje reescribir.
+    """
+
+    def __init__(self):
+        self.token = "x"
+        self.disponible = True
+        self.enviados = []
+        self.ediciones = []       # (chat_id, message_id, texto)
+        self.ediciones_futuro = []  # (chat_id, texto), las del boton del bot
+        self._siguiente = 900000
+
+    def enviar(self, texto, teclado=None, chat_id=None):
+        self._siguiente += 1
+        self.enviados.append((str(chat_id), texto, teclado))
+        mensaje = type("Message", (), {})()
+        mensaje.message_id = self._siguiente
+        mensaje.chat_id = str(chat_id)
+        return mensaje
+
+    def editar_mensaje(self, chat_id, message_id, texto, teclado=None):
+        self.ediciones.append((str(chat_id), int(message_id), texto, teclado))
+        return True
+
+    def editar_futuro(self, mensaje, texto, teclado=None, chat_id=None):
+        self.ediciones_futuro.append((str(chat_id), texto, teclado))
+        futuro = asyncio.get_event_loop().create_future()
+        futuro.set_result(None)
+        return futuro
+
+
+base.insertar_alerta("000000-b0020-0001", "gas",
+                     '{"id":"000000-b0020-0001","gas_adc":2100}')
+
+remitente = RemitenteConId()
+trabajador = cola_modulo.TrabajadorTelegram(base, remitente)
+trabajador._intentar_uno()
+
+envio = base.obtener_envio("000000-b0020-0001", "551999991")
+prueba("el envio guarda el message_id con el que salio",
+       envio is not None and envio["mensaje_id"] is not None,
+       dict(envio) if envio else None)
+
+# Con la alerta aun sin resolver no hay nada que reescribir, aunque el aviso ya
+# este en el chat con sus botones.
+trabajador._editar_resueltas()
+prueba("mientras la alerta no este resuelta, el aviso no se toca",
+       remitente.ediciones == [], remitente.ediciones)
+
+# La resolucion del PANEL, que es exactamente lo que hace `POST .../atender`.
+atendida = int(time.time())
+alertas.resolver(base, None, "000000-b0020-0001", ahora=atendida,
+                 quien="Marta", origen="el panel")
+
+trabajador._editar_resueltas()
+prueba("resuelta desde el panel, el aviso se reescribe una sola vez",
+       len(remitente.ediciones) == 1, remitente.ediciones)
+if remitente.ediciones:
+    chat, message_id, texto, teclado = remitente.ediciones[0]
+    prueba("y va al chat y al message_id del aviso que se mando",
+           (chat, message_id) == ("551999991", envio["mensaje_id"]),
+           (chat, message_id))
+    prueba("y dice ATENDIDO", "ATENDIDO" in texto, texto)
+    prueba("y se le quitan los botones", teclado is None, teclado)
+    prueba("y pone la hora en que se atendio",
+           time.strftime("%H:%M:%S", time.localtime(atendida)) in texto, texto)
+
+prueba("ya no queda nada en la cola de reescritura",
+       base.envios_a_editar() == [], base.envios_a_editar())
+trabajador._editar_resueltas()
+prueba("y la vuelta siguiente no vuelve a editar el mismo mensaje",
+       len(remitente.ediciones) == 1, remitente.ediciones)
+
+# Si ademas alguien pulsa el boton del bot DESPUES, tiene que contestarle a el y
+# no rehacer lo que ya hizo la cola.
+base.insertar_alerta("000000-b0020-0002", "gas",
+                     '{"id":"000000-b0020-0002","gas_adc":2100}')
+trabajador._intentar_uno()
+envio2 = base.obtener_envio("000000-b0020-0002", "551999991")
+consulta = ConsultaFalsa("mensaje", "000000-b0020-0002")
+u = UpdateConsulta("551999991", consulta)
+asyncio.run(bot_modulo.ClienteBot(base, remitente)
+            .cmd_atendi(update=u, contexto=ContextoFalso([])))
+prueba("el boton del bot tambien deja la fila marcada como reescrita",
+       base.envios_a_editar() == [], base.envios_a_editar())
+prueba("y el que la resolvio el boton lo reescribio EL, no la cola",
+       remitente.ediciones_futuro and remitente.ediciones_futuro[0][0]
+       == "551999991", remitente.ediciones_futuro)
+prueba("el message_id del aviso del boton se guardo en la base",
+       envio2 is not None and envio2["mensaje_id"] is not None)
+
+# Y el texto de los dos caminos es el mismo texto, porque sale de la misma funcion.
+# La hora que pone el boton es `resuelto_en`, la del aviso, y no la de cuando
+# pulsa: si alguien atiende desde el panel y otro despues pulsa el boton en
+# Telegram, el mensaje tiene que decir la hora real de atencion.
+fila2 = base.obtener_alerta("000000-b0020-0002")
+mismo = alertas.texto_atendido(fila2["tipo"], fila2["resuelto_en"],
+                               "000000-b0020-0002")
+prueba("el boton del bot escribe EXACTAMENTE lo que reescribiria la cola",
+       remitente.ediciones_futuro and remitente.ediciones_futuro[0][1] == mismo,
+       (remitente.ediciones_futuro, mismo))
+
+base.cerrar()
+
+
+# =============================================================================
+# 20. Los client ids MQTT de cada servicio no se montan
+# =============================================================================
+#
+# El 2026-10-07 los dos procesos usaban el mismo `MQTT_CLIENT_ID` (el del
+# orquestador, de `config.py`), así que el panel y el orquestador se expulsaban
+# mutuamente del broker y el panel podía tomar la sesión persistente del
+# orquestador. La corrección separó los client ids en el `docker-compose.yml` y
+# la sesión en `config.py`. Esta prueba falla si vuelven a coincidir o si el
+# compose no los define de forma explícita (sin depender del valor por defecto).
+print("\n20. Los client ids MQTT de cada servicio")
+print("------------------------------------------")
+
+ruta_compose = None
+_candidato = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _ in range(4):
+    _posible = os.path.join(_candidato, "docker-compose.yml")
+    if os.path.exists(_posible):
+        ruta_compose = _posible
+        break
+    _candidato = os.path.dirname(_candidato)
+
+
+def limite_servicio(texto: str, desde: int):
+    """El final del bloque de un servicio: la siguiente linea `  nombre:` al nivel de servicio."""
+    fin = len(texto)
+    for coincidencia in re.finditer(r"(?m)^  [A-Za-z0-9_]+:", texto[desde:]):
+        fin = desde + coincidencia.start()
+        break
+    return fin
+
+
+def client_id_y_sesion_de(servicio: str, texto: str):
+    """El `MQTT_CLIENT_ID` y `MQTT_SESION_LIMPIA` del bloque `environment` de un servicio."""
+    indice = texto.index("  %s:" % servicio)
+    fin = limite_servicio(texto, indice + len(servicio) + 2)
+    bloque = texto[indice:fin]
+    valores = {}
+    for linea in bloque.splitlines():
+        linea = linea.strip()
+        if linea.startswith("MQTT_CLIENT_ID:"):
+            valores["id"] = linea.split(":", 1)[1].strip()
+        if linea.startswith("MQTT_SESION_LIMPIA:"):
+            valores["sesion"] = linea.split(":", 1)[1].strip().strip('"')
+    return valores
+
+
+if os.path.exists(ruta_compose):
+    with open(ruta_compose, encoding="utf-8") as f:
+        compose = f.read()
+    orquestador = client_id_y_sesion_de("orquestador", compose)
+    panel = client_id_y_sesion_de("panel", compose)
+
+    prueba("el compose define el client id EXPLICITO del orquestador",
+           orquestador.get("id") == "orquestador", orquestador)
+    prueba("el compose define el client id EXPLICITO del panel",
+           panel.get("id") == "panel-api", panel)
+    prueba("y los dos client ids son DISTINTOS",
+           bool(orquestador.get("id")) and orquestador["id"] != panel.get("id"),
+           (orquestador.get("id"), panel.get("id")))
+    prueba("el orquestador lleva sesion PERSISTENTE en el compose",
+           orquestador.get("sesion") == "false", orquestador)
+    prueba("el panel lleva sesion LIMPIA en el compose",
+           panel.get("sesion") == "true", panel)
+    prueba("ningun servicio comparte client id con otro",
+           len({v.get("id") for v in (orquestador, panel) if v.get("id")}) == 2,
+           (orquestador.get("id"), panel.get("id")))
+else:
+    prueba("existe el docker-compose.yml con los client ids", False, ruta_compose)
+
 
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])

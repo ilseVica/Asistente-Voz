@@ -31,7 +31,9 @@ enterarse.
   sigue encendida»), pero no las manda.
 - No manda alertas de inactividad, y no avisa a nadie si alguien se queda
   postrado: eso necesita un reloj de avisos que no existe.
-- No habla con Alexa ni con el panel web. Con el satélite solo avisa que una
+- No habla con Alexa ni con el panel web. Con el panel solo entrega el enlace de
+  un solo uso cuando alguien escribe `/panel`; los datos y las alertas del panel
+  salen de la misma base, no del bot. Con el satélite solo avisa que una
   alerta quedó atendida.
 
 ## El registro con código de un solo uso
@@ -201,8 +203,12 @@ El `.env` del servidor tiene que tener, además de lo que ya tenía:
 ```
 TELEGRAM_BOT_TOKEN=...    # el token de BotFather
 TELEGRAM_ACTIVAR_BOT=1    # sin esto el bot de /registro no arranca
-PANEL_URL=                 # vacío está bien: el panel no existe todavía
+PANEL_URL=http://villaca.tail722206.ts.net:8080   # el botón "Abrir panel"
 ```
+
+`PANEL_URL` vacío no es un error: el bot contesta que el panel todavía no está
+disponible y no manda ningún enlace roto. Pero con el panel desplegado tiene que
+tener valor, o el botón del aviso de alerta no aparece.
 
 `TELEGRAM_CHAT_ID` **no** hay que ponerlo: la lista la descubre el bot con
 `/registro`. Si se pone y la lista está vacía, se usa como atajo para dar de alta
@@ -243,6 +249,7 @@ grupo del vecindario publicaría el teléfono de la persona que lo usa.
 | --- | --- |
 | `/registro <código>` | Suma **este** chat a la lista con un código de un solo uso, sin quitar a nadie |
 | `/alertas` | Cuántas hay pendientes, cuántas se mandaron y las últimas cinco |
+| `/panel` | Manda un botón **Abrir panel** con un enlace de un solo uso, que caduca a los 10 minutos |
 
 `/registro` sin código, o con un código que no sirve, pide el código. Y si el chat
 **ya está en la lista**, no se responde nada: el silencio es de ese chat, no global.
@@ -271,9 +278,23 @@ un silencio real, y encima podía aparecer sin que nadie lo
 pidiera. En una casa, un silencio que no silencia el gas es peor que no tener
 silencio. Quien atiende una alerta la marca con «Ya lo atendí», que sí es verdad.
 
-El botón «Ya lo atendí» solo se реда una vez por alerta. Si se pulsa dos veces, la
+El botón «Ya lo atendí» solo resuelve una vez por alerta. Si se pulsa dos veces, la
 segunda responde «Esta alerta ya estaba atendida» y no vuelve a avisar al
 satélite.
+
+**Y también se reescribe cuando la alerta se atiende desde el panel.** La
+resolución tiene dos caminos —el botón de Telegram y el botón del panel web—, los
+dos pasan por la misma función (`alertas.resolver`) y los dos dejan la alerta igual
+en la base. Lo que solo puede hacer el bot es reescribir su mensaje mientras
+resuelve: el panel es otro proceso y no lleva el token. Para que la familia no se
+quede viendo un aviso con los botones puestos cuando ya hay alguien con el aviso,
+la cola hace la otra mitad: cada cinco segundos mira los avisos ya enviados cuya
+alerta está resuelta y todavía no se ha reescrito, y los deja como los deja el
+botón («ATENDIDO», sin botones). El `message_id` con el que salió cada aviso se
+guarda en `envios.mensaje_id` en cuanto se manda, y `envios.editado_en` es lo que
+hace que cada aviso se reescriba una sola vez: si lo reescribió el propio botón, la
+cola no lo vuelve a tocar. `alertas.texto_atendido` es la única redacción, así que
+da igual por dónde se hubiera atendido.
 
 ## Los reintentos no tienen fin
 
@@ -326,7 +347,7 @@ sube de verdad, que avise las veces que haga falta.
 | `MQTT_CLIENT_ID` | `orquestador` | El client id fijo |
 | `TELEGRAM_BOT_TOKEN` | vacío | Sin token el servicio arranca y no envía |
 | `TELEGRAM_ACTIVAR_BOT` | `0` | Si es `1`, arranca el bot de comandos |
-| `PANEL_URL` | vacío | El botón "Abrir panel". Vacío está bien |
+| `PANEL_URL` | vacío | El botón "Abrir panel". Vacío: el botón no se muestra y nunca se manda un enlace roto |
 | `ORQUESTADOR_DB` | `/datos/orquestador.sqlite3` | La base, en el volumen |
 | `NIVEL_LOG` | `INFO` | `DEBUG` para ver todo |
 

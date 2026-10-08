@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <!--
+    El valor de ese `<base>` es una variable que `flutter build` sustituye por el
+    `--base-href`; no se toca. El resto de la página sí es de este proyecto y no la
+    plantilla de Flutter: el título, el color de la barra del navegador y
+    `apple-mobile-web-app-capable` son justo lo que hace que el icono del iPhone no
+    abra la barra de direcciones (apartado 5.3).
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+
+  <!-- El color de la barra del navegador. Estos son los  dos azules-verdosos del
+       panel; si el tema cambiara, tendría que cambiar esto con él. -->
+  <meta name="theme-color" content="#0E5E5A">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+  <!-- En iOS es la etiqueta que hace que «Añadir a la pantalla de inicio» abra la
+       app sin la barra del navegador. Es P37 y una de las decisiones del diseño. -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Panel de la sala">
+
+  <title>Panel de la sala</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/Icono-192.png">
+  <link rel="apple-touch-icon" href="icons/Icono-192.png">
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

@@ -39,3 +39,17 @@ resultados de prompt/
 Thumbs.db
 *.swp
 *~
+
+# El build del panel web. Son ficheros generados por `flutter build web`, sin fuente:
+# lo que se versiona es `servidor/panel/web/`. Se ignoran porque son de megabytes y
+# cambian en cada compilacion, y porque el Dockerfile los copia dentro de la imagen:
+# si se versionaran, cada cambio de Flutter daria un diff enorme.
+servidor/panel/web_build/
+
+# Lo de dentro de `web/` que Flutter genera y no es fuente: plugins resueltos,
+# estados de compilacion y el `.dart_tool`. `pubspec.lock` SI se versiona, porque fija
+# las versiones que se pueden compilar.
+servidor/panel/web/.dart_tool/
+servidor/panel/web/.flutter-plugins
+servidor/panel/web/.flutter-plugins-dependencies
+servidor/panel/web/build/

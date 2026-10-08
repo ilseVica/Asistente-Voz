@@ -4,7 +4,7 @@
 #
 # Que hace:
 #   1. Crea el directorio de secretos con permisos 750.
-#   2. Genera el archivo passwd con los hashes PBKDF2 de los cinco usuarios.
+#   2. Genera el archivo passwd con los hashes PBKDF2 de los seis usuarios.
 #   3. Lo deja en 640, propiedad del usuario que ejecuta el script.
 #
 # Por que el passwd NO se escribe a mano: son hashes con sal. Y por que las
@@ -14,7 +14,7 @@
 # agente.
 #
 # Uso:
-#   crear-usuarios.sh              -> los cinco usuarios (crea passwd)
+#   crear-usuarios.sh              -> los seis usuarios (crea passwd)
 #   crear-usuarios.sh nodo         -> solo ese usuario (crea o rota)
 #
 # Despues hay que copiar cada contrasena a servidor/.env, que queda en 600.
@@ -23,7 +23,7 @@
 set -euo pipefail
 
 IMAGEN="eclipse-mosquitto:2.0.22"
-USUARIOS_POR_DEFECTO="nodo puente orquestador satelite salud"
+USUARIOS_POR_DEFECTO="nodo puente orquestador satelite salud panel"
 
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
 ENV_FILE="$RAIZ/servidor/.env"

@@ -1,0 +1,35 @@
+{
+  "name": "Panel de la sala",
+  "short_name": "Panel",
+  "description": "El estado de la casa: luz, ambiente, gas y alertas.",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F4F5F2",
+  "theme_color": "#0E5E5A",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "icons/Icono-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/Icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/Icono-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/Icono-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

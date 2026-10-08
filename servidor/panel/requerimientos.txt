@@ -1,0 +1,33 @@
+# Dependencias del panel web.
+#
+# Versiones fijadas, sin rangos, y por el mismo motivo que las del orquestador: este
+# servicio corre en un servidor donde nadie mira cuándo se actualiza, y una
+# actualización automática un martes por la noche es la forma más rápida de descubrir
+# un fallo de compatibilidad a las tres de la mañana. Las versiones son las que se
+# comprobaron contra PyPI el 2026-10-05.
+#
+# Lo que NO está aquí, y es deliberado: `python-telegram-bot`. El panel no manda
+# mensajes, no lee el chat y no necesita el token de Telegram. Instalarlo aquí daría
+# una imagen con una credencial al alcance de un proceso que no la usa, y ampliaría la
+# superficie sin añadir nada.
+
+# La API. Trae `starlette`, `pydantic` y `anyio`, y se fija starlette aparte porque
+# una actualización de fastapi podría moverla y el arranque depende de ella.
+fastapi==0.142.2
+starlette==1.7.0
+pydantic==2.13.5
+
+# El servidor. Sin `--reload` y sin SSL: el panel se sirve por la red de Tailscale, que
+# ya va cifrada de punta a punta, y en la red de casa. Lo que sí hace falta es
+# `websockets`, porque `/api/vivo` es un WebSocket y sin él uvicorn solo acepta HTTP.
+uvicorn==0.54.0
+websockets==17.2
+
+# El cliente MQTT del panel. La 2.x es la que usa `CallbackAPIVersion.VERSION2`, igual
+# que en el orquestador, y por eso la misma versión y no otra.
+paho-mqtt==2.1.0
+
+# Lo que el panel NO necesita, y por eso no está en la lista: `python-multipart`. No
+# hay ningún `Form(...)` ni subida de ficheros. Se deja fuera a propósito, porque es una
+# dependencia que se instala esperando a que alguien la use y un día hay un `Form` sin
+# darse cuenta.

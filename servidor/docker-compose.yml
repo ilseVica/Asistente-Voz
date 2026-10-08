@@ -62,10 +62,15 @@ services:
     cpus: 0.50
     pids_limit: 100
 
+    # Driver "local": el json-file con rotación (max-size/max-file) dejó de
+    # mostrarse completo en `docker logs` (se truncaba en el archivo rotado más
+    # antiguo) y parecía que el broker no registraba, aunque sí escribía. El
+    # driver local no tiene esa concatenación rota entre rotados. Se aplicará al
+    # recrear este contenedor (requiere reiniciar el broker).
     logging:
-      driver: json-file
+      driver: local
       options:
-        max-size: "10m"
+        max-size: "5m"
         max-file: "3"
 
     healthcheck:
@@ -139,6 +144,8 @@ services:
       MQTT_PUERTO: "1883"
       MQTT_USUARIO: orquestador
       MQTT_ORQUESTADOR_PASSWORD: ${MQTT_ORQUESTADOR_PASSWORD:?falta MQTT_ORQUESTADOR_PASSWORD en servidor/.env}
+      MQTT_CLIENT_ID: orquestador
+      MQTT_SESION_LIMPIA: "false"
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_ACTIVAR_BOT: ${TELEGRAM_ACTIVAR_BOT:-0}
       PANEL_URL: ${PANEL_URL:-}
@@ -164,6 +171,114 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # Panel web de los familiares. Es la cuarta pieza del sistema: el mismo estado que
+  # el bot cuenta por Telegram, pero en una pagina web que se abre desde un movil y no
+  # necesita instalar nada.
+  #
+  # Decisiones ya aplicadas:
+  #   - build con context: . (la raiz de servidor/) y no panel/. El panel importa
+  #     config, db, alertas, panel_acceso y sanear del orquestador, y eso solo se
+  #     puede con el contexto en la raiz. Los ficheros de panel/ entran por su
+  #     Dockerfile, que los copia a mano.
+  #   - El web_build va montado en solo lectura y NO al repositorio: son unos
+  #     cuantos MB de JavaScript que se regeneran con `flutter build web`, y el
+  #     cambio de version del frontend es "recompilar y reiniciar", no un commit de
+  #     binarios. El orden es compilar ANTES de `docker compose build panel`, y
+  #     esta escrito en panel/README.md.
+  #   - network_mode: host, por la misma razon que los otros dos: el broker esta en
+  #     127.0.0.1 y con red propia "localhost" seria el propio contenedor. Y como
+  #     `host` no admite varios `--host`, el proceso abre un socket por direccion de
+  #     PANEL_DIRECCIONES y se los pasa a uvicorn.
+  #   - El healthcheck va contra 127.0.0.1 y NO contra las direcciones configuradas.
+  #     Si Tailscale esta caido, la direccion del panel no resuelve y el contenedor
+  #     quedaria "unhealthy" sin motivo; por eso `panel/api.py` abre SIEMPRE un
+  #     socket en 127.0.0.1 ademas de los de PANEL_DIRECCIONES.
+  #   - Sin depends_on con condition: service_healthy. Igual que el orquestador:
+  #     paho reconecta solo, y esperar solo retrasaria el arranque.
+  #   - `read_only: true` con tmpfs en /tmp: el panel no escribe nada en su sistema de
+  #     ficheros. Lo unico que escribe es en /datos, que es el volumen.
+  #   - El volumen de /datos va en lectura Y escritura: el panel lee las alertas y
+  #     los familiares, y escribe en panel_enlaces y panel_tokens. Con el mismo uid
+  #     que el orquestador (1000) para que los dos puedan escribir en el mismo
+  #     fichero SQLite.
+
+  panel:
+    build:
+      context: .
+      dockerfile: panel/Dockerfile
+    image: asistente-panel:1.0
+
+    container_name: asistente-panel
+
+    restart: unless-stopped
+    network_mode: host
+    stop_grace_period: 20s
+
+    environment:
+      MQTT_HOST: 127.0.0.1
+      MQTT_PUERTO: "1883"
+      MQTT_USUARIO: panel
+      # OBLIGATORIA. Sin ella el proceso muere al arrancar, y a proposito: un panel
+      # sin conexion al broker parece sano (la web carga, el healthcheck pasa) pero
+      # no muestra ni un dato. Que se note en el primer `docker logs` es mejor.
+      MQTT_PANEL_PASSWORD: ${MQTT_PANEL_PASSWORD:?falta MQTT_PANEL_PASSWORD en servidor/.env}
+      MQTT_CLIENT_ID: panel-api
+      MQTT_SESION_LIMPIA: "true"
+      ORQUESTADOR_DB: /datos/orquestador.sqlite3
+      PANEL_URL: ${PANEL_URL:-}
+      # Tailscale y, si hace falta en modo instalacion, la IP de casa. Nunca
+      # 0.0.0.0: esa no la escribe nadie, y con ella el panel de la familia se
+      # abriria a cualquiera que llegara al puerto.
+      PANEL_DIRECCIONES: ${PANEL_DIRECCIONES:-100.116.194.116}
+      # Con `${PANEL_PUERTO:-8080}` y no con "8080" a pelo, para que cambiarlo en .env
+      # cambie de verdad el puerto donde escucha. Con el valor fijo, poner otra cosa en
+      # .env no daria error: el panel seguiria en el 8080 y el healthcheck, que si lee
+      # PANEL_PUERTO del entorno, sepondria a mirar un puerto donde no hay nada. Un
+      # ajuste que no hace nada es peor que uno que no existe.
+      PANEL_PUERTO: ${PANEL_PUERTO:-8080}
+      MODO_SITIO: ${MODO_SITIO:-instalacion}
+      NIVEL_LOG: ${NIVEL_LOG:-INFO}
+
+    volumes:
+      # La MISMA base que el orquestador, y el mismo volumen.
+      - orquestador_datos:/datos
+      # El build de Flutter, en solo lectura: el panel sirve ficheros estaticos y no
+      # tiene por que escribir en ellos.
+      - ./panel/web_build:/srv/web:ro
+
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+    mem_limit: 256m
+    cpus: 0.50
+    pids_limit: 100
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      # /api/salud va SIN autenticacion a proposito: el healthcheck no tiene token, y
+      # ponerlo como variable de entorno seria dejar una credencial en el `docker
+      # inspect`. Y no devuelve nada de la casa: ni alertas, ni chat_id, ni el estado
+      # de los dispositivos.
+      # CMD-SHELL y no CMD para poder leer $PANEL_PUERTO del entorno del contenedor: con
+      # CMD el 8080 quedaria escrito aqui y cambiar PANEL_PUERTO en .env dejaria el
+      # healthcheck apuntando a un puerto cerrado, con el contenedor "unhealthy" y
+      # ninguna razon.
+      test:
+        - CMD-SHELL
+        - "python -c \"import os,sys,urllib.request; p=os.environ.get('PANEL_PUERTO','8080'); sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:'+p+'/api/salud', timeout=3).status==200 else 1)\""
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
 volumes:
   # El proyecto se llama "asistente" (name: arriba), asi que el volumen real se

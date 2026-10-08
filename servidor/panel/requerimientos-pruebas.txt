@@ -1,0 +1,23 @@
+# Dependencias SOLO para `panel/pruebas_api.py`.
+#
+# No van en la imagen del panel a propósito: `httpx` y `websockets` los usa el
+# `TestClient` de FastAPI para simular al cliente, y meterlos en producción
+# significaría instalar en el servidor un cliente HTTP entero que el servicio no
+# llama nunca. Cuanto menos hay que actualizar, menos se rompe.
+#
+# Cómo ejecutar las pruebas de la API:
+#
+#     docker run --rm -v "$PWD:/app" -w /app asistente-panel:1.0 \
+#         sh -c "pip install -q -r panel/requerimientos-pruebas.txt && \
+#                python panel/pruebas_api.py"
+#
+# Es un `pip install` dentro del contenedor y no un volumen: así no se toca el host y
+# no queda nada instalado en el portátil.
+
+# El cliente HTTP del `TestClient`. FastAPI lo exige para las pruebas de las rutas.
+httpx==0.28.1
+
+# El cliente de WebSocket, para probar `/api/vivo` de verdad y no con un doble.
+# Es la misma versión que la del servidor a propósito: si el servidor y el cliente no
+# hablan el mismo dialecto, la prueba pasa y el navegador no.
+websockets==17.2

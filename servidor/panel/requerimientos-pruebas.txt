@@ -14,8 +14,11 @@
 # Es un `pip install` dentro del contenedor y no un volumen: así no se toca el host y
 # no queda nada instalado en el portátil.
 
-# El cliente HTTP del `TestClient`. FastAPI lo exige para las pruebas de las rutas.
-httpx==0.28.1
+# El cliente HTTP del `TestClient`. Desde starlette 1.7.0 el `TestClient` usa
+# `httpx2` y con `httpx` (el antiguo) aborta con "requires the httpx2 package".
+# Comprobado: las 130 comprobaciones de `pruebas_api.py` pasan con httpx2 2.13.1
+# y sin `httpx` instalado.
+httpx2==2.13.1
 
 # El cliente de WebSocket, para probar `/api/vivo` de verdad y no con un doble.
 # Es la misma versión que la del servidor a propósito: si el servidor y el cliente no

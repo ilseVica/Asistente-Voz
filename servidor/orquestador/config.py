@@ -163,6 +163,15 @@ COLA_EVENTOS_WS = 64
 INTENTOS_ACCESO_POR_IP = 20
 SEGUNDOS_LIMITE_ACCESO = 600
 
+# El límite por IP de los 401 del panel (tokens de sesión y WebSocket). El token
+# tiene 43 caracteres, así que no protege el token: protege, igual que el de
+# arriba, de que un fallo convierta el endpoint en otra cosa. Separado del de
+# canje para no gastar el presupuesto de intentos de acceso con intentos de
+# sesión: una lluvia de `Authorization:` inventadas no debe dejar sin abrir la
+# puerta al vecino que sí tiene el código.
+INTENTOS_TOKEN_POR_IP = 60
+SEGUNDOS_LIMITE_TOKEN = 600
+
 # Las esperas de reconexión del WebSocket del cliente, en segundos. La última se
 # repite para siempre: un panel que deja de reintentar no es un panel que espera, es
 # un panel que se ha caído. El desorden aleatorio de ±20 % lo pone el cliente, para
@@ -297,9 +306,11 @@ PAUSA_TRABAJADOR_S = 5.0
 # `TELEGRAM_BOT_TOKEN`), así que un secreto nuevo queda cubierto por añadir la
 # línea al `.env` y no al código.
 #
-# `VARIABLES_SECRETAS_EXPLICITAS` queda para lo que no siga el patrón, y hoy está
-# vacía a propósito: está para que exista el sitio donde declarar ese caso en vez
-# de volver a escribir la lista en el filtro.
+# `VARIABLES_SECRETAS_EXPLICITAS` queda para lo que no siga el patrón: hoy
+# `TAILSCALE_AUTHKEY` (la clave del nodo de Funnel, en el `.env` y visible solo
+# para el servicio `tailscale` del compose) no acaba en ninguno de los sufijos y
+# necesita el sitio donde declararlo en vez de volver a escribir la lista en el
+# filtro.
 #
 # El filtro solo ve lo que hay en `os.environ`, así que cada contenedor tapa lo que
 # tiene: el orquestador la contraseña del orquestador, el panel la suya. Cada uno
@@ -308,7 +319,7 @@ PAUSA_TRABAJADOR_S = 5.0
 SUFIJOS_DE_SECRETO = ("_PASSWORD", "_TOKEN", "_SECRET", "_SECRETO", "_CLAVE")
 
 # Lo que NO se tapa por no acabar en nada de lo de arriba. Ver `secretos()`.
-VARIABLES_SECRETAS_EXPLICITAS = ()
+VARIABLES_SECRETAS_EXPLICITAS = ("TAILSCALE_AUTHKEY",)
 
 # Por debajo de esta longitud no se tapa nada. Un secreto de dos o tres letras no es
 # una contraseña: es una bandera, y tapar «on» o «si» en cada línea del log deja el

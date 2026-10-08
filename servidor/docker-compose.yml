@@ -280,6 +280,84 @@ services:
       retries: 3
       start_period: 20s
 
+# Nodo de Tailscale SOLO para Funnel: publica el panel web por Internet para
+  # quien no tiene Tailscale. Etapa 2 del panel.
+  #
+  # Decisiones ya aplicadas:
+  #   - network_mode: host + TS_USERSPACE=true. La misma red que los otros tres
+  #     servicios. En userspace tailscaled no crea una interfaz tailscale0, asi
+  #     que no choca con la del host (nodo "villaca"), y el backend del Funnel
+  #     apunta a 127.0.0.1:8080, el socket que el panel abre siempre.
+  #   - --port=41642: la VM ya tiene su propio tailscaled escuchando en UDP 41641
+  #     (el de "villaca"); compartiendo la red del host, sin este puerto distinto
+  #     el del contenedor no podria abrir el suyo. Documentado: `--port=N` en el
+  #     manual de tailscaled, pasado aqui por TS_TAILSCALED_EXTRA_ARGS.
+  #   - TAILSCALE_AUTHKEY SIN ":?". La clave es de UN SOLO USO y caduca en 1 dia,
+  #     y solo hace falta en el primer arranque, cuando no hay estado en el
+  #     volumen. Con estado y TS_AUTH_ONCE=true el contenedor arranca aunque la
+  #     clave haya caducado o la variable este vacia. Como generar una clave
+  #     nueva si se pierde el volumen, en panel/README.md.
+  #   - El estado (y con el la identidad del nodo) va en tailscale_datos. Sin
+  #     volumen, cada reinicio registraría un nodo nuevo: cambiarian el nombre en
+  #     el DNS de Funnel y el certificado.
+  #   - serve.json montado en solo lectura: ahi estan la Web del Funnel y el
+  #     AllowFunnel. Cambios en el archivo -> recrear el contenedor.
+  #   - read_only con tmpfs en /tmp y /var/run (ahi vive el socket de
+  #     tailscaled). Si containerboot no levantara por esto, se retira el
+  #     read_only y se deja anotado.
+  #   - El healthcheck usa `tailscale status` (el CLI habla con el socket local):
+  #     exit 0 solo si el nodo esta logueado y en el tailnet.
+  tailscale:
+    image: tailscale/tailscale:v1.102.5
+    container_name: asistente-tailscale
+
+    hostname: asistente
+
+    restart: unless-stopped
+    network_mode: host
+    stop_grace_period: 20s
+
+    environment:
+      TS_HOSTNAME: asistente
+      TS_AUTHKEY: ${TAILSCALE_AUTHKEY:-}
+      TS_STATE_DIR: /var/lib/tailscale
+      # Solo se autentica si NO hay estado guardado. Con estado, un `up` con la
+      # clave caducada o vacia no toca nada.
+      TS_AUTH_ONCE: "true"
+      TS_USERSPACE: "true"
+      TS_TAILSCALED_EXTRA_ARGS: --port=41642
+      TS_SERVE_CONFIG: /etc/tailscale/serve.json
+
+    volumes:
+      # La identidad del nodo. Sin este volumen, cada recreacion registra un nodo
+      # nuevo (nuevo nombre, nuevo certificado de Funnel).
+      - tailscale_datos:/var/lib/tailscale
+      - ./tailscale/serve.json:/etc/tailscale/serve.json:ro
+
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 100
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+    healthcheck:
+      test: ["CMD", "tailscale", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 volumes:
   # El proyecto se llama "asistente" (name: arriba), asi que el volumen real se
   # llama asistente_mosquitto_data. La clave va sin el prefijo para que el
@@ -289,3 +367,6 @@ volumes:
   # La base del orquestador. Sin este volumen, reiniciar el servicio borra los ids
   # procesados y se vuelven a mandar alertas ya avisadas.
   orquestador_datos:
+
+  # La identidad del nodo de Funnel. Ver el comentario del servicio de arriba.
+  tailscale_datos:

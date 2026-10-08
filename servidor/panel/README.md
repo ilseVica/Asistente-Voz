@@ -104,6 +104,93 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/api/estado
 El `healthcheck` del compose usa `/api/salud`, que no necesita token: por eso es la
 unica ruta sin sesion.
 
+Por Internet (Funnel), la misma comprobacion es:
+
+```bash
+curl -s https://asistente.tail722206.ts.net/api/salud
+```
+
+Desde el publico solo llega `ok` y `hora`: el detalle de `/api/salud` (url, esquema,
+modo, estado del broker) lo ve solo quien llama desde `127.0.0.1` sin
+`X-Forwarded-For`, que es el healthcheck de Docker.
+
+## El nodo de Tailscale (Funnel)
+
+Desde la Etapa 2 el panel se publica por Internet con un nodo de Tailscale llamado
+`asistente` (`asistente.tail722206.ts.net`), para quien no tiene Tailscale. El nodo
+vive en el contenedor `asistente-tailscale`, separado del Tailscale de la VM
+(`villaca`): red del host, userspace (`TS_USERSPACE=true`) y puerto UDP propio
+(`--port=41642`), porque el de la VM ya usa el 41641.
+
+Lo que se publica se decide en `tailscale/serve.json` (un solo manejador `/` que
+apunta al panel en `127.0.0.1:8080`, y `AllowFunnel` para
+`asistente.tail722206.ts.net:443`). El permiso para abrir el Funnel va en la consola
+de Tailscale, en la politica de acceso del nodo etiquetado. Los cambios en
+`serve.json` no se leen solos: hay que recrear el contenedor.
+
+### La clave de autenticacion es de UN SOLO USO
+
+`TAILSCALE_AUTHKEY` (en `servidor/.env`) solo hace falta en el PRIMER arranque,
+cuando el volumen `tailscale_datos` aun no tiene estado. Con estado dentro y
+`TS_AUTH_ONCE=true`, el contenedor arranca aunque la clave haya caducado (la propia
+es de 1 dia) o la variable este vacia: usa la identidad guardada. Por eso en el
+compose la variable NO es obligatoria (va sin `:?`).
+
+Si se pierde el volumen (o hay que re-registrar el nodo):
+
+1. Generar una clave nueva en https://console.tailscale.com/admin/settings/keys:
+   un solo uso, etiqueta `asistente`, pre-aprobada y caducidad de 1 dia.
+2. Borrar el nodo "asistente" viejo en Machines, si sigue.
+3. Poner la clave en `servidor/.env` (`TAILSCALE_AUTHKEY=tskey-...`).
+4. `docker compose up -d tailscale`.
+5. Comprobar que el nodo vuelve con el MISMO nombre "asistente": si aparece como
+   "asistente-2", el nombre del DNS de Funnel y el certificado han cambiado, y hay
+   que seguir por el nuevo.
+6. Cuando el nodo este logueado se puede dejar la clave vacia en el `.env`.
+
+El Funnel no es un acceso a la tailnet: solo expone el panel. Y con la politica del
+tailnet (solo `autogroup:member` inicia conexiones), los nodos etiquetados no pueden
+alcanzar a ningun otro, que es justo lo que se quiere para un nodo expuesto.
+
+### Diagnosticar el acceso publico
+
+Hay DOS caminos al mismo dominio, y el DNS por defecto resuelve al privado:
+
+- Privado (tailnet): `asistente.tail722206.ts.net` resuelve a la IP del nodo
+  (p. ej. `100.100.158.110`). Es el camino que usa quien tiene Tailscale.
+- Publico (Funnel): la entrada es una IP de Talaria (p. ej. `208.111.34.11`). Solo
+  este camino prueba que el Funnel cumple lo suyo.
+
+Para forzar el camino publico desde el servidor (donde el DNS daria la IP privada):
+
+```bash
+curl -sS --resolve asistente.tail722206.ts.net:443:208.111.34.11 \
+    https://asistente.tail722206.ts.net/api/salud
+```
+
+La configuracion y la capacidad del Funnel se ven desde dentro del contenedor:
+
+```bash
+docker compose exec tailscale tailscale funnel status
+docker compose exec tailscale tailscale status --json   # Self.Capabilities incluye "funnel"
+```
+
+Si el nodo responde por el camino privado pero NO por el publico con un error TLS,
+lo mas probable es que le falte la capacidad `funnel` en la politica de la consola
+(`nodeAttrs` debe apuntar al tag del nodo) o que el certificado no este emitido;
+se corrige en la consola y se recrea el contenedor.
+
+### Limitacion conocida: el WebSocket por el camino publico
+
+Por el camino publico el servidor no recibe los `pong` a traves del Funnel, asi que
+el WebSocket se cierra con **1001** cada ~60 s ("45 s sin pong"), aunque haya datos
+fluidos en ambos sentidos. No es un fallo de esta Etapa: es como se comporta el
+Funnel con las tramas de control. El cliente DEBE tratar el 1001 como reconexion
+(igual que con el 1013). Reconectar es inmediato (<0,5 s) y no se pierde ningun
+evento: al reconectar llega la instantanea entera, y los eventos periodicos del
+simulador/los cambios de estado siguen llegando. Medido el 2026-10-08: cierres a
+60,1 s exactos, reconexion media ~400 ms, sin eventos perdidos entre cortes.
+
 ## Las pruebas
 
 Las dos primeras no necesitan broker ni red, y se pueden correr en la imagen del panel:
@@ -115,6 +202,10 @@ docker run --rm -v "$PWD:/app" -w /app asistente-panel:1.0 \
 docker run --rm -v "$PWD:/app" -w /app asistente-panel:1.0 \
     sh -c "pip install -q -r panel/requerimientos-pruebas.txt && python panel/pruebas_estado.py"
 ```
+
+El `requerimientos-pruebas.txt` instala `httpx2` (y no `httpx`): desde starlette 1.7.0
+el `TestClient` aborta con "requires the httpx2 package" si no esta. La otra linea del
+mismo archivo (`websockets`) es lo que permite probar `/api/vivo` de verdad.
 
 ### La ACL
 

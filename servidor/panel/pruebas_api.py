@@ -240,6 +240,22 @@ prueba("y las del otro familiar siguen valiendo",
        cliente.get("/api/estado", headers=cab(token_marta)).status_code == 200)
 base.registrar_familiar("222", nombre="Luis")
 
+# Un 401 cuenta en `limite_token`, por la IP real: es la red de seguridad para que una
+# lluvia de `Authorization:` inventadas no se convierta en otra cosa. Se baja el límite
+# para no escribir 60 líneas, que es lo que importa: que el límite CUENTE.
+maximo_token = api_modulo.limite_token.maximo
+api_modulo.limite_token.maximo = 2
+try:
+    for _ in range(2):
+        cliente.get("/api/estado", headers=cab("token-inventado"))
+    r = cliente.get("/api/estado", headers=cab("token-inventado"))
+    prueba("pasado el límite de 401 por IP, la misma IP responde 429, no 401",
+           r.status_code == 429, r.status_code)
+    prueba("y una sesión buena desde esa misma IP desbloquea el contador",
+           cliente.get("/api/estado", headers=cab(token_marta)).status_code == 200)
+finally:
+    api_modulo.limite_token.maximo = maximo_token
+
 
 # =============================================================================
 # 2. El canje
@@ -587,9 +603,8 @@ r = cliente.get("/api/salud")
 prueba("/api/salud va SIN sesión (es el healthcheck de Docker)",
        r.status_code == 200, r.status_code)
 salud = r.json()
-prueba("y devuelve ok, hora, panel_url y esquema",
-       salud["ok"] is True and "hora" in salud and "panel_url" in salud
-       and "esquema" in salud, salud)
+prueba("y desde un peer que NO es de bucle devuelve solo ok y hora",
+       set(salud) == {"ok", "hora"}, sorted(salud))
 prueba("pero NO devuelve nada de la casa",
        "luz" not in salud and "alertas" not in salud and "chat" not in r.text.lower(),
        sorted(salud))
@@ -599,9 +614,39 @@ prueba("pero NO devuelve nada de la casa",
 prueba("y ningún familiar aparece por su id",
        all(str(v) not in ("111", "222") for v in salud.values()),
        salud)
-prueba("y los campos son exactamente los del healthcheck, ni uno más",
-       set(salud) == {"ok", "hora", "panel_url", "esquema", "modo", "mqtt"},
-       sorted(salud))
+
+# El detalle (url, esquema, modo, broker) solo lo ve quien llama desde el bucle SIN
+# `X-Forwarded-For`, que es el healthcheck de Docker. Se comprueba con un segundo
+# `TestClient` con la IP del cliente puesta a una de bucle: `/api/salud` no necesita el
+# lifespan, y este cliente no entra en él a propósito.
+loopback = TestClient(api_modulo.app, client=("127.0.0.1", 50000))
+detalle = loopback.get("/api/salud").json()
+prueba("desde bucle y sin X-Forwarded-For sí hay el detalle del healthcheck",
+       set(detalle) == {"ok", "hora", "panel_url", "esquema", "modo", "mqtt"},
+       sorted(detalle))
+escondido = loopback.get("/api/salud",
+                         headers={"X-Forwarded-For": "203.0.113.9"}).json()
+prueba("pero desde bucle CON X-Forwarded-For también se esconde: detrás de Funnel "
+       "el proxy pone SIEMPRE esa cabecera y el healthcheck de Docker no la lleva",
+       set(escondido) == {"ok", "hora"}, sorted(escondido))
+
+# El límite por IP de los 401 y el log usan la IP REAL del cliente, que con Funnel
+# llega en `X-Forwarded-For` — y por eso la cabecera solo se confía desde el bucle.
+prueba("ip_real confía en X-Forwarded-For solo desde bucle",
+       api_modulo.ip_real("127.0.0.1", {"x-forwarded-for": "203.0.113.9"})
+       == "203.0.113.9", "ip=%s" % api_modulo.ip_real(
+           "127.0.0.1", {"x-forwarded-for": "203.0.113.9"}))
+prueba("y toma el primer salto de la lista (el proxy no encola saltos)",
+       api_modulo.ip_real("::1", {"x-forwarded-for": "203.0.113.9, 10.0.0.1"})
+       == "203.0.113.9", "ip=%s" % api_modulo.ip_real(
+           "::1", {"x-forwarded-for": "203.0.113.9, 10.0.0.1"}))
+prueba("pero NO confía si el peer no es de bucle (la LAN llega directa)",
+       api_modulo.ip_real("10.0.0.5", {"x-forwarded-for": "203.0.113.9"})
+       == "10.0.0.5", "ip=%s" % api_modulo.ip_real(
+           "10.0.0.5", {"x-forwarded-for": "203.0.113.9"}))
+prueba("y sin cabecera no confía en nadie",
+       api_modulo.ip_real("127.0.0.1", {}) == "127.0.0.1",
+       "ip=%s" % api_modulo.ip_real("127.0.0.1", {}))
 
 r = cliente.get("/api/estado", headers=cab(token_marta))
 prueba("la API lleva Cache-Control: no-store (un móvil no debe servir una "

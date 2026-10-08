@@ -66,8 +66,27 @@ RAIZ_WEB = os.environ.get("PANEL_RAIZ_WEB", "/srv/web")
 
 estados = EstadoSala()
 limite_acceso = seguridad.LimiteAccesos()
+limite_token = seguridad.LimiteAccesos(config.INTENTOS_TOKEN_POR_IP,
+                                       config.SEGUNDOS_LIMITE_TOKEN)
 base: db.BaseDatos = None
 mqtt: ClienteEstado = None
+
+
+def ip_real(peer: str, cabeceras) -> str:
+    """La IP del cliente real, para los límites y el log.
+
+    Con Funnel el proxy de tailscaled (en este mismo host) reenvía al panel por
+    `127.0.0.1` y SOBREESCRIBE `X-Forwarded-For` con la IP real del que pide
+    (`Header.Set` en el código de Tailscale). Por eso se confía en esa cabecera
+    solo cuando el peer es de bucle: cualquiera que entre directo a la LAN
+    habla desde una IP que no es de bucle, y su «X-Forwarded-For» inventado se
+    ignora. Sin esto, un límite por IP contaría a todo el mundo como «127.0.0.1».
+    """
+    if peer in ("127.0.0.1", "::1"):
+        lista = (cabeceras or {}).get("x-forwarded-for", "")
+        if lista:
+            return lista.split(",")[0].strip()
+    return peer or "desconocida"
 
 
 # --- Los cuerpos de las peticiones -------------------------------------------
@@ -148,19 +167,32 @@ app = FastAPI(title="Panel del asistente", docs_url=None, redoc_url=None,
 
 @app.middleware("http")
 async def cabeceras(request: Request, llamar):
-    """`no-store` en todo, y `no-referrer` en la página del canje.
+    """`no-store` en todo, y las de seguridad en todas partes (apartado 5.4).
 
     `Cache-Control: no-store` es lo que evita que un móvil sirva una instantánea vieja
-    de su caché (apartado 4.8). `Referrer-Policy: no-referrer` va en la página del
-    canje porque lleva el código en la ruta, y un `Referer` se lo llevaría a cualquier
-    recurso que se cargara desde ahí.
+    de su caché (apartado 4.8). `Referrer-Policy: no-referrer` va ahora en TODAS las
+    respuestas y no solo en la del canje: el código de acceso sigue en la ruta, y un
+    `Referer` se lo llevaría a cualquier recurso que se cargara desde ahí. `Permissions-
+    Policy` corta el micrófono y la cámara (el panel no los usa y sí lo haría un código
+    que se colara), y el CSP es mínimo porque el resto lo pone Flutter en el propio
+    `index.html`.
+
+    `HSTS` solo cuando la petición ya llegó por HTTPS: el flag viene de `X-Forwarded-
+    Proto`, que con Funnel lo escribe el proxy de tailscale. Por HTTP puro (LAN) no se
+    anuncia, porque entonces un navegador que entró por HTTP hace tiempo se quedaría sin
+    poder volver a entrar sin pasar una vez por HTTPS.
     """
     respuesta = await llamar(request)
     respuesta.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     respuesta.headers["X-Content-Type-Options"] = "nosniff"
     respuesta.headers["X-Frame-Options"] = "DENY"
-    if request.url.path.startswith("/acceso/"):
-        respuesta.headers["Referrer-Policy"] = "no-referrer"
+    respuesta.headers["Referrer-Policy"] = "no-referrer"
+    respuesta.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=()")
+    respuesta.headers["Content-Security-Policy"] = (
+        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+    if request.headers.get("x-forwarded-proto", "").lower() == "https":
+        respuesta.headers["Strict-Transport-Security"] = "max-age=31536000"
     return respuesta
 
 
@@ -177,12 +209,22 @@ def sesion_requerida(request: Request) -> dict:
     cerrando la puerta.
 
     `seguridad.sesion_de` anota además el último uso, como mucho una vez por hora.
+
+    Un 401 cuenta en `limite_token` (por la IP real): es la red de seguridad para que
+    una lluvia de `Authorization:` inventadas no se convierta en otra cosa, y va
+    SEPARADA del límite de canje para que las dos defensas no se gasten una a otra.
     """
+    ip = ip_real(request.client.host if request.client else "", request.headers)
     token = seguridad.token_de_cabecera(request.headers.get("authorization", ""))
     fila = seguridad.sesion_de(base, token)
     if fila is None:
-        registro.warning("401 en %s", request.url.path)
+        if not limite_token.permitido(ip):
+            registro.warning("401 bloqueado por limite desde %s", ip)
+            raise HTTPException(429, "demasiados intentos; espera unos minutos")
+        limite_token.anotar_fallo(ip)
+        registro.warning("401 en %s desde %s", request.url.path, ip)
         raise HTTPException(401, "sesion no valida")
+    limite_token.anotar_exito(ip)
     return fila
 
 
@@ -195,21 +237,31 @@ def _nombre_de(sesion: dict) -> str:
 
 
 @app.get("/api/salud")
-async def salud():
+async def salud(request: Request):
     """El healthcheck. Sin autenticación y sin datos de la casa (apartado 4.1).
 
     Va sin auth a propósito: lo comprueba Docker, que no tiene token. Y no lleva
     `chat_id` ni token ni nada de la casa, porque un endpoint sin sesión es un endpoint
     público, y lo público se limita a lo que no importa.
+
+    Desde la Etapa 2 lo abre cualquiera por Funnel, y por eso el detalle (url, esquema,
+    modo, estado del broker) solo lo ve quien llama desde el bucle SIN `X-Forwarded-For`,
+    que es el healthcheck de Docker. Con Funnel delante, detrás viene siempre esa
+    cabecera y el detalle no sale: `ok` y `hora` alcanzan para decidir si el contenedor
+    sigue.
     """
-    return {
-        "ok": True,
-        "hora": int(time.time()),
-        "panel_url": config.PANEL_URL,
-        "esquema": db.VERSION_ESQUEMA,
-        "modo": config.MODO_SITIO,
-        "mqtt": bool(mqtt and mqtt.conectado),
-    }
+    peer = request.client.host if request.client else ""
+    detalle = peer in ("127.0.0.1", "::1") and not request.headers.get(
+        "x-forwarded-for")
+    respuesta = {"ok": True, "hora": int(time.time())}
+    if detalle:
+        respuesta.update({
+            "panel_url": config.PANEL_URL,
+            "esquema": db.VERSION_ESQUEMA,
+            "modo": config.MODO_SITIO,
+            "mqtt": bool(mqtt and mqtt.conectado),
+        })
+    return respuesta
 
 
 # --- El acceso ---------------------------------------------------------------
@@ -227,7 +279,7 @@ async def acceso(cuerpo: Canje, request: Request):
     y uno ya gastado, y no dice cuál. Un «código no válido» seguido de «código ya usado»
     en el mismo mensaje permite ir probando y aprender de los aciertos.
     """
-    ip = request.client.host if request.client else "desconocida"
+    ip = ip_real(request.client.host if request.client else "", request.headers)
 
     if not limite_acceso.permitido(ip):
         registro.warning("acceso bloqueado por limite desde %s", ip)
@@ -449,8 +501,15 @@ async def vivo(ws: WebSocket):
     """
     sesion = seguridad.sesion_de(base, ws.query_params.get("token", ""))
     if sesion is None:
+        # La IP real, igual que en las rutas HTTP (el contenedor recibe el 401 en el
+        # WebSocket con la misma lógica `ip_real`): la IP de Funnel llega en la cabecera
+        # y el fallo cuenta en el mismo `limite_token` que los 401 HTTP. Aquí el límite
+        # no puede responder un 429 (en un WebSocket no hay), y no hace falta: no aceptar
+        # la sesión ya es cerrar la puerta.
+        limite_token.anotar_fallo(ip_real(ws.client.host if ws.client else "",
+                                          ws.headers))
         registro.warning("websocket sin sesion valida desde %s",
-                         ws.client.host if ws.client else "?")
+                         ip_real(ws.client.host if ws.client else "", ws.headers))
         # Cerrar SIN haber hecho `accept` no manda nada: el WebSocket tiene que
         # aceptarse para poder escribir un close. Con `accept` primero, el 1008
         # llega al cliente y el navegador no se queda esperando hasta que agote su
@@ -460,6 +519,8 @@ async def vivo(ws: WebSocket):
         return
 
     await ws.accept()
+    limite_token.anotar_exito(ip_real(ws.client.host if ws.client else "",
+                                      ws.headers))
     registro.info("%s abre el websocket", db.enmascarar_chat(sesion["chat_id"]))
 
     oyente = estados.oyente_nuevo()

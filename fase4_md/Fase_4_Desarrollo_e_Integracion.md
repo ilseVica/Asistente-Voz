@@ -44,7 +44,7 @@ Estos datos se definen en el Paso 0 y se agregan a este documento:
 
 ## Estado de la implementación
 
-Corte al 3 de octubre de 2026. El desarrollo empezó con el arranque anticipado, antes de comprar el resto del hardware.
+Corte al 6 de octubre de 2026. El desarrollo empezó con el arranque anticipado, antes de comprar el resto del hardware.
 
 | Componente | Estado | Evidencia |
 | --- | --- | --- |
@@ -53,7 +53,8 @@ Corte al 3 de octubre de 2026. El desarrollo empezó con el arranque anticipado,
 | Plan actualizado con las decisiones del broker y del firmware | Hecho | Esta versión del documento. |
 | NTP del servidor para la red local | Pendiente | chrony no escucha en el puerto 123; falta aplicar su configuración con `sudo`. |
 | ESP32 conectado a la VM por USB | Pendiente | Falta agregar el dispositivo a la VM en Proxmox. |
-| Puente de la laptop, satélite de voz, orquestador, panel y alertas | No iniciado | — |
+| Puente de la laptop, satélite de voz, orquestador, panel y alertas | Implementado y probado | Reporte «2026-10-06 - Implementacion - Etapa 1: panel web de la familia». Sin commit. |
+| Panel: P33 (casa sin salida a Internet) | Pendiente | No ejecutable hoy: exige apagar el WAN del router. Escucha LAN ya configurada y probada. |
 
 ### Broker del servidor
 

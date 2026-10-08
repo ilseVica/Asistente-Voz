@@ -43,6 +43,13 @@ GAS_CIERRE_SOSTENIDO_S = 10
 PERIODO_LECTURA_GAS_S = 1.0
 GAS_ADC_MAXIMO = 4095
 
+# El firmware publica `nodo/estado` cada 60 s (PERIODO_NODO_ESTADO_MS MS_60S en
+# config.h). El panel decide si el sitio esta conectado con esa lectura (90 s de
+# plazo), asi que esta es una de las decisiones compartidas: si el simulador
+# publicara solo al conectar y al cambiar el gas, la placa lo mantendria verde
+# mientras aqui el panel lo marcaria "sin conexion" cada par de minutos.
+PERIODO_NODO_ESTADO_S = 60.0
+
 # El gas normal, que es el valor que el firmware usa como "sin gas"
 # (SIM_GAS_POR_DEFECTO).
 GAS_NORMAL = 312

@@ -824,6 +824,8 @@ def main() -> int:
     cliente.connect(direccion, puerto, keepalive=60)
     cliente.loop_start()
 
+    ultimo_nodo_estado = ahora()
+
     try:
         # El bucle NO llama a cliente.loop(): `loop_start()` ya corre un hilo
         # propio que se encarga de eso. Llamar a `loop()` desde aqui ademas
@@ -855,6 +857,9 @@ def main() -> int:
             publicar_sensores()
             _leer_comandos(entrada)
             time.sleep(0.2)
+            if ahora() - ultimo_nodo_estado >= contrato.PERIODO_NODO_ESTADO_S:
+                publicar_nodo_estado()
+                ultimo_nodo_estado = ahora()
     except KeyboardInterrupt:
         pass
     finally:

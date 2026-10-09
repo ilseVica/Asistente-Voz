@@ -49,9 +49,10 @@
 #define BOTON_EXTERNO_HABILITADO false
 
 // El LED integrado del clon puede ser activo a nivel bajo o alto (6.6).
-// Se resuelve probando en la primera prueba fisica: si GPIO 2 alto no enciende,
-// se cambia este valor a false. No hay que tocar ningun codigo.
-#define LED_ACTIVO_EN_NIVEL_BAJO true
+// La NodeMCU-32S lo enciende en ALTO (GPIO 2 = 1), asi que se deja en false.
+// Se confirma a la vista en la primera prueba fisica: si quedara invertido,
+// se vuelve a true y no hace falta tocar ningun codigo.
+#define LED_ACTIVO_EN_NIVEL_BAJO false
 
 // ---------------------------------------------------------------------------
 // Identidad

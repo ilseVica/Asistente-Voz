@@ -11,7 +11,11 @@ constexpr char ESPACIO[] = "nodo";
 constexpr char CLAVE_ARRANQUE[] = "arranque";
 constexpr char CLAVE_CONTADOR[] = "contador";
 constexpr char CLAVE_UMBRAL[] = "umbral_gas";
-constexpr char CLAVE_UMBRAL_CIERRE[] = "umbral_cierre_gas";
+// NVS limita las claves a 15 caracteres (NVS_KEY_NAME_MAX_SIZE) y rechaza las
+// mas largas con KEY_TOO_LONG sin persistir: antes se usaba "umbral_cierre_gas"
+// (17) y el write fallaba en silencio. Esta clave nunca llego a grabarse, asi
+// que renombrarla no requiere migrar datos.
+constexpr char CLAVE_UMBRAL_CIERRE[] = "cierre_gas";
 constexpr char CLAVE_HOST[] = "host_previo";
 
 Preferences nvs;

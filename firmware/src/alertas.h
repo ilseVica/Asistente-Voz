@@ -31,12 +31,19 @@ uint8_t alertas_pendientes();
 // Lines de estado del modulo, para el log y para la prueba P45.
 String alertas_estado_texto();
 
-// Callback de esp-mqtt. ESP32MQTTClient no expone MQTT_EVENT_PUBLISHED, asi que
-// este modulo registra su propio manejador en esp_mqtt_client_register_event().
+// Recibe un MQTT_EVENT_PUBLISHED ya despachado por el CAMINO UNICO de esp-mqtt.
 //
-// Se recibe el cliente como void* a proposito: alertas.h no quiere arrastrar la
-// cabecera de esp-mqtt, y quien llama (mqtt_gestor.cpp) si la tiene.
-void alertas_registrar_manejador(void *cliente_esp_mqtt);
+// La libreria no expone MQTT_EVENT_PUBLISHED, y en este core (IDF 4.x) registrar
+// un manejador aparte con esp_mqtt_client_register_event() es destructivo: esa
+// funcion pone a NULL _mqtt_config.event_handle y deja pasar TODOS los eventos
+// por el bucle de eventos, donde solo habria manejador para este; desde ese
+// momento MQTT_EVENT_DATA se publica al bucle y nadie lo recoge, con lo que la
+// entrada MQTT muere en silencio (causa DIAG-2026-10-08). Por eso el evento se
+// enruta desde handleMQTT, el mismo punto por el que pasan CONNECTED y DATA.
+//
+// Se recibe como void* a proposito: alertas.h no quiere arrastrar la cabecera de
+// esp-mqtt, y quien llama (mqtt_gestor.cpp) si la tiene.
+void alertas_evento_publicado(void *evento);
 
 // Ultimo msg_id publicado por este modulo, para poder correlacionar en el log.
 int alertas_ultimo_msg_id();

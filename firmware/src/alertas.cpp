@@ -2,8 +2,8 @@
 
 #include <string>
 
-// mqtt_client.h es la cabecera de esp-mqtt que trae esp_mqtt_client_handle_t,
-// MQTT_EVENT_PUBLISHED, event->msg_id y esp_mqtt_client_register_event().
+// mqtt_client.h es la cabecera de esp-mqtt que trae esp_mqtt_event_handle_t,
+// MQTT_EVENT_PUBLISHED y event->msg_id.
 #include <mqtt_client.h>
 
 
@@ -112,21 +112,15 @@ void encolar(const String &topico, const String &payload, const String &id) {
            alertas_pendientes());
 }
 
-// El manejador que registra el modulo contra esp-mqtt. Solo mira confirmaciones;
-// el resto de eventos los sigue atendiendo ESP32MQTTClient con su propio switch.
-//
-// La firma es la de ESP-IDF 4.x, que es la que trae el core 2.0.17: cuatro
-// argumentos, void de retorno, y los datos llegan en event_data. En ESP-IDF 5.x
-// cambia a esp_err_t (*)(esp_mqtt_event_handle_t), igual que hace ESP32MQTTClient
-// con sus dos firmas condicionadas por ESP_IDF_VERSION.
-void manejador_publicado(void *argumentos, esp_event_base_t base, int32_t evento_id,
-                          void *datos) {
-  (void)argumentos;
-  (void)base;
-  if (evento_id != MQTT_EVENT_PUBLISHED) {
-    return;
-  }
+}  // namespace
 
+// Recibe el MQTT_EVENT_PUBLISHED que ya enruto handleMQTT (el camino unico de
+// esp-mqtt). El evento llega como void* porque alertas.h no arrastra esp-mqtt.
+// Solo mira confirmaciones; el resto de eventos los sigue atendiendo
+// ESP32MQTTClient con su propio switch. Vive FUERA del namespace anonimo (debe
+// ser simbolo externo visible para mqtt_gestor.cpp); las variables del modulo
+// siguen siendo visibles en este TU despues de su declaracion.
+void alertas_evento_publicado(void *datos) {
   auto evento = static_cast<esp_mqtt_event_handle_t>(datos);
   if (evento == nullptr) {
     return;
@@ -161,28 +155,11 @@ void manejador_publicado(void *argumentos, esp_event_base_t base, int32_t evento
            alertas_pendientes());
 }
 
-}  // namespace
-
 void alertas_iniciar() {
   semaforo_cola = xSemaphoreCreateMutex();
   if (semaforo_cola == nullptr) {
     log_error(ETIQUETA, "no se pudo crear el mutex de la cola");
   }
-}
-
-void alertas_registrar_manejador(void *cliente_esp_mqtt) {
-  if (cliente_esp_mqtt == nullptr) {
-    log_error(ETIQUETA, "no se puede registrar el manejador: cliente nulo");
-    return;
-  }
-  auto cliente = static_cast<esp_mqtt_client_handle_t>(cliente_esp_mqtt);
-  esp_err_t resultado = esp_mqtt_client_register_event(cliente, MQTT_EVENT_PUBLISHED,
-                                                       manejador_publicado, nullptr);
-  if (resultado != ESP_OK) {
-    log_error(ETIQUETA, "no se pudo registrar MQTT_EVENT_PUBLISHED (%d)", resultado);
-    return;
-  }
-  log_info(ETIQUETA, "manejador de MQTT_EVENT_PUBLISHED registrado");
 }
 
 void alerta_gas_registrar(int gas_adc) {

@@ -146,7 +146,7 @@ bool hay_cambio_relevante(const Lectura &lectura) {
 String construir_payload(const Lectura &lectura) {
   String carga = "{";
   carga += "\"" JSON_CLAVE_TEMP "\":" + String(lectura.temp_c, 1);
-  carga += ",\"" JSON_CLAVE_HUM "\":" + String(lectura.hum_pct, 0);
+  carga += ",\"" JSON_CLAVE_HUM "\":" + String(lectura.hum_pct);
   carga += ",\"" JSON_CLAVE_GAS "\":" + String(lectura.gas_adc);
   carga += ",\"" JSON_CLAVE_PRESENCIA "\":" + String(lectura.presencia ? "true" : "false");
   carga += "}";

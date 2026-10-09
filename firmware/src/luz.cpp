@@ -106,6 +106,11 @@ void led_escribir(bool encendido) {
 void luz_iniciar() {
   pinMode(GPIO_PIN_LED, OUTPUT);
   boton_preparar(boton_boot, GPIO_PIN_BOTON_BOOT);
+  // DIAG-2026-10-08: el boton BOOT quedaba rellenado pero deshabilitado
+  // (disponible=false), asi que GPIO 0 nunca se leia. Se habilita con pull-up
+  // interno y la logica de antirrebote/4 s de botones_tarea().
+  pinMode(GPIO_PIN_BOTON_BOOT, INPUT_PULLUP);
+  boton_boot.disponible = true;
 
   // GPIO 26 y 27 quedan cableados aunque el hardware no exista todavia (6.7).
 #if RELE_HABILITADO
@@ -126,8 +131,20 @@ void luz_iniciar() {
 #endif
 
   escribir_salidas();
-  log_info(ETIQUETA, "el boton BOOT (GPIO %d) enciende y apaga la luz; %lu ms pulsado reinicia",
+  log_info(ETIQUETA, "boton BOOT (GPIO %d) habilitado: corto alterna la luz, %lu ms reinicia",
            GPIO_PIN_BOTON_BOOT, static_cast<unsigned long>(MS_PULSON_REINICIO));
+}
+
+String luz_estado_json() {
+  // Estado de la luz con origen valido del contrato. Con estado conocido se hace
+  // eco del origen del ultimo cambio; sin el (arranque en frio) se usa "boton"
+  // como origen fisico por defecto: la luz nace apagada sin que ninguna orden la
+  // cambiara, y "boton" es el unico de los cuatro origenes que no atribuye el
+  // estado a un actor remoto inexistente.
+  const bool estado = estado_conocido ? encendida : false;
+  const char *origen = estado_conocido ? origen_actual : LUZ_ORIGEN_BOTON;
+  return String("{\"" JSON_CLAVE_ESTADO "\":\"") + (estado ? LUZ_ESTADO_ON : LUZ_ESTADO_OFF) +
+         "\",\"" JSON_CLAVE_ORIGEN_VOZ "\":\"" + origen + "\"}";
 }
 
 void luz_aplicar_orden(bool es_encendido, const char *origen) {

@@ -28,6 +28,11 @@ bool luz_encendida();
 bool luz_tiene_estado_conocido();
 uint32_t luz_ultimo_cambio_ms();
 
+// JSON completo de luz/estado para (re)publico retenido: incluye el origen valido
+// que corresponda (echo del ultimo cambio, o "boton" por defecto en arranque en
+// frio). Se usa tambien en mqtt_al_conectar() para la regla "Reconexion".
+String luz_estado_json();
+
 // Boton de luz y reinicio. GPIO 0 (BOOT) hace de boton de luz en esta entrega y
 // ademas reinicia con pulsacion larga (P31). GPIO 33 queda cableado con antirrebote
 // pero desactivado con BOTON_EXTERNO_HABILITADO = false, para no responder a un pin

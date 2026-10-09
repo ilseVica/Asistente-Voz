@@ -1,10 +1,12 @@
 #include <ESP32MQTTClient.h>
 #include <esp_idf_version.h>
+#include <esp_log.h>
 
 #include "alertas.h"
 #include "config.h"
 #include "contrato.h"
 #include "hora.h"
+#include "luz.h"
 #include "mqtt_gestor.h"
 #include "nodo_estado.h"
 #include "registro.h"
@@ -18,18 +20,28 @@ ESP32MQTTClient cliente;
 bool sesion_activa = false;
 String broker_usado;
 
-// Handle de esp-mqtt al que ya se le registro el manejador de MQTT_EVENT_PUBLISHED.
-// onMqttConnect se llama en CADA reconexion, y si la reconexion es automatica
-// esp-mqtt reutiliza el mismo cliente. esp_mqtt_client_register_event() no
-// comprueba duplicados: registrar dos veces el mismo manejador lo haria correr dos
-// veces por PUBACK, y la segunda vez encontraria la cola ya vacia. Se registra una
-// sola vez por handle.
-esp_mqtt_client_handle_t manejador_registrado = nullptr;
-
 const char *construir_will() {
   // Last Will retenido en nodo/estado con conectado=false. El broker lo publica
   // si el ESP32 se cae sin cerrar la sesion (prueba P27 del plan).
   return "{\"conectado\":false}";
+}
+
+// Suscripciones SIN callback propio (nullptr): el enrutado por topico lo hace
+// setOnMessageCallback de arriba, que es el unico camino. Devuelve true si las
+// tres llamadas encolaron su SUBSCRIBE.
+bool mqtt_suscribir() {
+  MessageReceivedCallback sin_callback = nullptr;
+  const bool ok_luz = cliente.subscribe(TOPIC_LUZ_SET, sin_callback, QOS_LUZ_SET_SUSCRIPCION);
+  const bool ok_cfg = cliente.subscribe(TOPIC_NODO_CONFIG, sin_callback, QOS_NODO_CONFIG_SUSCRIPCION);
+  bool ok = ok_luz && ok_cfg;
+#if PRUEBAS == 1
+  // Este topic solo existe en el firmware de pruebas (6.10).
+  const bool ok_prueba =
+      cliente.subscribe(TOPIC_PRUEBA_GAS, sin_callback, QOS_PRUEBA_GAS_SUSCRIPCION);
+  ok = ok && ok_prueba;
+  log_info(ETIQUETA, "PRUEBAS=1: suscrito a %s y comandos GAS por serie", TOPIC_PRUEBA_GAS);
+#endif
+  return ok;
 }
 
 }  // namespace
@@ -100,32 +112,7 @@ void mqtt_al_conectar(esp_mqtt_client_handle_t cliente_esp) {
     return;
   }
 
-  // Punto de extension de ESP32MQTTClient: lo declara en su cabecera y no lo
-  // define, asi que hay que implementarlo. Se aprovecha para enganchar el
-  // manejador de confirmaciones, que la libreria no expone (3.5).
-  if (manejador_registrado != cliente_esp) {
-    // Se pasa como void* a proposito: alertas.h no arrastra la cabecera de esp-mqtt.
-    alertas_registrar_manejador(cliente_esp);
-    manejador_registrado = cliente_esp;
-  } else {
-    log_depurar(ETIQUETA, "reconectado; el manejador de MQTT_EVENT_PUBLISHED ya estaba "
-                          "registrado en este cliente");
-  }
-
-  // Suscripciones SIN callback propio (nullptr): el enrutado por topico lo hace
-  // setOnMessageCallback de arriba, que es el unico camino. ESP32MQTTClient llama al
-  // callback global Y al de cada suscripcion que coincida, asi que dejar los dos
-  // puestos hacia que cada mensaje se validara dos veces.
-  // El nullptr va con tipo explicito porque las dos sobrecargas de subscribe()
-  // admiten nullptr y sin el se elige una de forma ambigua.
-  MessageReceivedCallback sin_callback = nullptr;
-  cliente.subscribe(TOPIC_LUZ_SET, sin_callback, QOS_LUZ_SET_SUSCRIPCION);
-  cliente.subscribe(TOPIC_NODO_CONFIG, sin_callback, QOS_NODO_CONFIG_SUSCRIPCION);
-#if PRUEBAS == 1
-  // Este topic solo existe en el firmware de pruebas (6.10).
-  cliente.subscribe(TOPIC_PRUEBA_GAS, sin_callback, QOS_PRUEBA_GAS_SUSCRIPCION);
-  log_info(ETIQUETA, "PRUEBAS=1: suscrito a %s y comandos GAS por serie", TOPIC_PRUEBA_GAS);
-#endif
+  (void)mqtt_suscribir();
 
   sesion_activa = true;
 
@@ -141,6 +128,13 @@ void mqtt_al_conectar(esp_mqtt_client_handle_t cliente_esp) {
   cliente.publish(std::string(TOPIC_NODO_ESTADO), std::string(estado.c_str()), QOS_NODO_ESTADO,
                   true);
   log_info(ETIQUETA, "conectado al broker; %s", estado.c_str());
+
+  // Regla "Reconexion" del contrato: al reconectarse se re-publica tambien el
+  // estado de la luz (retenido) y los sensores siguen su latido normal (2.5).
+  const String estado_luz = luz_estado_json();
+  cliente.publish(std::string(TOPIC_LUZ_ESTADO), std::string(estado_luz.c_str()), QOS_LUZ_ESTADO,
+                  true);
+  log_info(ETIQUETA, "luz/estado al conectar: %s", estado_luz.c_str());
 }
 
 void mqtt_tarea() {
@@ -177,15 +171,27 @@ void onMqttConnect(esp_mqtt_client_handle_t cliente_esp) {
 // core 2.0.17 (IDF 4.x), donde se pasa en _mqtt_config.event_handle en vez de
 // registrarse con esp_mqtt_client_register_event(). Sin esto no enlaza.
 //
-// Su unico trabajo es pasarle el evento al switch de la libreria, que atiende
-// MQTT_EVENT_CONNECTED, MQTT_EVENT_DATA, MQTT_EVENT_DISCONNECTED y
-// MQTT_EVENT_ERROR. OJO: ese switch NO incluye MQTT_EVENT_PUBLISHED, que es
-// justamente el evento que hace falta para confirmar la entrega de una alerta.
-// Por eso este proyecto registra aparte su propio manejador, en
-// alertas_registrar_manejador().
+// Este es el CAMINO UNICO por el que pasan todos los eventos del cliente. Su
+// trabajo habitual es pasarle el evento al switch de la libreria (CONNECTED,
+// DATA, DISCONNECTED y ERROR), que la libreria atiende con onEventCallback().
+//
+// OJO: el switch de la libreria NO incluye MQTT_EVENT_PUBLISHED, que es justo el
+// evento que hace falta para confirmar la entrega de una alerta (3.5). Antes este
+// proyecto lo registraba aparte con alertas_registrar_manejador() ->
+// esp_mqtt_client_register_event(), y eso era la causa raiz de DIAG-2026-10-08:
+// en esp-mqtt v4.x esa funcion pone a NULL client->config.event_handle y deja
+// pasar todos los eventos por el bucle de eventos, donde solo habia manejador
+// para PUBLISHED; desde ahi MQTT_EVENT_DATA se publicaba al bucle sin nadie que
+// lo recogiera y la entrada MQTT moria en silencio. Por eso PUBLISHED se enruta
+// aqui, en el mismo punto directo por el que pasan los demas eventos.
 #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
 esp_err_t handleMQTT(esp_mqtt_event_handle_t evento) {
-  cliente.onEventCallback(evento);
+  if (evento->event_id == MQTT_EVENT_PUBLISHED) {
+    // El evento llega como void* a proposito: alertas.h no arrastra esp-mqtt.
+    alertas_evento_publicado(evento);
+  } else {
+    cliente.onEventCallback(evento);
+  }
   return ESP_OK;
 }
 #else

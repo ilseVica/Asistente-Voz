@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/status.dart' as estado_ws;
@@ -159,11 +160,18 @@ class ClienteApi {
   }
 }
 
+/// Los segundos de espera entre reintentos (apartado 4.3 de la propuesta):
+/// 1, 2, 4, 8, 15, 30 y a partir de ahí siempre 30. Es la base; el jitter de
+/// ±20 % se aplica encima en `_reconectar`.
+int esperaReintentos(int intento) =>
+    intento > 6 ? 30 : const <int>[1, 2, 4, 8, 15, 30][intento - 1];
+
 /// Los eventos del WebSocket.
 ///
 /// `estado` es la instantánea inicial y los demás traen sólo su bloque. El
-/// corazón late por su cuenta (`latido`), y `saturado` no llega nunca: se cierra
-/// con 1013 y aquí se trata como «reconecta».
+/// corazón late por su cuenta (`latido`) y el cliente contesta `pong`; además
+/// el cliente manda su propio `ping` cada 25 s (apartado 4.3), y `saturado` no
+/// llega nunca: se cierra con 1013 y aquí se trata como «reconecta».
 class Vivo {
   Vivo({required this.url, this.retrasoReconexion});
 
@@ -175,7 +183,10 @@ class Vivo {
   WebSocketChannel? _canal;
   StreamSubscription<dynamic>? _suscripcion;
   Timer? _temporizador;
+  Timer? _ping;
   int _intentos = 0;
+
+  final Random _azar = Random();
 
   final StreamController<Estado> _estado = StreamController<Estado>.broadcast();
   final StreamController<Map<String, dynamic>> _bloques =
@@ -205,8 +216,19 @@ class Vivo {
       return;
     }
     _canal = canal;
+    _ping?.cancel();
+    _ping = Timer.periodic(const Duration(seconds: 25), (_) {
+      // El ping propio del cliente (apartado 4.3): el navegador no puede mandar
+      // un ping de protocolo, así que va como mensaje de aplicación.
+      _mandar(<String, dynamic>{'tipo': 'ping'});
+    });
     _suscripcion = canal.stream.listen(_alRecibir,
         onDone: _alCerrar, onError: (Object _) => _alCerrar());
+  }
+
+  void _mandar(Map<String, dynamic> mensaje) {
+    // `_canal` puede haberse caído mientras se construía la orden.
+    _canal?.sink.add(jsonEncode(mensaje));
   }
 
   void _alRecibir(dynamic dato) {
@@ -224,6 +246,9 @@ class Vivo {
       } else if (tipo == 'latido') {
         _intentos = 0;
         if (!_conectado.isClosed) _conectado.add(true);
+        // El servidor cierra a los 45 s sin `pong`; el `pong` de aplicación es
+        // la respuesta al `latido` (el ping de protocolo WebSocket no cuenta).
+        _mandar(<String, dynamic>{'tipo': 'pong'});
       } else {
         if (!_conectado.isClosed) _conectado.add(true);
         _bloques.add(mapa);
@@ -235,11 +260,17 @@ class Vivo {
   }
 
   void _alCerrar() {
+    // `_abierto` NO se toca aquí a propósito: significa «queremos seguir
+    // conectados», y así `_reconectar` sabe que hay que reintentar. El que corta
+    // la intención es `desconectar()` (salir de la sesión). Sin esta decisión,
+    // la reconexión automática no pasaba el `if (!_abierto)` y el WebSocket se
+    // quedaba muerto hasta que alguien recargara la página.
     final bool estaba = _abierto;
-    _abierto = false;
     _suscripcion?.cancel();
     _suscripcion = null;
     _canal = null;
+    _ping?.cancel();
+    _ping = null;
     if (estaba) {
       if (!_conectado.isClosed) _conectado.add(false);
       _reconectar();
@@ -250,12 +281,12 @@ class Vivo {
     if (!_abierto) return;
     _temporizador?.cancel();
     _intentos++;
-    // Espera creciente con tope: 1, 2, 4, 8, 16 y ya nunca más de 16 s. Si el
-    // panel está caído no se lanza una tormenta de reconexiones, y si vuelve en
-    // cuanto se puede se ve en el primer segundo.
-    final int espera = _intentos > 4 ? 16 : 1 << (_intentos - 1);
-    final Duration demora = retrasoReconexion?.call(espera) ??
-        Duration(seconds: espera);
+    // 1, 2, 4, 8, 15, 30 y de ahí en adelante 30, con ±20 % de desorden para que
+    // dos teléfonos no reintenten a la vez (apartado 4.3 de la propuesta).
+    final int base = esperaReintentos(_intentos);
+    final Duration demora = retrasoReconexion?.call(base) ??
+        Duration(
+            seconds: (base * (1.0 + _azar.nextDouble() * 0.4 - 0.2)).round());
     _temporizador = Timer(demora, () {
       _abierto = true;
       _abrir();
@@ -266,6 +297,8 @@ class Vivo {
     _abierto = false;
     _temporizador?.cancel();
     _temporizador = null;
+    _ping?.cancel();
+    _ping = null;
     _suscripcion?.cancel();
     _suscripcion = null;
     _canal?.sink.close(estado_ws.normalClosure);
@@ -274,6 +307,10 @@ class Vivo {
   }
 
   void cerrar() {
+    _temporizador?.cancel();
+    _temporizador = null;
+    _ping?.cancel();
+    _ping = null;
     _estado.close();
     _bloques.close();
     _conectado.close();

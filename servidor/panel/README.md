@@ -180,16 +180,29 @@ lo mas probable es que le falte la capacidad `funnel` en la politica de la conso
 (`nodeAttrs` debe apuntar al tag del nodo) o que el certificado no este emitido;
 se corrige en la consola y se recrea el contenedor.
 
-### Limitacion conocida: el WebSocket por el camino publico
+### El latido y por que ya no se corta el WebSocket
 
-Por el camino publico el servidor no recibe los `pong` a traves del Funnel, asi que
-el WebSocket se cierra con **1001** cada ~60 s ("45 s sin pong"), aunque haya datos
-fluidos en ambos sentidos. No es un fallo de esta Etapa: es como se comporta el
-Funnel con las tramas de control. El cliente DEBE tratar el 1001 como reconexion
-(igual que con el 1013). Reconectar es inmediato (<0,5 s) y no se pierde ningun
-evento: al reconectar llega la instantanea entera, y los eventos periodicos del
-simulador/los cambios de estado siguen llegando. Medido el 2026-10-08: cierres a
-60,1 s exactos, reconexion media ~400 ms, sin eventos perdidos entre cortes.
+El `latido` y el `pong` son mensajes de aplicacion, no tramas de control: el servidor
+manda `latido` cada 20 s y cierra con **1001** a los 45 s sin el `{"tipo": "pong"}` que
+el cliente tiene que devolver (`SEGUNDOS_PONG_WS`). El servidor los recibe igual por
+los dos caminos (privado y Funnel): NO hay ninguna limitacion del Funnel con el
+WebSocket.
+
+El corte de ~60 s que se midio el 2026-10-08 no lo causaba el camino publico: el
+cliente web escuchaba el `latido` pero no respondia el `pong` de aplicacion, asi que el
+servidor lo cerraba a los 60 s por CUALQUIER camino. Se arreglo en el cliente:
+
+- responde `{"tipo": "pong"}` a cada `latido` (el ping de protocolo WebSocket no
+  cuenta);
+- manda su propio `{"tipo": "ping"}` cada 25 s, porque el navegador no tiene ping de
+  protocolo;
+- se reconecta solo tras cualquier cierre (1001, 1008, 1013 o red caida) con esperas
+  1, 2, 4, 8, 15, 30 s y ±20 % de desorden (apartado 4.3 de la propuesta Etapa 1); al
+  reconectar recibe la instantanea entera.
+
+Verificado el 2026-10-08: 5 min seguidos por el camino publico (celular con datos
+moviles y sin Tailscale, IP publica real en el log) sin un solo corte, y ante un cierre
+forzado del servidor la app se reconecto sola y siguio recibiendo eventos.
 
 ## Las pruebas
 
@@ -235,11 +248,13 @@ dispositivo.
 
 ## El WebSocket
 
-Instantanea completa al conectar, luego un evento por cambio, y `latido` cada 20 s. Si
-pasan 45 s sin `pong`, el servidor cierra. La cola de cada conexion esta acotada
-(`COLA_EVENTOS_WS`): si un cliente no consume y se llena, se le cierra con **1013**
-("recargando"), no con un error. El cliente tiene que tratar el 1013 como reconexion, y
-al reconectar recibe la instantanea entera, que es lo que lo hace seguro.
+Instantanea completa al conectar, luego un evento por cambio, y `latido` cada 20 s. El
+cliente contesta `{"tipo": "pong"}` y manda su propio `ping` cada 25 s: sin el pong, el
+servidor cierra a los 45 s. La cola de cada conexion esta acotada (`COLA_EVENTOS_WS`):
+si un cliente no consume y se llena, se le cierra con **1013** ("recargando"), no con
+un error. Cualquier cierre (1013, 1001, 1008 o red caida) se trata como reconexion
+automatica con esperas 1, 2, 4, 8, 15, 30 s, y al reconectar recibe la instantanea
+entera, que es lo que lo hace seguro.
 
 ## La pagina de canje
 

@@ -19,6 +19,10 @@ constexpr char ETIQUETA[] = "mqtt";
 ESP32MQTTClient cliente;
 bool sesion_activa = false;
 String broker_usado;
+// Handle de esp-mqtt del cliente de la libreria, capturado en onMqttConnect(). Se
+// usa para publicar con esp_mqtt_client_publish() y poder leer el msg_id que
+// devuelve (correlacion de PUBACK en alertas.cpp). Null hasta la primera conexion.
+esp_mqtt_client_handle_t cliente_esp_actual = nullptr;
 
 const char *construir_will() {
   // Last Will retenido en nodo/estado con conectado=false. El broker lo publica
@@ -112,6 +116,10 @@ void mqtt_al_conectar(esp_mqtt_client_handle_t cliente_esp) {
     return;
   }
 
+  // Se guarda el handle para poder publicar por la API de esp-mqtt y leer el
+  // msg_id (correlacion de PUBACK). Es el mismo handle que usa la libreria.
+  cliente_esp_actual = cliente_esp;
+
   (void)mqtt_suscribir();
 
   sesion_activa = true;
@@ -143,6 +151,9 @@ void mqtt_tarea() {
     sesion_activa = true;
   } else if (!ahora_conectado && sesion_activa) {
     sesion_activa = false;
+    // El handle deja de ser valido para publicar mientras no haya sesion; se
+    // vuelve a capturar en el proximo onMqttConnect().
+    cliente_esp_actual = nullptr;
     log_aviso(ETIQUETA, "sesion caida; las alertas pendientes siguen en la cola");
   }
 }
@@ -159,6 +170,19 @@ bool mqtt_publicar(const String &topico, const String &payload, int qos, bool re
   // broker lo recibe. Para las alertas, la confirmacion llega por
   // MQTT_EVENT_PUBLISHED (ver alertas.cpp).
   return cliente.publish(std::string(topico.c_str()), std::string(payload.c_str()), qos, retener);
+}
+
+int mqtt_publicar_qos_con_msg_id(const String &topico, const String &payload, int qos,
+                                 bool retener) {
+  if (!mqtt_conectado() || cliente_esp_actual == nullptr) {
+    return -1;
+  }
+  // Misma llamada que ESP32MQTTClient::publish(), pero se conserva el msg_id que
+  // devuelve esp-mqtt (>= 0) para que alertas.cpp pueda confirmar exactamente esa
+  // publicacion cuando llegue su MQTT_EVENT_PUBLISHED. Devuelve -1 si no se pudo
+  // encolar.
+  return esp_mqtt_client_publish(cliente_esp_actual, topico.c_str(), payload.c_str(),
+                                 static_cast<int>(payload.length()), qos, retener);
 }
 
 // ESP32MQTTClient la declara en su cabecera y no la define. Es el punto de

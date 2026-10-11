@@ -24,6 +24,12 @@ bool mqtt_conectado();
 // con el PUBACK: ver alertas.h.
 bool mqtt_publicar(const String &topico, const String &payload, int qos, bool retener);
 
+// Publica y devuelve el msg_id que asigna esp-mqtt, o -1 si no se pudo encolar
+// (desconectado o error). Es la misma llamada que usa ESP32MQTTClient::publish(),
+// pero conservando el msg_id para correlacionar el MQTT_EVENT_PUBLISHED con la
+// publicacion concreta (las alertas QoS 1). Ver alertas.cpp.
+int mqtt_publicar_qos_con_msg_id(const String &topico, const String &payload, int qos, bool retener);
+
 
 
 // Se llama desde onMqttConnect(), que ESP32MQTTClient declara en su cabecera y no

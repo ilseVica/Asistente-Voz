@@ -79,7 +79,15 @@ RUTA_ESQUEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # potente de siempre: en una base que ya esta en la 2, `esquema.sql` no toca nada
 # (`CREATE TABLE IF NOT EXISTS` sobre una tabla que ya existe) y las columnas solo
 # pueden salir de ahi.
-VERSION_ESQUEMA = 3
+#
+# La version 4 agrega `activo` a `familiares`: un registro se puede DESACTIVAR sin
+# borrarlo. La columna tiene `DEFAULT 1` para que los familiares que ya estan en la
+# tabla sigan recibiendo alertas sin tocar sus filas, y es otra columna nueva en
+# una tabla vieja, asi que vuelve a ser el `ALTER TABLE` idempotente. Sin ella, un
+# chat ficticio como la «Prueba Publica» de P20 haria que el fan out le creara un
+# envio por cada alerta y el trabajador lo reintentaria para siempre contra algo
+# que no existe.
+VERSION_ESQUEMA = 4
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -226,6 +234,17 @@ class BaseDatos:
         if version < 3:
             self._migrar_envios_mensajes()
 
+        # De la 3 a la 4: `familiares` gana `activo`. Igual que en la 2->3, la
+        # columna va DENTRO de una tabla que ya existe, asi que en una base que ya
+        # esta en la 3 el fichero de esquema no la puede crear y hace falta el
+        # `ALTER TABLE` idempotente. En una base nueva el `CREATE TABLE` del fichero
+        # ya trajo la columna, y en una vieja el `PRAGMA table_info` decide, con lo
+        # que la funcion se puede llamar las veces que haga falta sin duplicar. El
+        # `DEFAULT 1` es lo que deja a los familiares existentes activos sin migrar
+        # datos.
+        if version < 4:
+            self._migrar_familiares_activo()
+
         # El indice de las alertas que esperan a un familiar se crea AQUI y no en
         # `esquema.sql`, y el motivo es el orden: `esquema.sql` se ejecuta entero
         # ANTES de migrar, y sobre una base ya existente su `CREATE TABLE IF NOT
@@ -264,6 +283,26 @@ class BaseDatos:
                 self.conexion.execute(
                     "ALTER TABLE envios ADD COLUMN %s INTEGER" % nombre
                 )
+
+    def _migrar_familiares_activo(self) -> None:
+        """La migración de la versión 3 a la 4: `activo` en `familiares`.
+
+        No hay datos que mover: la columna nace con `DEFAULT 1` (todos los
+        familiares existentes quedan activos, que es el comportamiento de antes),
+        y una fila inactiva solo puede salir del comando `inactivar`.
+
+        El `PRAGMA table_info` es lo que la hace idempotente, igual que en la
+        migración de la 2 a la 3: en una base creada en limpio, `esquema.sql` ya
+        puso la columna al ejecutarse entero antes de llegar aqui, y un segundo
+        `ALTER TABLE` sobre una columna que ya existe fallaria con «duplicate
+        column name» y dejaria la base a medias.
+        """
+        columnas = {fila["name"] for fila in
+                    self.conexion.execute("PRAGMA table_info(familiares)").fetchall()}
+        if "activo" not in columnas:
+            self.conexion.execute(
+                "ALTER TABLE familiares ADD COLUMN activo INTEGER NOT NULL DEFAULT 1"
+            )
 
     def _migrar_a_familiares_multiples(self) -> None:
         """La migración de la versión 0 a la 1.
@@ -574,17 +613,87 @@ class BaseDatos:
         El orden es el de alta, no el alfabetico: el primero en registrarse es el
         que mas tiempo lleva cuidando la casa, y en la cola de envios ese es el
         orden en que se avisa.
+
+        La lista INCLUYE TAMBIEN LOS INACTIVOS: es la del operador, la que
+        muestra que un chat esta registrado pero desactivado. Para saber a quien
+        avisar esta `familiares_activos`; confundir las dos devolveria alertas a
+        alguien desactivado.
         """
         with _candado:
             return list(self.conexion.execute(
                 "SELECT * FROM familiares ORDER BY registrado_en, chat_id"
             ))
 
+    def familiares_activos(self) -> list:
+        """Los familiares que reciben alertas AHORA (`activo = 1`).
+
+        Es la lista de DESTINO del fan out (`insertar_alerta`). La diferencia con
+        `familiares_registrados` es intencional y separada por el nombre: esa
+        devuelve todo (es lo que ve el operador), esta solo los que hay que avisar.
+        Un `WHERE activo = 1` en el fan out es la diferencia entre un chat que
+        "esta apuntado" y un chat que "esta apuntado pero no le llega nada".
+        """
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT * FROM familiares WHERE activo = 1 "
+                "ORDER BY registrado_en, chat_id"
+            ))
+
     def contar_familiares(self) -> int:
+        """Cuantos chats hay en la tabla, ACTIVOS O NO.
+
+        El número de "personas registradas" que ven el panel y el bot. Si contara
+        solo los activos, una desactivacion "desapareceria" a alguien sin avisar;
+        el estado se ve en la lista, no en el total.
+        """
         with _candado:
             return self.conexion.execute(
                 "SELECT COUNT(*) AS total FROM familiares"
             ).fetchone()["total"]
+
+    def marcar_familiar_inactivo(self, chat_id: str) -> bool:
+        """Desactiva un familiar SIN borrarlo. Devuelve si cambio algo.
+
+        La fila se queda, que es de lo que se trata: desactivar es para casos como
+        la «Prueba Publica» de P20, un chat que se apunto al sistema y no debe
+        recibir nada pero que conviene conservar como evidencia. `activo = 0`;
+        ademas cancela sus ENVIOS PENDIENTES, igual que hace `dar_de_baja`, porque
+        si se dejaran el trabajador de la cola seguiria reintentandolos para siempre
+        contra un chat que ya no debe recibir avisos.
+
+        Se devuelven los avisos cancelados al operador.
+        """
+        chat = str(chat_id)
+        with _candado:
+            cursor = self.conexion.execute(
+                "UPDATE familiares SET activo = 0 WHERE chat_id = ? AND activo = 1",
+                (chat,),
+            )
+            cancelados = self.conexion.execute(
+                "DELETE FROM envios WHERE chat_id = ? AND enviado_en IS NULL",
+                (chat,),
+            ).rowcount
+            self.conexion.commit()
+            if cursor.rowcount == 1 and cancelados:
+                registro.info("al inactivar al familiar %s se cancelaron %d "
+                              "aviso(s) sin mandar",
+                              enmascarar_chat(chat), cancelados)
+            return cursor.rowcount == 1
+
+    def marcar_familiar_activo(self, chat_id: str) -> bool:
+        """Reactiva un familiar desactivado. Devuelve si cambio algo.
+
+        Solo le vuelve a llegar lo NUEVO: lo que se encolo mientras estaba
+        inactivo no se le reenvia (esa es la regla de `insertar_alerta`, que solo
+        reparte entre los que estan ACTIVOS en el momento de encolar).
+        """
+        with _candado:
+            cursor = self.conexion.execute(
+                "UPDATE familiares SET activo = 1 WHERE chat_id = ? AND activo = 0",
+                (str(chat_id),),
+            )
+            self.conexion.commit()
+            return cursor.rowcount == 1
 
     def nombre_de(self, chat_id: str) -> str:
         """El nombre de un familiar, o una cadena vacía.
@@ -815,8 +924,12 @@ class BaseDatos:
 
         Devuelve `False` si ya estaba, y en ese caso no inserta nada de nada.
 
-        Los `chat_ids` son los familiares registrados en el momento de encolar. Si
-        se pasa `None`, se leen de la tabla, que es lo que hace el camino normal.
+        Los `chat_ids` son los familiares ACTIVOS en el momento de encolar (si se
+        pasa `None`, se leen de la tabla con `familiares_activos`). Que el fan out
+        consulte a los activos es lo que hace cumplir la desactivacion: un chat
+        con `activo = 0` no recibe NADA nuevo, y el que se reactiva no recibe lo
+        que se le acumulo mientras estaba fuera, porque en el momento de cada
+        alerta no estaba activo.
 
         Si no hay ningun familiar, la alerta se guarda SIN envios y con
         `fanout_hecho = 0`: no es una alerta perdida, queda a la espera de que se
@@ -831,7 +944,7 @@ class BaseDatos:
         ahora = int(time.time())
         purgable = ahora + config.DIAS_PURGA_ALERTAS * 86400
         if chat_ids is None:
-            chat_ids = [fila["chat_id"] for fila in self.familiares_registrados()]
+            chat_ids = [fila["chat_id"] for fila in self.familiares_activos()]
 
         with _candado:
             cursor = self.conexion.execute(

@@ -47,11 +47,14 @@ String registrar_hora() {
 String identificador_mac_nodo() {
   uint8_t mac[6] = {0};
   WiFi.macAddress(mac);
-  char texto[7];
+  char texto[13];
   snprintf(texto, sizeof(texto), "%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3],
            mac[4], mac[5]);
-  // El formato pide MAC[2..7], es decir los ultimos seis caracteres del MAC.
-  return String(texto + 2);
+  // El formato pide los ultimos seis digitos hexadecimales de la MAC (plan, linea
+  // 201): con e8:6b:ea:ca:41:c4 son los de mac[3], mac[4] y mac[5], "ca41c4". El
+  // buffer mide 13 (doce hex + nulo); antes media 7 y truncaba el prefijo a cuatro
+  // caracteres.
+  return String(texto + 6);
 }
 
 String id_alerta_construir(uint16_t arranque, uint16_t contador) {

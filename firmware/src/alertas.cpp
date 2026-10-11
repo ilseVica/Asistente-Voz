@@ -17,7 +17,6 @@ namespace {
 constexpr char ETIQUETA[] = "alertas";
 constexpr uint8_t CAPACIDAD_COLA = 8;
 constexpr uint32_t MS_VIGILANTE_SIN_CONFIRMAR = 8000UL;  // menor que los 30 s del outbox
-constexpr uint8_t INTENTOS_MAXIMOS = 3;
 
 // Una entrada de la cola. Guarda el payload ya construido, porque al reenviar se
 // tiene que publicar EXACTAMENTE lo mismo, con el mismo id. Reconstruirlo podria
@@ -27,11 +26,16 @@ struct Entrada {
   String topico;
   String payload;
   String id;
-  uint8_t intentos = 0;
+  // Regla del contrato: la alerta se reenvia MIENTRAS haya sesion MQTT y hasta que
+  // el broker confirme, NUNCA se descarta por numero de intentos. `intentos` es
+  // solo para el log; por eso ya no hay tope (antes, a los 3, la alerta se tiraba).
+  uint16_t intentos = 0;
   uint32_t ultimo_intento_ms = 0;
-  // msg_id NO se puede rellenar: ESP32MQTTClient::publish() devuelve bool y no el
-  // msg_id que esp-mqtt asigno. Por eso la correlacion se hace de otra forma, en
-  // manejador_publicado().
+  // msg_id devuelto por esp_mqtt_client_publish() en el ultimo envio y en el
+  // anterior. El PUBACK (MQTT_EVENT_PUBLISHED) se acepta solo si su msg_id coincide
+  // con uno de estos dos: asi un PUBACK rezagado de otra alerta no libera esta.
+  int msg_id_esperado = -1;
+  int msg_id_anterior = -1;
 };
 
 // Solo hay una alerta en vuelo a la vez. Es lo que permite que cada
@@ -107,6 +111,8 @@ void encolar(const String &topico, const String &payload, const String &id) {
   cola[libre].id = id;
   cola[libre].intentos = 0;
   cola[libre].ultimo_intento_ms = 0;
+  cola[libre].msg_id_esperado = -1;
+  cola[libre].msg_id_anterior = -1;
   desbloquear();
   log_info(ETIQUETA, "encolada id=%s topico=%s pendientes=%d", id.c_str(), topico.c_str(),
            alertas_pendientes());
@@ -138,15 +144,23 @@ void alertas_evento_publicado(void *datos) {
     return;
   }
 
-  // Correlacion sin comparar msg_ids, y por que es correcta: ESP32MQTTClient solo
-  // publica con QoS 1 en los topicos de alerta, y este modulo nunca tiene mas de
-  // una alerta en vuelo. Por lo tanto TODO MQTT_EVENT_PUBLISHED que llega es el
-  // PUBACK de la alerta que esta esperando. Si el ESP32 llegara a publicar con
-  // QoS 1 en otro topico, esta regla dejaria de valer y habria que pasar a
-  // comparar msg_ids, lo que exigiria leer el msg_id de esp_mqtt_client_publish().
-  String id = cola[en_vuelo].id;
-  cola[en_vuelo].ocupada = false;
-  cola[en_vuelo].intentos = 0;
+  // Correlacion por msg_id: solo se libera la entrada si el PUBACK corresponde a
+  // una de las publicaciones de ESTA alerta (el ultimo envio o el anterior). Un
+  // PUBACK rezagado de otra alerta ya descartada no puede liberar la actual.
+  Entrada &entrada = cola[en_vuelo];
+  if (msg_id != entrada.msg_id_esperado && msg_id != entrada.msg_id_anterior) {
+    const int esperado = entrada.msg_id_esperado;
+    desbloquear();
+    log_aviso(ETIQUETA, "PUBLICADO msg_id=%d no es de la alerta en vuelo (esperado %d), se ignora",
+              msg_id, esperado);
+    return;
+  }
+
+  String id = entrada.id;
+  entrada.ocupada = false;
+  entrada.intentos = 0;
+  entrada.msg_id_esperado = -1;
+  entrada.msg_id_anterior = -1;
   indice_en_vuelo = -1;
   desbloquear();
 
@@ -191,24 +205,26 @@ void alertas_tarea() {
       desbloquear();
       return;
     }
-    if (en_vuelo.intentos >= INTENTOS_MAXIMOS) {
-      log_error(ETIQUETA, "id=%s sin confirmar tras %d intentos, se descarta", en_vuelo.id.c_str(),
-                en_vuelo.intentos);
-      en_vuelo.ocupada = false;
-      indice_en_vuelo = -1;
+    // El watchdog actua a los 8 s, mucho antes de que el outbox de esp-mqtt
+    // descarte el mensaje a los 30 s, y se republica con el MISMO id. No hay tope
+    // de intentos: por contrato la alerta se reenvia hasta que el broker confirme.
+    const int msg_id = mqtt_publicar_qos_con_msg_id(en_vuelo.topico, en_vuelo.payload,
+                                                    QOS_ALERTA_GAS, false);
+    if (msg_id < 0) {
+      // Sin sesion real en este instante: no cuenta como intento; se reintenta en
+      // el siguiente ciclo. Los reintentos solo cuentan con conexion MQTT.
       desbloquear();
       return;
     }
-    // El watchdog actua a los 8 s, mucho antes de que el outbox de esp-mqtt
-    // descarte el mensaje a los 30 s, y se republica con el MISMO id.
-    log_aviso(ETIQUETA, "id=%s sin PUBACK en %lu ms, reintento %d", en_vuelo.id.c_str(),
-              static_cast<unsigned long>(transcurrido), en_vuelo.intentos + 1);
-    en_vuelo.intentos += 1;
-    en_vuelo.ultimo_intento_ms = ahora;
-    bool enviado = mqtt_publicar(en_vuelo.topico, en_vuelo.payload, QOS_ALERTA_GAS, false);
-    if (!enviado) {
-      en_vuelo.intentos = 0;  // fallo local, se reintentara en el siguiente ciclo
+    if (en_vuelo.intentos < 0xFFFF) {
+      en_vuelo.intentos += 1;
     }
+    en_vuelo.msg_id_anterior = en_vuelo.msg_id_esperado;
+    en_vuelo.msg_id_esperado = msg_id;
+    en_vuelo.ultimo_intento_ms = ahora;
+    log_aviso(ETIQUETA, "id=%s sin PUBACK en %lu ms, reintento %u (msg_id=%d)",
+              en_vuelo.id.c_str(), static_cast<unsigned long>(transcurrido),
+              static_cast<unsigned>(en_vuelo.intentos), msg_id);
     desbloquear();
     return;
   }
@@ -218,19 +234,19 @@ void alertas_tarea() {
     if (!cola[i].ocupada) {
       continue;
     }
-    cola[i].intentos = 1;
-    cola[i].ultimo_intento_ms = millis();
-    indice_en_vuelo = i;
-    const bool enviado = mqtt_publicar(cola[i].topico, cola[i].payload, QOS_ALERTA_GAS, false);
-    if (!enviado) {
-      cola[i].intentos = 0;
-      cola[i].ultimo_intento_ms = 0;
-      indice_en_vuelo = -1;
+    const int msg_id = mqtt_publicar_qos_con_msg_id(cola[i].topico, cola[i].payload,
+                                                    QOS_ALERTA_GAS, false);
+    if (msg_id < 0) {
       desbloquear();
       return;
     }
-    log_info(ETIQUETA, "ENVIANDO id=%s topico=%s intento=%d", cola[i].id.c_str(),
-             cola[i].topico.c_str(), cola[i].intentos);
+    cola[i].intentos = 1;
+    cola[i].msg_id_anterior = -1;
+    cola[i].msg_id_esperado = msg_id;
+    cola[i].ultimo_intento_ms = millis();
+    indice_en_vuelo = i;
+    log_info(ETIQUETA, "ENVIANDO id=%s topico=%s intento=%d msg_id=%d", cola[i].id.c_str(),
+             cola[i].topico.c_str(), cola[i].intentos, msg_id);
     desbloquear();
     return;
   }

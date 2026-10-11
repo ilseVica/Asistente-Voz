@@ -13,6 +13,8 @@ Lo que se cubre, en orden:
   1. La validación por tópico, y que `tipo` sea un campo extra más.
   2. Que la lista de familiares esté en SQLite y que cada alta se SUME.
   3. El fan out: una alerta, un envío por familiar.
+  3b. Desactivar sin borrar: los inactivos salen del fan out, y reactivar no
+      reenvía lo que se les acumuló mientras estaban fuera.
   4. Que los reintentos sean independientes (el fallo de uno no toca al otro).
   5. Que un fallo de red NUNCA convierta un aviso en algo que no se manda.
   6. El backfill: lo que se acumuló sin nadie sale, el histórico no se reenvía.
@@ -266,6 +268,123 @@ prueba("siguen siendo tres envios para esa alerta, no seis",
        destinos_de("000000-b0004-0002"))
 
 base.cerrar()
+
+
+# =============================================================================
+# 3b. Desactivar sin borrar: los inactivos salen del fan out
+# =============================================================================
+
+titulo("3b. Familiares activos e inactivos")
+
+base, _ = base_nueva("activos-")
+base.registrar_familiar("111", nombre="Marta")
+base.registrar_familiar("222", nombre="Javi")
+
+# Un alta normal nace ACTIVA (`activo = 1`, el DEFAULT de la columna). Es lo que
+# deja a los que ya estaban cuando llega la migración y a los que se dan de alta
+# después exactamente igual: nadie queda sin avisar por no pedir el flag.
+prueba("un alta nueva nace activa",
+       [f["chat_id"] for f in base.familiares_activos()] == ["111", "222"],
+       base.familiares_activos())
+prueba("y el total cuenta a los dos",
+       base.contar_familiares() == 2, base.contar_familiares())
+
+# La desactivación NO borra: la fila sigue (es evidencia, como la «Prueba
+# Publica» de P20), pero deja de ser un destino del fan out. Son dos listas
+# distintas, y la prueba es que no se confunden.
+base.marcar_familiar_inactivo("222")
+prueba("inactivar saca al chat de los ACTIVOS",
+       [f["chat_id"] for f in base.familiares_activos()] == ["111"],
+       base.familiares_activos())
+prueba("pero el registro sigue en la tabla",
+       base.familiar_registrado("222")
+       and any(f["chat_id"] == "222" and f["activo"] == 0
+               for f in base.familiares_registrados()),
+       base.familiares_registrados())
+prueba("el total no pierde al desactivado",
+       base.contar_familiares() == 2, base.contar_familiares())
+
+# El fan out reparte entre los ACTIVOS en el momento de encolar. Una alerta que
+# entra con "222" inactivo no le crea un envio, active o no después, y dar de
+# alta a un tercero no reenvia nada del pasado.
+base.insertar_alerta("000000-b0004-0101", "gas",
+                     '{"id":"000000-b0004-0101","gas_adc":2100}')
+base.registrar_familiar("333", nombre="Ana")
+base.insertar_alerta("000000-b0004-0102", "gas",
+                     '{"id":"000000-b0004-0102","gas_adc":2200}')
+prueba("con un inactivo, las alertas solo van a los activos",
+       sorted(f["chat_id"] for f in base.tomar_envios_pendientes(limite=50)
+              if f["alerta_id"] == "000000-b0004-0102") == ["111", "333"],
+       base.tomar_envios_pendientes(limite=50))
+
+# Inactivar CANCELA los envios que le quedaban sin mandar, igual que hace la baja:
+# si se dejaran, el trabajador de la cola los reintentaria para siempre contra un
+# chat apagado.
+base.marcar_familiar_activo("222")
+base.insertar_alerta("000000-b0004-0103", "gas",
+                     '{"id":"000000-b0004-0103","gas_adc":2300}')
+prueba("con los tres ACTIVOS la alerta va a los tres",
+       sorted(f["chat_id"] for f in base.tomar_envios_pendientes(limite=50)
+              if f["alerta_id"] == "000000-b0004-0103") == ["111", "222", "333"],
+       base.tomar_envios_pendientes(limite=50))
+base.marcar_familiar_inactivo("222")
+prueba("inactivar CANCELA su envio pendiente",
+       base.obtener_envio("000000-b0004-0103", "222") is None,
+       base.obtener_envio("000000-b0004-0103", "222"))
+prueba("y a los otros dos no les toca nada",
+       base.obtener_envio("000000-b0004-0103", "111") is not None
+       and base.obtener_envio("000000-b0004-0103", "333") is not None,
+       (base.obtener_envio("000000-b0004-0103", "111"),
+        base.obtener_envio("000000-b0004-0103", "333")))
+
+# Pedir inactivar a un inactivo (o activar a un activo) no hace nada: devuelve
+# False, y así el CLI puede distinguir «se hizo» de «ya estaba así».
+prueba("inactivar a un inactivo no hace nada",
+       base.marcar_familiar_inactivo("222") is False)
+
+# Reactivar solo vuelve a poner al chat en el fan out para lo NUEVO. Lo que se
+# encolo mientras estuvo inactivo no se le reenvia, igual que no se le reenvia a
+# un recién registrado el historico: en el momento de cada alerta no estaba activo.
+base.marcar_familiar_activo("222")
+prueba("reactivar vuelve a meterlo en el fan out",
+       [f["chat_id"] for f in base.familiares_activos()] == ["111", "222", "333"],
+       base.familiares_activos())
+base.insertar_alerta("000000-b0004-0104", "gas",
+                     '{"id":"000000-b0004-0104","gas_adc":2400}')
+prueba("al reactivar solo recibe lo NUEVO, no lo de su estancia inactiva",
+       base.obtener_envio("000000-b0004-0103", "222") is None
+       and base.obtener_envio("000000-b0004-0104", "222") is not None,
+       (base.obtener_envio("000000-b0004-0103", "222"),
+        base.obtener_envio("000000-b0004-0104", "222")))
+prueba("reactivar a un activo no hace nada",
+       base.marcar_familiar_activo("111") is False)
+base.cerrar()
+
+# La migración de la 3 a la 4, igual que se probo la de la 2 a la 3: una base que
+# ya estaba en la 3 (la columna NO existia) la gana al abrirla. Es el caso de la
+# instalacion real: `esquema.sql` no puede tocar una tabla que ya existe, asi que
+# la columna solo puede salir del `ALTER TABLE` de la migración.
+ruta_v3 = os.path.join(tempfile.mkdtemp(prefix="v3-"), "o.sqlite3")
+con = sqlite3.connect(ruta_v3)
+con.executescript(db_modulo.leer_esquema())
+con.execute("ALTER TABLE familiares DROP COLUMN activo")
+con.execute("PRAGMA user_version = 3")
+con.commit()
+con.close()
+
+base_v3 = db_modulo.BaseDatos(ruta_v3)
+columnas_fam = {f["name"] for f in base_v3.conexion.execute(
+    "PRAGMA table_info(familiares)").fetchall()}
+prueba("una base en la versión 3 gana `activo` al abrirla",
+       "activo" in columnas_fam, sorted(columnas_fam))
+prueba("y sube a la versión 4 del esquema",
+       base_v3.conexion.execute("PRAGMA user_version").fetchone()[0]
+       == db_modulo.VERSION_ESQUEMA)
+base_v3.registrar_familiar("555", nombre="Marta")
+prueba("una alta en la base migrada nace activa",
+       [f["chat_id"] for f in base_v3.familiares_activos()] == ["555"],
+       base_v3.familiares_activos())
+base_v3.cerrar()
 
 
 # =============================================================================
@@ -1662,7 +1781,7 @@ columnas_envios = {f["name"] for f in base.conexion.execute(
     "PRAGMA table_info(envios)").fetchall()}
 prueba("`envios` tiene `mensaje_id` y `editado_en`",
        {"mensaje_id", "editado_en"} <= columnas_envios, sorted(columnas_envios))
-prueba("la base abre ya en la version 3 del esquema",
+prueba("la base abre ya en la versión actual del esquema",
        base.conexion.execute("PRAGMA user_version").fetchone()[0]
        == db_modulo.VERSION_ESQUEMA)
 
@@ -1684,8 +1803,9 @@ columnas_v2 = {f["name"] for f in base_v2.conexion.execute(
     "PRAGMA table_info(envios)").fetchall()}
 prueba("una base en la versión 2 gana las dos columnas al abrirla",
        {"mensaje_id", "editado_en"} <= columnas_v2, sorted(columnas_v2))
-prueba("y sube a la versión 3",
-       base_v2.conexion.execute("PRAGMA user_version").fetchone()[0] == 3)
+prueba("y sube a la versión actual del esquema",
+       base_v2.conexion.execute("PRAGMA user_version").fetchone()[0]
+       == db_modulo.VERSION_ESQUEMA)
 base_v2.cerrar()
 
 base.registrar_familiar("551999991", nombre="Marta")

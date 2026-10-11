@@ -409,6 +409,8 @@ USO = """Uso:
   python -m registro código           imprime un código de un solo uso
   python -m registro familiares       lista los familiares registrados
   python -m registro baja CHAT_ID     da de baja a un familiar
+  python -m registro inactivar CHAT_ID  deja de avisarle SIN borrarlo
+  python -m registro activar CHAT_ID    vuelve a avisarle
 """
 
 
@@ -438,13 +440,18 @@ def _listar_familiares(base) -> int:
         nombre = fila["nombre"] or "(sin nombre)"
         fecha = time.strftime("%Y-%m-%d %H:%M", time.localtime(fila["registrado_en"]))
         pendientes = base.envios_sin_mandar_de(fila["chat_id"])
+        estado = "activo" if fila["activo"] else "INACTIVO (no recibe avisos)"
         print("  chat_id   %s" % fila["chat_id"])
         print("  nombre    %s" % nombre)
         print("  alta      %s" % fecha)
+        print("  estado    %s" % estado)
         print("  sin mandar %d" % pendientes)
         print()
     print("Para dar de baja a uno:")
     print("  python -m registro baja CHAT_ID")
+    print("Para desactivar SIN borrar (o reactivar):")
+    print("  python -m registro inactivar CHAT_ID")
+    print("  python -m registro activar CHAT_ID")
     return 0
 
 
@@ -475,6 +482,46 @@ def _dar_de_baja(base, chat_id: str) -> int:
         print("Se cancelaron %d aviso(s) que no le habian llegado." % pendientes)
         print("Los avisos ya enviados a ese chat no se pueden deshacer: esa persona")
         print("ya los vio.")
+    return 0
+
+
+def _cambiar_activo(base, chat_id: str, activo: bool) -> int:
+    """`inactivar`/`activar`: desactiva SIN borrar, o devuelve a un inactivo.
+
+    Devuelven los codigos de salida de `_dar_de_baja`: 0 = se hizo, 1 = el chat no
+    esta o ya estaba como se pide, 2 = falta el argumento. Los codigos importan
+    porque los repiten los scripts y un shell distingue «cambio hecho» de «no
+    habia nada que hacer».
+    """
+    chat_id = chat_id.strip()
+    if not chat_id:
+        print("Falta el chat_id. Mira la lista con:", file=sys.stderr)
+        print("  python -m registro familiares", file=sys.stderr)
+        return 2
+
+    if not base.familiar_registrado(chat_id):
+        print("Ese chat_id no esta registrado. No hay nada que %s."
+              % ("inactivar" if not activo else "activar"))
+        return 1
+
+    if activo:
+        cambio = base.marcar_familiar_activo(chat_id)
+    else:
+        cambio = base.marcar_familiar_inactivo(chat_id)
+    if not cambio:
+        print("Ese familiar ya estaba %s. Nada que hacer."
+              % ("activo" if activo else "inactivo"))
+        return 0
+
+    # El log lleva el chat enmascarado y la consola el entero, igual que en la baja.
+    from db import enmascarar_chat
+
+    verbo = "reactivado" if activo else "inactivado"
+    registro.warning("familiar %s %s desde la consola del operador",
+                     enmascarar_chat(chat_id), verbo)
+    print("Familiar %s %s." % (chat_id, verbo))
+    if not activo:
+        print("Ya no recibe avisos nuevos, pero su registro se queda.")
     return 0
 
 
@@ -510,6 +557,19 @@ def main(argumentos) -> int:
         base = _abrir_base()
         try:
             return _dar_de_baja(base, argumentos[1])
+        finally:
+            base.cerrar()
+
+    if orden in ("inactivar", "activar"):
+        if len(argumentos) < 2:
+            print("Falta el chat_id que se quiere %s."
+                  % ("desactivar" if orden == "inactivar" else "reactivar"),
+                  file=sys.stderr)
+            print(USO, file=sys.stderr)
+            return 2
+        base = _abrir_base()
+        try:
+            return _cambiar_activo(base, argumentos[1], activo=orden == "activar")
         finally:
             base.cerrar()
 

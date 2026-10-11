@@ -73,15 +73,20 @@ CREATE INDEX IF NOT EXISTS idx_ids_recibido
 -- El nombre es lo que la persona escribio detras del codigo, y es opcional. No se
 -- usa para decidir nada: es para que el operador sepa a quien va a dar de baja.
 --
--- No hay columna `activo` ni borrado logico. "Esta en la tabla" significa "recibe
--- alertas", y una fila que significa "no" solo invites a bugs: un `SELECT` que se
--- olvide del `WHERE activo = 1` mandaria avisos a alguien dado de baja. Dar de
--- baja borra la fila y cancela sus envios pendientes (ver `db.dar_de_baja`).
+-- `activo` es el corte que pide la sesión del 2026-10-10: un registro se puede
+-- DESACTIVAR sin borrarlo (la fila queda como evidencia, p. ej. la «Prueba
+-- Publica» de P20) y el fan out lo salta. 1 = recibe alertas (el default, asi los
+-- familiares existentes quedan activos al migrar); 0 = conserva la fila pero no
+-- recibe ningun aviso nuevo. Al inactivar se cancelan sus ENVIOS PENDIENTES, igual
+-- que hace una baja (ver `db.marcar_familiar_inactivo`), para que la cola no siga
+-- reintentando contra un chat que ya no debe recibir. La baja fisica
+-- (`dar_de_baja`) sigue existiendo como opcion irreversible.
 
 CREATE TABLE IF NOT EXISTS familiares (
     chat_id        TEXT NOT NULL PRIMARY KEY,
     nombre         TEXT NOT NULL DEFAULT '',
-    registrado_en  INTEGER NOT NULL
+    registrado_en  INTEGER NOT NULL,
+    activo         INTEGER NOT NULL DEFAULT 1
 );
 
 

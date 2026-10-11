@@ -14,6 +14,7 @@
 // para el detalle de cada regla del contrato.
 
 #include <Arduino.h>
+#include <esp_system.h>
 
 #include "alertas.h"
 #include "alexa.h"
@@ -39,16 +40,31 @@ uint32_t ultimo_ciclo_ms = 0;
 // se lee la linea ni hay ninguna forma de disparar gas sin broker (ajuste C).
 constexpr char COMANDO_GAS[] = "GAS ";
 
+// Motivo del ultimo reinicio (V4 del reporte de pruebas). El contador de arranques
+// ya lo registra persistencia_iniciar(); esto anade el POR QUE, que es lo que
+// permite distinguir un reinicio por BOOT de uno por watchdog o brownout.
+const char *nombre_reset_reason(esp_reset_reason_t motivo) {
+  switch (motivo) {
+    case ESP_RST_POWERON: return "poweron";
+    case ESP_RST_EXT: return "externo";
+    case ESP_RST_SW: return "software";
+    case ESP_RST_PANIC: return "panic";
+    case ESP_RST_INT_WDT: return "int_wdt";
+    case ESP_RST_TASK_WDT: return "task_wdt";
+    case ESP_RST_WDT: return "wdt";
+    case ESP_RST_DEEPSLEEP: return "deepsleep";
+    case ESP_RST_BROWNOUT: return "brownout";
+    case ESP_RST_SDIO: return "sdio";
+    default: return "desconocido";
+  }
+}
+
 #if PRUEBAS == 1
 void manejar_comandos_de_prueba() {
   while (Serial.available() > 0) {
-    const int caracter = Serial.read();
-    if (caracter < 0) {
-      return;
-    }
-    if (caracter != '\n' && caracter != '\r') {
-      continue;
-    }
+    // Se lee la linea entera de una vez. Antes se consumia caracter a caracter
+    // buscando el salto y, justo despues de consumirlo, se llamaba a
+    // readStringUntil('\n'), que leia la linea SIGUIENTE: el comando se perdia.
     String linea = Serial.readStringUntil('\n');
     linea.trim();
     if (linea.startsWith(COMANDO_GAS)) {
@@ -80,8 +96,11 @@ void setup() {
   }
 
   registrar_iniciar(static_cast<NivelLog>(NIVEL_LOG));
+  const esp_reset_reason_t motivo = esp_reset_reason();
   log_info("main", "arranque, nodo %s, firmware PRUEBAS=%d, log nivel %d", PLACA_NOMBRE, PRUEBAS,
            NIVEL_LOG);
+  log_info("main", "reset_reason=%d (%s)", static_cast<int>(motivo),
+           nombre_reset_reason(motivo));
 
   // El orden importa: primero lo que no depende de la red, despues lo que si.
   persistencia_iniciar();

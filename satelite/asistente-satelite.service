@@ -1,0 +1,19 @@
+[Unit]
+Description=Asistente de voz - satelite (etapa B del Paso 2)
+Documentation=file:%h/.config/asistente-satelite/config.toml
+# El satelite necesita PipeWire para capturar y reproducir.
+After=pipewire.socket pipewire.service
+Wants=pipewire.socket
+
+[Service]
+Type=simple
+# El lanzador lo crea instalar.sh; apunta al repo y al entorno de uv.
+ExecStart=%h/.local/bin/asistente-satelite
+Restart=on-failure
+RestartSec=2
+# Nada de audio ni secretos en el journal: el servicio ya registra poco.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

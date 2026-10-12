@@ -58,6 +58,7 @@ import bot as bot_modulo  # noqa: E402
 import cola as cola_modulo  # noqa: E402
 import config  # noqa: E402
 import db as db_modulo  # noqa: E402
+import mqtt_cliente  # noqa: E402
 import panel_acceso as panel_acceso_modulo  # noqa: E402
 import registro as registro_modulo  # noqa: E402
 import voz  # noqa: E402
@@ -1939,6 +1940,12 @@ print("------------------")
 prueba("el topico del texto de voz es el del contrato",
        config.TOPICO_VOZ_TEXTO == "casa/sala/voz/texto", config.TOPICO_VOZ_TEXTO)
 
+# La regla de antiguedad de voz/texto compara el `ts` del mensaje con la hora del
+# sistema, asi que los `ts` de estas pruebas se calculan al correr y NO se dejan
+# literales: un ts fijo vence a los 10 s y convierte la suite en una bomba de
+# reloj (el eco deja de publicarse y las comprobaciones fallan sin tocar nada).
+AHORA = int(time.time())
+
 
 def publicar_que_recoge():
     """Un `publicar` falso que apunta lo que se publica, para las pruebas de voz."""
@@ -1952,7 +1959,7 @@ def publicar_que_recoge():
 
 # --- El eco de una frase reconocida ---
 apuntes, publicar = publicar_que_recoge()
-publicado = voz.procesar('{"frase_id":"f1","texto":"prende la luz","modo":"comandos","ts":1791768964}', publicar)
+publicado = voz.procesar('{"frase_id":"f1","texto":"prende la luz","modo":"comandos","ts":%d}' % AHORA, publicar)
 prueba("una frase reconocida hace eco", publicado is True and len(apuntes) == 1,
        apuntes)
 if apuntes:
@@ -1969,7 +1976,8 @@ if apuntes:
 # --- `[unk]` y vacio: no se entendio ---
 for texto_raro in ("[unk]", "", "   "):
     apuntes, publicar = publicar_que_recoge()
-    voz.procesar('{"frase_id":"f","texto":"%s","modo":"comandos","ts":1791768964}' % texto_raro, publicar)
+    voz.procesar('{"frase_id":"f","texto":"%s","modo":"comandos","ts":%d}'
+                 % (texto_raro, AHORA), publicar)
     prueba("texto %r contesta 'No entendi'" % texto_raro,
            len(apuntes) == 1
            and apuntes[0][1].get("texto") == voz.SIN_ENTENDER, apuntes)
@@ -1986,7 +1994,7 @@ prueba("un cuerpo que no es objeto no publica nada",
 eco_original = config.ECO_VOZ
 config.ECO_VOZ = False
 apuntes, publicar = publicar_que_recoge()
-publicado = voz.procesar('{"frase_id":"f","texto":"apaga la luz","ts":1791768964}', publicar)
+publicado = voz.procesar('{"frase_id":"f","texto":"apaga la luz","ts":%d}' % AHORA, publicar)
 config.ECO_VOZ = eco_original
 prueba("con ECO_VOZ=0 no se publica el eco", publicado is False and apuntes == [],
        apuntes)
@@ -1999,16 +2007,69 @@ prueba("voz sin ts no publica eco",
        apuntes)
 apuntes, publicar = publicar_que_recoge()
 prueba("voz con ts > 10 s se descarta",
-       voz.procesar('{"frase_id": "f", "texto": "prende la luz", "ts": 1791769727}', publicar) is False and apuntes == [],
+       voz.procesar('{"frase_id": "f", "texto": "prende la luz", "ts": %d}' % (AHORA - 60), publicar) is False and apuntes == [],
        apuntes)
 apuntes, publicar = publicar_que_recoge()
-publicado = voz.procesar('{"frase_id": "f", "texto": "prende la luz", "ts": 1791769745}', publicar)
+publicado = voz.procesar('{"frase_id": "f", "texto": "prende la luz", "ts": %d}' % AHORA, publicar)
 prueba("voz con ts reciente publica eco", publicado is True and len(apuntes) == 1, apuntes)
 
 apuntes, publicar = publicar_que_recoge()
 prueba("voz con ts en milisegundos se descarta (unidades incorrectas)",
-       voz.procesar('{"frase_id": "f", "texto": "prende", "ts": 1791769747000}', publicar) is False and apuntes == [],
+       voz.procesar('{"frase_id": "f", "texto": "prende", "ts": %d}' % (AHORA * 1000), publicar) is False and apuntes == [],
        apuntes)
+
+
+# --- El eco no espera el PUBACK desde el callback de paho ---
+# `publicar` con `esperar=False` NO debe llamar a `wait_for_publish`: cuando se
+# invoca desde `on_message` (el hilo de red de paho) esperar el PUBACK se
+# autobloquea hasta el timeout, porque ese mismo hilo es el que lo procesaria.
+# Ese autobloqueo era el retraso de 5 s del eco. `esperar=True` (lo normal desde
+# otros hilos) si tiene que esperar.
+class PublicadorFalso:
+    """Un doble del cliente paho que cuenta las esperas de PUBACK."""
+
+    def __init__(self):
+        self.publicados = []
+        self.esperas = 0
+
+    def publish(self, topico, cuerpo, qos=1, retain=False):
+        self.publicados.append((topico, cuerpo, qos, retain))
+        return self
+
+    def wait_for_publish(self, timeout=None):
+        self.esperas += 1
+
+
+def cliente_con_publicador_falso():
+    doble = mqtt_cliente.ClienteMQTT.__new__(mqtt_cliente.ClienteMQTT)
+    doble.cliente = PublicadorFalso()
+    doble._hilo_red = None
+    return doble
+
+
+sin_espera = cliente_con_publicador_falso()
+sin_espera.publicar(config.TOPICO_SATELITE_DECIR, {"texto": "Escuché: hola"},
+                    qos=1, esperar=False)
+prueba("publicar con esperar=False no espera el PUBACK",
+       sin_espera.cliente.esperas == 0 and len(sin_espera.cliente.publicados) == 1,
+       sin_espera.cliente.esperas)
+
+con_espera = cliente_con_publicador_falso()
+con_espera.publicar(config.TOPICO_SATELITE_DECIR, {"texto": "Escuché: hola"}, qos=1)
+prueba("publicar por defecto si espera el PUBACK",
+       con_espera.cliente.esperas == 1, con_espera.cliente.esperas)
+
+# Y la red de seguridad: si lo llaman desde el MISMO hilo de red de paho —el que
+# guarda `_al_conectar`— no espera aunque se pida `esperar=True`. Así ningún
+# camino que publique desde un callback (hoy la voz, mañana cualquier tópico)
+# puede autobloquearse por olvidar pasar `esperar=False`.
+en_callback = cliente_con_publicador_falso()
+en_callback._hilo_red = threading.current_thread()
+en_callback.publicar(config.TOPICO_SATELITE_DECIR, {"texto": "Escuché: hola"}, qos=1)
+prueba("publicar desde el hilo de red de paho no espera aunque esperar=True",
+       en_callback.cliente.esperas == 0
+       and len(en_callback.cliente.publicados) == 1,
+       en_callback.cliente.esperas)
 # --- El reparto por topico ---
 # `enrutar` tiene que mandar el texto de voz a `voz.procesar` y todo lo demas a
 # `alertas.procesar`. Es lo unico que impide que el topico nuevo caiga en la rama
@@ -2016,8 +2077,8 @@ prueba("voz con ts en milisegundos se descarta (unidades incorrectas)",
 base, _ruta = base_nueva("voz-despacho-")
 apuntes, publicar = publicar_que_recoge()
 orquestador_modulo.enrutar(config.TOPICO_VOZ_TEXTO,
-                           '{"frase_id":"f","texto":"hola","modo":"comandos","ts":1791768964}',
-                           base, publicar)
+                           '{"frase_id":"f","texto":"hola","modo":"comandos","ts":%d}'
+                           % AHORA, base, publicar)
 prueba("enrutar manda el texto de voz al eco", len(apuntes) == 1, apuntes)
 prueba("y NO lo mete en la base como si fuera una alerta",
        base.obtener_alerta("f") is None, base.obtener_alerta("f"))

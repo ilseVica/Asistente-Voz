@@ -1,0 +1,54 @@
+# Configuracion del satelite de voz (etapa B del Paso 2).
+#
+# Copiar a ~/.config/asistente-satelite/config.toml y completar con los valores
+# reales. Los secretos (token y contrasena) se ponen aqui o, mejor, se apunta a un
+# archivo con token_archivo / password_archivo. NUNCA se guarda este archivo con
+# valores reales dentro del repositorio: solo esta plantilla.
+
+[servidor]
+# WebSocket del servidor de Vosk. Por la red de la casa o por Tailscale.
+ws_url = "ws://192.168.1.169:2700"
+# token = "pegar-el-token-aqui"
+# O bien, leerlo de un archivo con permisos 600 (recomendado):
+token_archivo = "/home/USUARIO/ruta/al/token"
+
+[mqtt]
+# Broker de Mosquitto del servidor.
+host = "192.168.1.169"
+puerto = 1883
+usuario = "satelite"
+# password = "pegar-la-contrasena-aqui"
+# O bien:
+password_archivo = "/home/USUARIO/ruta/a/la/password"
+# Client id fijo: con uno aleatorio, cada reinicio dejaria una sesion abierta en el
+# broker durante 2 dias. Debe coincidir con el de la laptop (uno solo).
+client_id = "satelite-sala"
+topico_estado = "casa/sala/satelite/estado"
+topico_decir = "casa/sala/satelite/decir"
+
+[audio]
+# Nodo de PipeWire de ENTRADA (microfono) y de SALIDA (bocinas), por nombre. El
+# satelite no depende del dispositivo predeterminado. Ver: wpctl status / pw-cli
+# ls Node. Ejemplo de la laptop: alsa_input.pci-...analog-stereo
+entrada_nodo = "alsa_input.pci-0000_00_1f.3.analog-stereo"
+salida_nodo = "alsa_output.pci-0000_00_1f.3.analog-stereo"
+# Latencia de captura de pw-record. Baja para no acumular bufer.
+latencia_captura = "20ms"
+# Tope de duracion de una frase: al alcanzarlo se cierra sola.
+altura_max_s = 8.0
+
+[rutas]
+# Binario de Piper 2023.11.14-2 y voz es_MX-ald-medium (los que instala
+# instalar.sh). Rutas absolutas.
+piper = "/home/USUARIO/asistente-satelite/piper/piper"
+voz = "/home/USUARIO/asistente-satelite/voces/es_MX-ald-medium.onnx"
+# Registro de marcas por frase (sin audio). Si se omite, va a
+# ~/.local/state/asistente-satelite/latencias.jsonl
+registro = "/home/USUARIO/.local/state/asistente-satelite/latencias.jsonl"
+# Medir el primer turno (P35): si pasa de 2.5 s, poner en true.
+precargar_piper = false
+
+[tecla]
+# Socket Unix local del aviso de la tecla. Si se omite:
+# $XDG_RUNTIME_DIR/asistente-satelite.sock
+socket = "$XDG_RUNTIME_DIR/asistente-satelite.sock"

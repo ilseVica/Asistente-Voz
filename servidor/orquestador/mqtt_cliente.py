@@ -28,6 +28,7 @@ del todo. Con estos, un broker caído no genera un intento por segundo.
 import json
 import logging
 import ssl
+import threading
 
 import paho.mqtt.client as mqtt
 
@@ -41,6 +42,11 @@ class ClienteMQTT:
         self.al_recibir = al_recibir
         self.conectado = False
         self.contador_ayuda = 0
+        # Hilo en el que paho ejecuta sus callbacks (`on_connect`, `on_message`,
+        # ...). Se guarda en `_al_conectar` y sirve para no esperar el PUBACK
+        # cuando se publica desde dentro de un callback: ese PUBACK lo procesa el
+        # mismo hilo, así que esperarlo se autobloquea hasta el `timeout`.
+        self._hilo_red = None
         self.cliente = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=config.MQTT_CLIENT_ID,
@@ -64,6 +70,10 @@ class ClienteMQTT:
     def _al_conectar(self, cliente, usuario, banderas, codigo,
                      propiedades=None):
         self.conectado = True
+        # Todos los callbacks de paho corren en el hilo de red. Guardarlo aquí
+        # (que es el primer callback que llega) permite que `publicar` reconozca
+        # después si lo están llamando desde ese mismo hilo.
+        self._hilo_red = threading.current_thread()
         # `codigo` es un objeto ReasonCode de paho 2.x, no un entero. No admite
         # `int()` ni comparacion con `!= 0`: hay que preguntarle con
         # `is_failure`, que es la API de la 2.x. En la 1.x esto era un `rc == 0`
@@ -162,8 +172,21 @@ class ClienteMQTT:
     # --- Publicaciones, para las pruebas -----------------------------------
 
     def publicar(self, topico: str, carga: dict, qos: int = 1,
-                 retain: bool = False) -> None:
+                 retain: bool = False, esperar: bool = True) -> None:
         """Publica un mensaje. Lo usa el registro y las pruebas.
+
+        `esperar=True` aguanta hasta el PUBACK con `wait_for_publish`. Eso vale
+        desde el hilo propio de quien publica, pero NO desde dentro de un callback
+        de paho: `on_message` corre en el hilo de red, y el PUBACK lo procesa ese
+        mismo hilo, así que esperarlo ahí se autobloquea hasta el `timeout` (5 s) y
+        el mensaje no sale hasta entonces.
+
+        Por eso `publicar` detecta si lo llaman desde el hilo de red de paho (el
+        que se guarda en `_hilo_red`): en ese caso no espera nunca, aunque se pida
+        `esperar=True`. Así ningún camino que publique desde un callback —el eco de
+        la voz, y cualquier tópico que se añada mañana— puede autobloquearse por
+        olvidar pasar `esperar=False`. El camino de la voz lo pasa además de forma
+        explícita, para que la intención se lea en el sitio de la llamada.
 
         Nota importante sobre la ACL: el usuario `orquestador` puede escribir en
         `luz/set`, `satelite/decir`, `nodo/config` y `alerta/ayuda`, pero **no** en
@@ -175,8 +198,14 @@ class ClienteMQTT:
         resultado = self.cliente.publish(
             topico, cuerpo, qos=qos, retain=retain
         )
-        resultado.wait_for_publish(timeout=5)
-        registro.info("publicado en %s: %s", topico, cuerpo)
+        en_callback = threading.current_thread() is self._hilo_red
+        if esperar and not en_callback:
+            resultado.wait_for_publish(timeout=5)
+            registro.info("publicado en %s: %s", topico, cuerpo)
+        else:
+            motivo = ("encolado desde el hilo de red de paho"
+                      if en_callback else "encolado sin esperar el PUBACK")
+            registro.info("%s en %s: %s", motivo, topico, cuerpo)
 
     def publicar_luz(self, estado: str, origen: str = "panel") -> None:
         import time

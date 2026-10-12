@@ -201,8 +201,17 @@ def main() -> int:
     # sea el de voz sigue el camino de siempre, que es `alertas.procesar`. Un
     # `TOPICO_VOZ_TEXTO` mal escrito no enruta a otro sitio: cae en alertas y sale
     # por el log como topico no atendido.
+    # El eco de la voz se publica desde dentro de `on_message`, o sea en el hilo
+    # de red de paho. `publicar` espera el PUBACK con `wait_for_publish`, y ese
+    # PUBACK lo procesa el propio hilo de red: esperarlo ahi se autobloquea los 5 s
+    # del timeout y el eco sale tarde. Por eso este camino publica con
+    # `esperar=False`; el mensaje se encola y sale en cuanto el callback termina.
+    # Las demas publicaciones (bot, registro) van desde otros hilos y si esperan.
+    def publicar_eco(topico, carga, qos=1, retain=False):
+        cliente.publicar(topico, carga, qos=qos, retain=retain, esperar=False)
+
     cliente = mqtt_cliente.ClienteMQTT(
-        lambda topico, cuerpo: enrutar(topico, cuerpo, base, cliente.publicar)
+        lambda topico, cuerpo: enrutar(topico, cuerpo, base, publicar_eco)
     )
 
     trabajador = cola.TrabajadorTelegram(base, remitente)

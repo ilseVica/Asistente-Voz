@@ -32,6 +32,7 @@ import mqtt_cliente
 import registro
 import sanear as sanear_modulo
 import telegram_cliente
+import voz
 
 registro_log = logging.getLogger("orquestador")
 
@@ -85,6 +86,8 @@ def log_resumen() -> None:
     registro_log.info("  telegram: %s, bot de comandos %s",
                       resumen["telegram"], resumen["bot"])
     registro_log.info("  panel: %s", resumen["panel"])
+    registro_log.info("  eco de voz: %s",
+                      "activo" if config.ECO_VOZ else "inactivo")
     registro_log.info("  base de datos: %s", resumen["db"])
 
 
@@ -106,6 +109,23 @@ def tarea_purga(base) -> None:
             # es solo un poco más de disco.
             registro_log.error("fallo en la purga: %s", error)
         time.sleep(config.SEGUNDOS_PURGA)
+
+
+def enrutar(topico, cuerpo, base, publicar) -> None:
+    """Reparte un mensaje de MQTT a quien lo procesa.
+
+    Es una funcion y no un `if` suelto para que se pueda probar sola, y para que el
+    punto donde se decide «que topico va con que procesador» sea uno solo y este a
+    la vista. Hoy hay dos caminos: el texto de voz y todo lo demas (las alertas).
+
+    El texto de voz NO pasa por `alertas.procesar`: si pasara, y como esa funcion
+    decide el tipo por el topico, un `casa/sala/voz/texto` caeria en su rama de
+    «topico no atendido» y no se haria nada con el.
+    """
+    if topico == config.TOPICO_VOZ_TEXTO:
+        voz.procesar(cuerpo, publicar)
+    else:
+        alertas.procesar(topico, cuerpo, base)
 
 
 def main() -> int:
@@ -175,8 +195,14 @@ def main() -> int:
     # intermedia que cierre la base, en vez de cambiar la firma de una de las dos:
     # el cliente no tiene por que saber de bases de datos, y el procesador no
     # tiene por que saber de MQTT.
+    #
+    # El reparto por topico va aqui y NO dentro del cliente MQTT a proposito: asi
+    # el transporte sigue sin saber que existe la voz, y cualquier topico que no
+    # sea el de voz sigue el camino de siempre, que es `alertas.procesar`. Un
+    # `TOPICO_VOZ_TEXTO` mal escrito no enruta a otro sitio: cae en alertas y sale
+    # por el log como topico no atendido.
     cliente = mqtt_cliente.ClienteMQTT(
-        lambda topico, cuerpo: alertas.procesar(topico, cuerpo, base)
+        lambda topico, cuerpo: enrutar(topico, cuerpo, base, cliente.publicar)
     )
 
     trabajador = cola.TrabajadorTelegram(base, remitente)

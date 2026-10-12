@@ -44,7 +44,7 @@ Estos datos se definen en el Paso 0 y se agregan a este documento:
 
 ## Estado de la implementación
 
-Corte al 6 de octubre de 2026. El desarrollo empezó con el arranque anticipado, antes de comprar el resto del hardware.
+Corte al 11 de octubre de 2026; ese día se actualizó la etapa A del servidor de voz (Paso 2). El desarrollo empezó con el arranque anticipado, antes de comprar el resto del hardware.
 
 | Componente | Estado | Evidencia |
 | --- | --- | --- |
@@ -55,6 +55,7 @@ Corte al 6 de octubre de 2026. El desarrollo empezó con el arranque anticipado,
 | ESP32 conectado a la VM por USB | Pendiente | Falta agregar el dispositivo a la VM en Proxmox. |
 | Puente de la laptop, satélite de voz, orquestador, panel y alertas | Implementado y probado | Reporte «2026-10-06 - Implementacion - Etapa 1: panel web de la familia». Sin commit. |
 | Panel: P33 (casa sin salida a Internet) | Pendiente | No ejecutable hoy: exige apagar el WAN del router. Escucha LAN ya configurada y probada. |
+| Servidor de voz, etapa A del Paso 2 (11-10-2026) | Implementado y probado en vivo | Reporte «2026-10-11 - Implementacion - Etapa A Vosk y WebSocket». Servicios `voz` y orquestador corriendo; arnés con MQTT: 13/18 aciertos, latencia fin→publicado ≤ 15 ms, ~136 MiB de RAM. |
 
 ### Broker del servidor
 
@@ -70,6 +71,14 @@ Corte al 6 de octubre de 2026. El desarrollo empezó con el arranque anticipado,
 - **Pines:** LED integrado en GPIO 2 (hace de luz), BOOT en GPIO 0 (pulsación corta alterna la luz; pulsación larga de 4 s reinicia el ESP32), relé en GPIO 26, buzzer en GPIO 27, botón externo en GPIO 33, MQ-2 en GPIO 34, DHT22 en GPIO 4 y PIR en GPIO 35.
 - **Secretos:** las credenciales de Wi-Fi y MQTT y la dirección del broker van en `firmware/include/secrets.h`, ignorado por git; el resto de la configuración va en `config.h`.
 - **Errores corregidos al revisar el código contra el plan:** las órdenes de luz por MQTT no se aplicaban, las de Alexa se descartaban por no traer `ts`, con la red caída no funcionaba nada local, el botón BOOT no alternaba la luz, los sensores nunca se publicaban, el gas se muestreaba demasiado rápido, cada mensaje se procesaba dos veces y el ESP32 no reintentaba la conexión si el broker no respondía al arrancar.
+
+### Servidor de voz (Paso 2, etapa A)
+
+- **Servicio:** `servidor/voz/` con Vosk en Docker (imagen `asistente-voz:1.0`), WebSocket en los tres listeners de la VM (loopback, red de la casa y Tailscale, nunca `0.0.0.0`) en el puerto 2700, y usuario MQTT `voz` con permiso de escribir solo en `casa/sala/voz/texto`.
+- **Modelo:** `vosk-model-small-es-0.42` (descargado con sha256 verificado, ~58 MB) y gramática cerrada de 18 frases + `[unk]` en formas sin tilde («ayudame», «olvidalo»). Al arrancar se vigila el vocabulario: si el modelo no conoce una palabra de la gramática, se avisa en el log («no se cambia sola»).
+- **Protocolo de audio:** tramas PCM 16 kHz mono 16-bit LE de 3200 B (100 ms); `{"tipo":"inicio","token":...}` y `{"tipo":"fin"}`; respuestas `{"tipo":"frase"}` y `{"tipo":"final"}` con `frase_id`, y publicación MQTT con `modo`, `ts` y `marcas` de cada etapa. Límites probados con el arnés: trama máxima 3200 B, frase de 10 s e inactividad de 3 s.
+- **Orquestador:** se suscribe a `casa/sala/voz/texto`, responde el eco controlado por `ECO_VOZ`, y despacha los tópicos en `orquestador.enrutar`. Pruebas nuevas de regresión: 283, sin fallos (antes 252).
+- **Mediciones de la etapa A** (arnés `herramientas/arnes_wav.py`, voz sintética de Piper): 11–15 de 18 frases exactas según la corrida; las confusiones son entre variantes cercanas («prende/enciende», verbo inicial perdido); 1–3 de 8 frases fuera de la gramática se reconocen como otra frase; latencia del VAD fin → `final` de Vosk 6–14 ms y → publicado en MQTT 6–15 ms; RAM del contenedor ~136 MiB (límite 512 MiB) y CPU 3–4 % solo mientras se reconoce.
 
 ### Pendientes antes de las pruebas en hardware
 
@@ -188,6 +197,7 @@ Esta sección es un **borrador**: se revisa y se congela al final del Paso 0, y 
 | `casa/sala/nodo/estado` | ESP32 (al conectar y como *Last Will*, con *retain*) | Servidor | `{"conectado":true,"ts":"2026-10-03T18:46:07Z","ip":"192.168.1.123","fw":"1.0.0","gas_adc":312,"alertas_pendientes":0,"gas_episodio":false,"alexa":true}` |
 | `casa/sala/nodo/config` | Servidor (con *retain*) | ESP32 | `{"gas_on_adc":1800,"gas_off_adc":1550}` |
 | `casa/sala/nodo/prueba_gas` | Laptop (`mosquitto_pub`) | ESP32 compilado con `PRUEBAS=1` | `{"gas_adc":3000}` |
+| `casa/sala/voz/texto` | Servidor (servicio de voz, Vosk) | Servidor (orquestador) | `{"frase_id":"arnes-001","texto":"enciende la luz","modo":"comandos","ts":1759501234,"marcas":{"primera_trama_ms":1759501234000,"ultima_trama_ms":1759501234100,"fin_ms":1759501234150,"final_ms":1759501234160,"publicado_ms":1759501234160}}` |
 | `$SYS/broker/connection/puente-sitio/state` | Puente de la laptop (automático) | Servidor | `1` o `0` |
 
 Reglas del contrato:
@@ -209,6 +219,7 @@ Reglas del contrato:
 - **Estado del enlace con el sitio:** con `notifications true`, el puente de la laptop publica `1` en `$SYS/broker/connection/puente-sitio/state` del servidor al conectarse, y deja ahí un *Last Will* que publica `0` si se cae Tailscale. El nombre del tópico sale del `remote_clientid` del puente. Si el servidor ve `0`, el panel muestra «sitio sin conexión» en menos de 90 segundos, aunque el ESP32 siga encendido.
 - **Reconexión:** al reconectarse, el ESP32 publica `nodo/estado` con `conectado: true`, el estado de la luz y los sensores.
 - **Comando de prueba:** `casa/sala/nodo/prueba_gas` simula una lectura de gas y solo existe en el firmware compilado con `PRUEBAS=1`. La demostración usa ese firmware, porque la variante mínima del guion lo necesita; se publica desde la laptop con `mosquitto_pub` al broker local.
+- **Órdenes por voz:** el servicio de voz publica el texto reconocido en `casa/sala/voz/texto` con `modo` (`comandos` o `chat`, para separar lo que se traduce a intenciones de lo que responde el chat), `ts` y unas `marcas` con la hora de cada etapa (primera trama, última trama, fin recibido por el servidor, `final` de Vosk y publicación en MQTT). Todas las marcas son epoch en milisegundos con el reloj del servidor. El orquestador lo escucha, descarta mensajes de `voz/texto` con `ts` de más de 10 s o sin `ts`, y con `ECO_VOZ=1` responde de inmediato un eco por `casa/sala/satelite/decir` («Escuché: …», o «No entendí, ¿puedes repetir?» si el texto está vacío o es `[unk]`). La traducción a intenciones llega en el Paso 3.
 
 ### QoS, retención y antigüedad
 
@@ -221,6 +232,7 @@ Reglas del contrato:
 | `casa/sala/satelite/decir` | 1 | No | Sí |
 | `casa/sala/nodo/config` | 1 | Sí | No |
 | `casa/sala/nodo/prueba_gas` | 1 | No | No |
+| `casa/sala/voz/texto` | 1 | No | Sí |
 | `casa/sala/sensores` | 0 | No | No |
 | `casa/sala/luz/estado` | 0 | Sí | No |
 | `casa/sala/nodo/estado` | 0 | Sí | No |
@@ -240,6 +252,12 @@ Reglas del contrato:
 - **Respuesta:** llega por `casa/sala/satelite/decir`, igual que los avisos, recordatorios y mensajes del chat.
 - **Fallas:** si la conexión se cae a mitad de frase, la frase se descarta y el asistente pide repetirla.
 - **Privacidad:** el audio no se guarda en disco en ninguna parte del sistema.
+
+### Registro de cambios al contrato
+
+| Fecha | Cambio | Motivo |
+| --- | --- | --- |
+| 2026-10-11 | Alta de `casa/sala/voz/texto` (etapa A del Paso 2), eco del orquestador por `satelite/decir`, gramática Vosk de 18 frases + `[unk]` y descarte de mensajes de voz/texto con `ts` > 10 s o sin `ts`. | El servicio de voz del servidor publica el reconocimiento en texto para que el orquestador decida la intención en el Paso 3; el eco confirma al satélite que el audio se entendió, y se aplica la misma regla de antigüedad que `luz/set`. |
 
 ### Configuración del puente
 
@@ -326,6 +344,8 @@ La meta se reparte por etapas, sin contar la palabra de activación. Como el aud
 | **Total** | **≤ 1.5 s** | **≤ 1.8 s** |
 | En paralelo: orden MQTT hasta el ESP32 y relé | ≤ 0.2 s | ≤ 0.4 s |
 
+Las mediciones de la etapa A (11-10-2026, con el arnés y audio sintético): del fin del VAD al texto `final` de Vosk, 6–14 ms; del fin a la publicación en `casa/sala/voz/texto`, 6–15 ms. Ambos quedan muy por debajo del «Texto final de Vosk» y se midieron con texto ya en el servidor; falta por medir en la etapa B la subida de la última trama y el arranque de Piper.
+
 Si la velocidad de subida medida en el lugar es menor a 1 Mbit/s, la demostración usa la variante mínima y el video.
 
 ### Casos de prueba
@@ -396,7 +416,7 @@ Los mayores riesgos están en la red de la demostración, la palabra de activaci
 | El modelo de palabra de activación tarda en entrenarse o falla | El asistente no se activa por voz | Entrenar desde la semana 2 con miles de ejemplos sintéticos y horas de audio negativo; tecla para hablar mientras tanto. Go/no-go al cierre de la semana 5. |
 | La palabra de activación se confunde con «Alexa» | Los dos asistentes responden a la vez | Palabra claramente distinta, «Alexa» en los ejemplos negativos y verificación con P07. |
 | Eco de la bocina en el micrófono | El asistente se responde a sí mismo | Cancelación de eco por software con PipeWire, más la pausa del micrófono mientras habla Piper (P14 y P15). |
-| Vosk reconoce mal en ambientes ruidosos | Comandos fallidos durante la demo | Gramática cerrada, frases cortas y ensayo en el lugar. |
+| Vosk reconoce mal en ambientes ruidosos | Comandos fallidos durante la demo | Gramática cerrada, frases cortas y ensayo en el lugar. Con voz sintética, la etapa A midió confusiones entre variantes cercanas («prende/enciende») y 1–3 de 8 frases fuera de gramática que se reconocen como otra frase; la etapa B exigirá coincidencia exacta o pedirá confirmación antes de ejecutar. |
 | El panel web depende de un CDN externo | No carga sin Internet | Compilar con `--no-web-resources-cdn` y probarlo con P33. |
 | Falsas alarmas del MQ-2 | Alertas repetidas o sin motivo | Calentamiento de 3 minutos, histéresis y una alerta por episodio (P09 y P10). |
 | Módulo de relés activo en LOW con lógica de 5 V | El relé no se apaga con los 3.3 V del ESP32 o funciona invertido | Comprar un módulo compatible con 3.3 V, o usar un transistor. |

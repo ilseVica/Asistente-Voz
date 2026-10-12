@@ -1,8 +1,10 @@
 """El cliente MQTT del orquestador.
 
-Solo dos cosas: conectarse, y entregar cada mensaje a `alertas.procesar`. Toda la
+Solo dos cosas: conectarse, y entregar cada mensaje a quien lo tenga que procesar
+(`alertas.procesar` para las alertas, `voz.procesar` para el texto reconocido). La
 decisión sobre qué hacer con el mensaje está en otro archivo, para que el
-transporte no mezcle con la lógica.
+transporte no se mezcle con la lógica. El reparto por tópico lo hace
+`orquestador.py` al construir el cliente.
 
 Lo importante de este archivo es `clean_session=False`.
 
@@ -90,10 +92,12 @@ class ClienteMQTT:
         paho lo ignora en silencio: es el mismo problema un nivel más arriba, y
         también se ve al log.
         """
-        # Solo los dos topicos de alerta, y solo de lectura: este servicio
-        # escucha gas y ayuda, y nada mas. No se suscribe a `alerta/#` a
-        # proposito, para que un topico nuevo no empiece a llegar sin revisarlo.
-        for topico in (config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA):
+        # Solo los dos topicos de alerta y el texto de voz, y solo de lectura: este
+        # servicio escucha gas, ayuda y lo que reconocio el servicio de voz, y nada
+        # mas. No se suscribe a `alerta/#` ni a `casa/#` a proposito, para que un
+        # topico nuevo no empiece a llegar sin revisarlo.
+        for topico in (config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA,
+                       config.TOPICO_VOZ_TEXTO):
             resultado, _ = self.cliente.subscribe(topico, qos=config.QOS_ALERTAS)
             if resultado != mqtt.MQTT_ERR_SUCCESS:
                 registro.error("NO se pudo suscribir a %s (error %d). La ACL de "

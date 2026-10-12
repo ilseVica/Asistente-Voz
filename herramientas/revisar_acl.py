@@ -26,6 +26,7 @@ ACL = os.path.join(RAIZ, "servidor", "mosquitto", "config", "acl.conf")
 READMES = [
     os.path.join(RAIZ, "firmware", "README.md"),
     os.path.join(RAIZ, "nodo_simulado", "README.md"),
+    os.path.join(RAIZ, "servidor", "voz", "README.md"),
 ]
 
 # Una publicación: el usuario (-u) y el tópico (-t) tienen que estar en la misma

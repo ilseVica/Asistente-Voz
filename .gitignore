@@ -53,3 +53,15 @@ servidor/panel/web/.dart_tool/
 servidor/panel/web/.flutter-plugins
 servidor/panel/web/.flutter-plugins-dependencies
 servidor/panel/web/build/
+
+# El modelo de Vosk del servicio de voz (etapa A del Paso 2). Son unos 40 MB que se
+# descargan con `servidor/voz/descargar-modelo.sh`, que ademas comprueba su SHA-256.
+# No se versiona: es un dato, no codigo, y no cambia de una instalacion a otra.
+servidor/voz/modelos/
+
+# Material de trabajo del arnes de pruebas de voz: el binario de Piper (sintesis de
+# las frases), su modelo de voz y los WAV que genera. Nada de esto es codigo del
+# proyecto, y los WAV son audio de prueba que se regenera en cada corrida.
+herramientas/piper/
+herramientas/voces/
+herramientas/wav_pruebas/

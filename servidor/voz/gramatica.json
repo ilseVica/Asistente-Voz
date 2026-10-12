@@ -1,0 +1,48 @@
+{
+  "_comentario": [
+    "Gramatica del modo «comandos» del servicio de voz (etapa A del Paso 2).",
+    "Vive en un archivo de configuracion y NO en el codigo, porque es material que",
+    "se congela con el contrato y se revisa con el equipo: cambiarla es editar este",
+    "JSON y reiniciar el servicio, sin tocar Python ni reconstruir nada mas.",
+    "",
+    "En modo gramatica Vosk tiende a convertir cualquier sonido en la frase mas",
+    "parecida de esta lista, asi que la lista es CERRADA a proposito. Por eso no",
+    "existe «no» ni «ayuda» a secas: una frase corta como «no» se activaria con",
+    "cualquier ruido. El token [unk] se anade siempre, para que el modelo tenga una",
+    "salida para lo que no reconoce; el orquestador decide que hacer con el.",
+    "",
+    "El servicio anade [unk] por su cuenta a partir del campo «unk» de aqui abajo y",
+    "avisa si alguna palabra de la gramatica no esta en el vocabulario del modelo",
+    "(Vosk imprime «Ignoring word missing in vocabulary»). Esas palabras se reportan",
+    "y se proponen sustitutos; no se cambian solas."
+  ],
+  "unk": "[unk]",
+  "intenciones": {
+    "encender": [
+      "prende la luz",
+      "enciende la luz",
+      "prende el foco",
+      "enciende el foco",
+      "prende la luz de la sala",
+      "enciende la luz de la sala",
+      "prende la luz por favor",
+      "enciende la luz por favor"
+    ],
+    "apagar": [
+      "apaga la luz",
+      "apaga el foco",
+      "apaga la luz de la sala",
+      "apaga la luz por favor"
+    ],
+    "ayuda": [
+      "necesito ayuda",
+      "necesito ayuda por favor",
+      "ayudame por favor"
+    ],
+    "cancelar": [
+      "cancela",
+      "cancelar",
+      "olvidalo"
+    ]
+  }
+}

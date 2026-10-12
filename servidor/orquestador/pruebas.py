@@ -60,6 +60,8 @@ import config  # noqa: E402
 import db as db_modulo  # noqa: E402
 import panel_acceso as panel_acceso_modulo  # noqa: E402
 import registro as registro_modulo  # noqa: E402
+import voz  # noqa: E402
+import orquestador as orquestador_modulo  # noqa: E402
 
 FALLOS = []
 COMPROBACIONES = [0]
@@ -1921,7 +1923,156 @@ base.cerrar()
 
 
 # =============================================================================
-# 20. Los client ids MQTT de cada servicio no se montan
+# 20. Voz (etapa A): el texto reconocido, su eco y su reparto
+# =============================================================================
+#
+# La etapa A anade un topico nuevo (`casa/sala/voz/texto`) y un camino nuevo en el
+# orquestador: el texto reconocido no es una alerta y no puede pasar por
+# `alertas.procesar`, que decide el tipo por el topico y lo rechazaria. Estas
+# pruebas fijan las tres cosas que pueden romperse sin que se note: que el topico
+# sea el del contrato, que el eco diga lo que tiene que decir (y nada cuando el eco
+# esta apagado), y que `enrutar` mande cada topico a su procesador de verdad.
+
+print("\n20. Voz (etapa A)")
+print("------------------")
+
+prueba("el topico del texto de voz es el del contrato",
+       config.TOPICO_VOZ_TEXTO == "casa/sala/voz/texto", config.TOPICO_VOZ_TEXTO)
+
+
+def publicar_que_recoge():
+    """Un `publicar` falso que apunta lo que se publica, para las pruebas de voz."""
+    apuntes = []
+
+    def publicar(topico, carga, qos=1, retain=False):
+        apuntes.append((topico, carga, qos, retain))
+
+    return apuntes, publicar
+
+
+# --- El eco de una frase reconocida ---
+apuntes, publicar = publicar_que_recoge()
+publicado = voz.procesar('{"frase_id":"f1","texto":"prende la luz","modo":"comandos","ts":1791768964}', publicar)
+prueba("una frase reconocida hace eco", publicado is True and len(apuntes) == 1,
+       apuntes)
+if apuntes:
+    topico, carga, qos, retain = apuntes[0]
+    prueba("el eco va al topico satelite/decir",
+           topico == config.TOPICO_SATELITE_DECIR, topico)
+    prueba("el eco dice 'Escuche: ' + lo reconocido",
+           carga.get("texto") == "Escuché: prende la luz", carga)
+    prueba("el eco lleva tipo respuesta", carga.get("tipo") == "respuesta", carga)
+    prueba("el eco lleva ts entero", isinstance(carga.get("ts"), int), carga)
+    prueba("el eco va con QoS 1", qos == 1, qos)
+    prueba("el eco NO se retiene", retain is False, retain)
+
+# --- `[unk]` y vacio: no se entendio ---
+for texto_raro in ("[unk]", "", "   "):
+    apuntes, publicar = publicar_que_recoge()
+    voz.procesar('{"frase_id":"f","texto":"%s","modo":"comandos","ts":1791768964}' % texto_raro, publicar)
+    prueba("texto %r contesta 'No entendi'" % texto_raro,
+           len(apuntes) == 1
+           and apuntes[0][1].get("texto") == voz.SIN_ENTENDER, apuntes)
+
+# --- Cuerpos que no son una frase ---
+apuntes, publicar = publicar_que_recoge()
+prueba("un cuerpo que no es JSON no publica nada",
+       voz.procesar("esto no es json", publicar) is False and apuntes == [], apuntes)
+apuntes, publicar = publicar_que_recoge()
+prueba("un cuerpo que no es objeto no publica nada",
+       voz.procesar('["una","lista"]', publicar) is False and apuntes == [], apuntes)
+
+# --- Con el eco apagado, el texto solo va al log ---
+eco_original = config.ECO_VOZ
+config.ECO_VOZ = False
+apuntes, publicar = publicar_que_recoge()
+publicado = voz.procesar('{"frase_id":"f","texto":"apaga la luz","ts":1791768964}', publicar)
+config.ECO_VOZ = eco_original
+prueba("con ECO_VOZ=0 no se publica el eco", publicado is False and apuntes == [],
+       apuntes)
+
+
+# --- Antigüedad de voz/texto (regla > 10 s o sin ts) ---
+apuntes, publicar = publicar_que_recoge()
+prueba("voz sin ts no publica eco",
+       voz.procesar('{"frase_id": "f", "texto": "prende la luz"}', publicar) is False and apuntes == [],
+       apuntes)
+apuntes, publicar = publicar_que_recoge()
+prueba("voz con ts > 10 s se descarta",
+       voz.procesar('{"frase_id": "f", "texto": "prende la luz", "ts": 1791769727}', publicar) is False and apuntes == [],
+       apuntes)
+apuntes, publicar = publicar_que_recoge()
+publicado = voz.procesar('{"frase_id": "f", "texto": "prende la luz", "ts": 1791769745}', publicar)
+prueba("voz con ts reciente publica eco", publicado is True and len(apuntes) == 1, apuntes)
+
+apuntes, publicar = publicar_que_recoge()
+prueba("voz con ts en milisegundos se descarta (unidades incorrectas)",
+       voz.procesar('{"frase_id": "f", "texto": "prende", "ts": 1791769747000}', publicar) is False and apuntes == [],
+       apuntes)
+# --- El reparto por topico ---
+# `enrutar` tiene que mandar el texto de voz a `voz.procesar` y todo lo demas a
+# `alertas.procesar`. Es lo unico que impide que el topico nuevo caiga en la rama
+# de "topico no atendido" de alertas y se pierda sin ruido.
+base, _ruta = base_nueva("voz-despacho-")
+apuntes, publicar = publicar_que_recoge()
+orquestador_modulo.enrutar(config.TOPICO_VOZ_TEXTO,
+                           '{"frase_id":"f","texto":"hola","modo":"comandos","ts":1791768964}',
+                           base, publicar)
+prueba("enrutar manda el texto de voz al eco", len(apuntes) == 1, apuntes)
+prueba("y NO lo mete en la base como si fuera una alerta",
+       base.obtener_alerta("f") is None, base.obtener_alerta("f"))
+
+apuntes, publicar = publicar_que_recoge()
+orquestador_modulo.enrutar(
+    config.TOPICO_ALERTA_GAS, '{"id":"000000-b0030-0001","gas_adc":2100}',
+    base, publicar)
+prueba("enrutar manda la alerta de gas a alertas.procesar",
+       base.obtener_alerta("000000-b0030-0001") is not None, None)
+prueba("y una alerta NO dispara el eco", apuntes == [], apuntes)
+base.cerrar()
+
+# --- El ACL: el usuario voz solo escribe su topico; el orquestador lo lee ---
+ruta_acl = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "mosquitto", "config", "acl.conf")
+
+
+def bloques_de_usuario(texto):
+    """Devuelve `{usuario: [lineas topic ...]}` del acl.conf."""
+    bloques = {}
+    usuario = None
+    for linea in texto.splitlines():
+        limpia = linea.strip()
+        if not limpia or limpia.startswith("#"):
+            continue
+        if limpia.startswith("user "):
+            usuario = limpia.split()[1]
+            bloques[usuario] = []
+        elif usuario is not None and limpia.startswith("topic "):
+            bloques[usuario].append(limpia)
+    return bloques
+
+
+if os.path.exists(ruta_acl):
+    with open(ruta_acl, encoding="utf-8") as f:
+        acl_texto = f.read()
+    bloques = bloques_de_usuario(acl_texto)
+    prueba("el ACL tiene un usuario voz", "voz" in bloques, sorted(bloques))
+    prueba("voz puede escribir casa/sala/voz/texto",
+           "topic write casa/sala/voz/texto" in bloques.get("voz", []),
+           bloques.get("voz"))
+    prueba("voz NO puede escribir nada mas",
+           bloques.get("voz") == ["topic write casa/sala/voz/texto"],
+           bloques.get("voz"))
+    prueba("el orquestador puede leer casa/sala/voz/texto",
+           "topic read casa/sala/voz/texto" in bloques.get("orquestador", []),
+           bloques.get("orquestador"))
+else:
+    prueba("existe el acl.conf para revisar el usuario voz", False, ruta_acl)
+
+
+# =============================================================================
+# 21. Los client ids MQTT de cada servicio no se montan
 # =============================================================================
 #
 # El 2026-10-07 los dos procesos usaban el mismo `MQTT_CLIENT_ID` (el del
@@ -1930,7 +2081,7 @@ base.cerrar()
 # orquestador. La corrección separó los client ids en el `docker-compose.yml` y
 # la sesión en `config.py`. Esta prueba falla si vuelven a coincidir o si el
 # compose no los define de forma explícita (sin depender del valor por defecto).
-print("\n20. Los client ids MQTT de cada servicio")
+print("\n21. Los client ids MQTT de cada servicio")
 print("------------------------------------------")
 
 ruta_compose = None
@@ -1987,6 +2138,34 @@ if os.path.exists(ruta_compose):
     prueba("ningun servicio comparte client id con otro",
            len({v.get("id") for v in (orquestador, panel) if v.get("id")}) == 2,
            (orquestador.get("id"), panel.get("id")))
+
+    # El servicio de voz (etapa A) tambien tiene client id propio y explicito, y es
+    # el unico con limites de CPU y RAM altos, porque es el unico que carga un
+    # modelo. Los demas se quedan en 256m y 0.50.
+    voz_compose = client_id_y_sesion_de("voz", compose)
+    prueba("el compose define el client id EXPLICITO del servicio de voz",
+           voz_compose.get("id") == "voz", voz_compose)
+    prueba("el servicio de voz no usa sesion persistente",
+           voz_compose.get("sesion") in (None, "true"), voz_compose)
+    prueba("ningun servicio comparte client id con el de voz",
+           len({orquestador.get("id"), panel.get("id"), voz_compose.get("id")}
+               - {None}) == 3,
+           (orquestador.get("id"), panel.get("id"), voz_compose.get("id")))
+
+    indice_voz = compose.index("  voz:")
+    bloque_voz = compose[indice_voz:limite_servicio(compose, indice_voz + 6)]
+    prueba("el servicio de voz limita la RAM a 512m",
+           "mem_limit: 512m" in bloque_voz, bloque_voz[:200])
+    prueba("el servicio de voz limita la CPU a 1.0",
+           "cpus: 1.0" in bloque_voz, None)
+    prueba("el servicio de voz corre con el sistema de archivos en solo lectura",
+           "read_only: true" in bloque_voz, None)
+    prueba("el modelo de voz se monta en solo lectura",
+           "./voz/modelos:/modelo:ro" in bloque_voz, None)
+    prueba("el token del satelite es obligatorio en el compose",
+           "VOZ_TOKEN_SHA256: ${VOZ_TOKEN_SHA256:?" in bloque_voz, None)
+    prueba("la contrasena del usuario voz es obligatoria en el compose",
+           "MQTT_VOZ_PASSWORD: ${MQTT_VOZ_PASSWORD:?" in bloque_voz, None)
 else:
     prueba("existe el docker-compose.yml con los client ids", False, ruta_compose)
 

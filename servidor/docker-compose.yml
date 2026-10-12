@@ -172,6 +172,94 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Servicio de voz. Escucha por WebSocket, reconoce con Vosk y publica el texto en
+  # `casa/sala/voz/texto`. No decide nada: las intenciones son del orquestador.
+  #
+  # Decisiones ya aplicadas:
+  #   - network_mode: host, como los demas: el broker esta en 127.0.0.1 y el
+  #     satelite se conecta por Tailscale. Un WebSocket de la libreria escucha en
+  #     UNA direccion, asi que `servidor_voz.py` abre un socket por cada una de
+  #     VOZ_DIRECCIONES. Por eso nunca se pone 0.0.0.0: con el, cualquier interfaz
+  #     nueva de la VM quedaria escuchando sin que nadie lo decidiera.
+  #   - El modelo va montado en solo lectura en /modelo, y NO dentro de la imagen:
+  #     son decenas de MB que cambian de version de vez en cuando, y meterlos en una
+  #     capa de Docker haria que cada actualizacion del modelo reconstruyera la
+  #     imagen. `servidor/voz/modelos/` esta en .gitignore.
+  #   - mem_limit 512m y cpus 1.0: es el servicio que mas RAM usa (el modelo small
+  #     ocupa unos 300 MB), medido en la VM. El orquestador y el broker se quedan en
+  #     256m porque no cargan ningun modelo.
+  #   - `read_only: true` con tmpfs en /tmp: no escribe nada en su sistema de
+  #     archivos. El audio no toca disco en ningun momento.
+  #   - Sin depends_on con condition: service_healthy. Igual que los demas: paho
+  #     reconecta solo. Como el orquestador, el servicio arranca aunque el broker
+  #     este levantandose.
+  #
+  # OJO: `VOZ_TOKEN_SHA256` y `MQTT_VOZ_PASSWORD` son OBLIGATORIAS y sin valor por
+  # defecto. Sin la primera el servicio no puede autenticar al satelite; sin la
+  # segunda no puede publicar. En los dos casos muere al arrancar, que es lo que se
+  # quiere: un servicio de voz que arranca y no reconoce nada parece sano.
+
+  voz:
+    build:
+      context: ./voz
+      dockerfile: Dockerfile
+    image: asistente-voz:1.0
+
+    container_name: asistente-voz
+
+    restart: unless-stopped
+    network_mode: host
+    stop_grace_period: 20s
+
+    environment:
+      VOZ_PUERTO: "2700"
+      # Las tres direcciones del sistema por defecto. Ver la nota de arriba.
+      VOZ_DIRECCIONES: ${VOZ_DIRECCIONES:-127.0.0.1 192.168.1.169 100.116.194.116}
+      VOZ_MODELO: /modelo/vosk-model-small-es-0.42
+      VOZ_GRAMATICA: /app/gramatica.json
+      VOZ_TOKEN_SHA256: ${VOZ_TOKEN_SHA256:?falta VOZ_TOKEN_SHA256 en servidor/.env}
+      MQTT_HOST: 127.0.0.1
+      MQTT_PUERTO: "1883"
+      MQTT_USUARIO: voz
+      MQTT_VOZ_PASSWORD: ${MQTT_VOZ_PASSWORD:?falta MQTT_VOZ_PASSWORD en servidor/.env}
+      MQTT_CLIENT_ID: voz
+      NIVEL_LOG: ${NIVEL_LOG:-INFO}
+
+    volumes:
+      # El modelo, en solo lectura. Ver descargar-modelo.sh.
+      - ./voz/modelos:/modelo:ro
+
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 100
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      # Un connect a 127.0.0.1. `servidor_voz.py` abre SIEMPRE el socket de
+      # loopback ademas de los de VOZ_DIRECCIONES, asi que este healthcheck no
+      # depende de que Tailscale o la LAN esten levantados. Si un socket de red
+      # falla, el servicio avisa por el log y sigue con el que si pudo abrir.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; s=socket.create_connection(('127.0.0.1',2700),3); s.close()"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   # Panel web de los familiares. Es la cuarta pieza del sistema: el mismo estado que
   # el bot cuenta por Telegram, pero en una pagina web que se abre desde un movil y no
   # necesita instalar nada.

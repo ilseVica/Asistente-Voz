@@ -83,7 +83,23 @@ TOPICO_ALERTA_AYUDA = "casa/sala/alerta/ayuda"
 # el broker con el usuario `satelite`.
 TOPICO_SATELITE_DECIR = "casa/sala/satelite/decir"
 
+# El texto que reconoce el servicio de voz (etapa A del Paso 2). El orquestador lo
+# lee para decidir la intencion (Paso 3); por ahora, en esta etapa, solo hace el
+# eco de prueba de mas abajo. Lo publica el usuario `voz`, y es el unico topico
+# que ese usuario puede escribir.
+TOPICO_VOZ_TEXTO = "casa/sala/voz/texto"
+
 QOS_ALERTAS = 1
+
+# El eco de voz. Con 1, el orquestador publica en `satelite/decir` lo que
+# entendio ("Escuche: ..."), para poder demostrar el camino completo (audio ->
+# texto -> respuesta) sin el satelite, que todavia no existe. Con 0, solo lo
+# registra en el log.
+#
+# Por defecto 1 para que la etapa A sea visible tal cual, y para que la prueba de
+# punta a punta del arnes pueda mirar el eco. Es una ayuda de la etapa A, no una
+# funcion del producto: cuando exista el satelite (etapa B), el `.env` lo pone a 0.
+ECO_VOZ = os.environ.get("ECO_VOZ", "1").strip() not in ("0", "false", "no", "")
 
 # Ventana del antirrebote de ayuda, en segundos (P05). El ESP32 ya ignora nuevas
 # peticiones durante 60 s; este es el segundo filtro, para el caso de que la alerta

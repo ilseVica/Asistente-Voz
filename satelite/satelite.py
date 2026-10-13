@@ -380,6 +380,12 @@ class Reproductor:
             self.entorno.get("LD_LIBRARY_PATH", "")
         self.espeak = os.path.join(carpeta, "espeak-ng-data")
         self._proceso = None
+        # Hook opcional: se llama con la marca del arranque del sonido (fin de la
+        # sintesis), ANTES de la reproduccion. El nucleo lo usa para escribir el
+        # registro en ese momento: la metrica fin->sonido es de la sintesis, y no
+        # hay que esperar a que termine pw-play (que en salida real puede tardar
+        # mas que la vigia de 3 s y dejaba la frase registrada a medias).
+        self.al_sintesis = None
 
     def _rate_de_voz(self) -> int:
         if self.voz and os.path.exists(self.voz + ".json"):
@@ -429,6 +435,8 @@ class Reproductor:
         await proceso.stdin.drain()
         wav = await _leer_wav(proceso.stdout)
         t_sonido = reloj_ms()
+        if self.al_sintesis is not None:
+            self.al_sintesis(t_sonido)
         if self.salida_nula:
             return t_sonido
 
@@ -651,6 +659,7 @@ class Nucleo:
         self._contador = 0
         self.primer_turno_ms: int | None = None
         self._primer_turno_hecho = False
+        self.segundos_sin_respuesta = SEGUNDOS_SIN_RESPUESTA
 
     # --- tecla ---
     def presionar(self) -> None:
@@ -737,16 +746,16 @@ class Nucleo:
         registro.info("frase %s: fin enviado (motivo=%s)", frase.frase_id, motivo)
 
     async def _vigia_respuesta(self, frase: Frase) -> None:
-        await asyncio.sleep(SEGUNDOS_SIN_RESPUESTA)
+        await asyncio.sleep(self.segundos_sin_respuesta)
         if frase.t_decir is None:
             frase.sin_respuesta = True
             registro.warning("frase %s: nada en satelite/decir en %d s",
-                             frase.frase_id, SEGUNDOS_SIN_RESPUESTA)
+                             frase.frase_id, self.segundos_sin_respuesta)
         elif not frase.escrito:
             # El eco ya se hablo pero el `final` del WebSocket no llego a tiempo:
             # se registra como esta (sin fin->final) para no colgarla de la vigia.
             registro.warning("frase %s: sin final del WebSocket en %d s",
-                             frase.frase_id, SEGUNDOS_SIN_RESPUESTA)
+                             frase.frase_id, self.segundos_sin_respuesta)
         self._escribir_frase(frase)
 
     def descartar_frase_actual(self) -> None:
@@ -839,6 +848,17 @@ class Nucleo:
         while True:
             item = await self.cola.get()
             self.hablando = True
+            turno = item.turno
+            if turno is not None:
+                # El registro se cierra al SINETIZAR (cuando se conoce la marca del
+                # sonido), no al terminar de reproducir: en salida real pw-play tarda
+                # unos segundos y podia dejar que la vigia de 3 s escribiera la frase
+                # sin t_sonido (perdiendo fin->sonido).
+                def al_sintesis(t_sonido: int) -> None:
+                    turno.t_sonido = t_sonido
+                    self._medir_primer_turno(turno)
+                    self._rematar_turno(turno)
+                self.rep.al_sintesis = al_sintesis
             t_sonido = None
             try:
                 t_sonido = await self.rep.decir(item.texto)
@@ -846,10 +866,13 @@ class Nucleo:
                 registro.error("no se pudo hablar: %s", error)
             finally:
                 self.hablando = False
-            if item.turno is not None and t_sonido is not None:
-                item.turno.t_sonido = t_sonido
-                self._medir_primer_turno(item.turno)
-                self._rematar_turno(item.turno)
+                if turno is not None:
+                    self.rep.al_sintesis = None
+                    if turno.t_sonido is None and t_sonido is not None:
+                        turno.t_sonido = t_sonido
+                        self._medir_primer_turno(turno)
+                    if turno.t_sonido is not None:
+                        self._rematar_turno(turno)
 
     def _rematar_turno(self, frase: Frase) -> None:
         """Escribe la frase cuando ya esta completa, sea cual sea el orden.

@@ -65,6 +65,28 @@ class FakeRep:
         return reloj_ms()
 
 
+class FakeRepSintetizaYReproduce:
+    """Replica la salida real: el hook de sintesis se dispara antes de reproducir.
+
+    En salida real Piper termina de sintetizar (marca t_sonido emitida via
+    al_sintesis) y DESPUES pw-play reproduce el audio; decir solo vuelve al
+    terminar la reproduccion. Esta falsa reproduce ese orden.
+    """
+
+    def __init__(self, duracion=0.2):
+        self.dichos = []
+        self.duracion = duracion
+        self.al_sintesis = None
+
+    async def decir(self, texto):
+        self.dichos.append(texto)
+        t_sonido = reloj_ms()
+        if self.al_sintesis is not None:
+            self.al_sintesis(t_sonido)
+        await asyncio.sleep(self.duracion)
+        return t_sonido
+
+
 class FuenteQuieta:
     """No entrega nada: sirve para que la captura se quede esperando y se cancele."""
 
@@ -80,11 +102,11 @@ class FuenteInfinita:
 
 
 class Base(unittest.IsolatedAsyncioTestCase):
-    def hacer_nucleo(self, ws=None, fuente=None):
+    def hacer_nucleo(self, ws=None, fuente=None, repes=None):
         self.tmp = tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False)
         self.tmp.close()
         cfg = Config(altura_max_s=8.0)
-        self.rep = FakeRep()
+        self.rep = repes if repes is not None else FakeRep()
         self.reg = RegistroLatencias(self.tmp.name)
         loop = asyncio.get_running_loop()
         nucleo = Nucleo(cfg, self.rep, self.reg, loop)
@@ -274,6 +296,38 @@ class TestNucleo(Base):
             await self.esperar(lambda: self.rep.dichos)
             await asyncio.sleep(0.1)
             self.assertEqual(self.rep.dichos, ["Escuché: prende la luz"])
+        finally:
+            tarea.cancel()
+
+    async def test_registro_se_cierra_al_sintetizar_no_al_reproducir(self):
+        """El registro se cierra con fin->final Y fin->sonido en salida real.
+
+        La marca t_sonido se conoce al TERMINAR DE SINTETIZAR, no al terminar de
+        reproducir. Antes el guardado esperaba a que pw-play terminara (unos 2 s):
+        si la cadena pasaba de la vigia de 3 s, esta escribia la frase a medias y
+        se perdia fin->sonido (se reporto en la laptop, 3 de 10 frases).
+        """
+        nucleo = self.hacer_nucleo(repes=FakeRepSintetizaYReproduce())
+        nucleo.segundos_sin_respuesta = 0.05
+        tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())
+        try:
+            nucleo.abrir_frase()
+            nucleo.cerrar_frase()
+            fid = nucleo.turno_pendiente.frase_id
+            nucleo.al_decir({"texto": "Escuché: prende la luz de la sala",
+                             "tipo": "respuesta",
+                             "ts": int(reloj_ms() / 1000)})
+            await self.esperar(lambda: self.rep.dichos)
+            nucleo.al_recibir_final({"tipo": "final", "frase_id": fid,
+                                     "texto": "prende la luz de la sala"})
+            await self.esperar(lambda: os.path.getsize(self.tmp.name) > 0)
+            with open(self.tmp.name, encoding="utf-8") as archivo:
+                import json
+                entrada = json.loads(archivo.readline())
+            self.assertEqual(entrada["texto"], "prende la luz de la sala")
+            self.assertIsNotNone(entrada["fin_final_ms"])
+            self.assertIsNotNone(entrada["fin_sonido_ms"])
+            self.assertIsNone(nucleo.turno_pendiente)
         finally:
             tarea.cancel()
 

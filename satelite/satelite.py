@@ -936,9 +936,12 @@ class ServidorTecla:
         try:
             datos = await reader.read(64)
             accion = datos.strip().lower()
+            # tecla.py envia P al presionar y R al soltar (P/R); tambien se
+            # aceptan p/s. Sin esto, la R del cierre caia en desconocida y el
+            # soltar se perdia: la frase quedaba abierta hasta el tope de altura.
             if accion.startswith(b"p"):
                 self.nucleo.presionar()
-            elif accion.startswith(b"s"):
+            elif accion.startswith(b"s") or accion.startswith(b"r"):
                 self.nucleo.soltar()
             writer.write(b"ok")
             await writer.drain()

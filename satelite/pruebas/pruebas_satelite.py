@@ -22,8 +22,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import satelite  # noqa: E402
 from satelite import (  # noqa: E402
-    Config, Frase, Nucleo, RegistroLatencias, aceptar_por_antiguedad, reloj_ms,
-    MENSAJE_REPETIR, MENSAJE_SIN_CONEXION, TRAMA_BYTES,
+    Config, Frase, Nucleo, RegistroLatencias, ServidorTecla, aceptar_por_antiguedad,
+    reloj_ms, MENSAJE_REPETIR, MENSAJE_SIN_CONEXION, TRAMA_BYTES,
 )
 
 # Todos los codigos de error reales que puede mandar servidor_voz.py, mas el
@@ -341,6 +341,41 @@ class TestNucleo(Base):
             self.assertEqual(self.rep.dichos, [])
         finally:
             tarea.cancel()
+
+
+class TestTecla(unittest.IsolatedAsyncioTestCase):
+    """El socket de la tecla traduce P/R (contrato de tecla.py) a presionar/soltar."""
+
+    class Nodo:
+        def __init__(self):
+            self.veces = []
+
+        def presionar(self):
+            self.veces.append("presionar")
+
+        def soltar(self):
+            self.veces.append("soltar")
+
+    async def _enviar(self, ruta, letra):
+        reader, writer = await asyncio.open_unix_connection(ruta)
+        writer.write(letra)
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    async def test_p_r_y_p_s_abren_y_cierran(self):
+        nodo = self.Nodo()
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = os.path.join(tmp, "tecla.sock")
+            servidor = await ServidorTecla(ruta, nodo).servir()
+            try:
+                for letra in (b"P", b"R", b"p", b"s"):
+                    await self._enviar(ruta, letra)
+                    await asyncio.sleep(0.02)
+            finally:
+                servidor.close()
+        self.assertEqual(nodo.veces,
+                         ["presionar", "soltar", "presionar", "soltar"])
 
 
 class TestWav(unittest.TestCase):

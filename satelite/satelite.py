@@ -448,6 +448,22 @@ class Reproductor:
         await reproductor.wait()
         return t_sonido
 
+    async def sintetizar(self, texto: str) -> int:
+        """Sintetiza y descarta el audio, sin reproducirlo.
+
+        Arranca Piper y lee un WAV completo para que el modelo quede cargado en el
+        proceso persistente, pero el audio NO sale por las bocinas. Sirve para la
+        precarga silenciosa: el primer turno real no paga la carga del modelo y el
+        usuario no oye la frase de precarga.
+        """
+        await self.iniciar()
+        proceso = self._proceso
+        assert proceso is not None and proceso.stdin is not None
+        proceso.stdin.write((texto + "\n").encode("utf-8"))
+        await proceso.stdin.drain()
+        await _leer_wav(proceso.stdout)
+        return reloj_ms()
+
 
 # --- WebSocket ---------------------------------------------------------------
 
@@ -726,7 +742,12 @@ class Nucleo:
             frase.sin_respuesta = True
             registro.warning("frase %s: nada en satelite/decir en %d s",
                              frase.frase_id, SEGUNDOS_SIN_RESPUESTA)
-            self._escribir_frase(frase)
+        elif not frase.escrito:
+            # El eco ya se hablo pero el `final` del WebSocket no llego a tiempo:
+            # se registra como esta (sin fin->final) para no colgarla de la vigia.
+            registro.warning("frase %s: sin final del WebSocket en %d s",
+                             frase.frase_id, SEGUNDOS_SIN_RESPUESTA)
+        self._escribir_frase(frase)
 
     def descartar_frase_actual(self) -> None:
         frase = self.frase
@@ -756,6 +777,10 @@ class Nucleo:
         fin_voz = frase.t_fin_voz if frase.t_fin_voz is not None else final_ms
         registro.info("frase %s: final en %d ms -> %r", frase.frase_id,
                       final_ms - fin_voz, frase.texto)
+        if frase.t_sonido is not None or frase.sin_respuesta:
+            self._rematar_turno(frase)
+        if frase.t_decir is not None and self.turno_pendiente is frase:
+            self.turno_pendiente = None
 
     def al_recibir_error(self, mensaje: dict) -> None:
         codigo = mensaje.get("codigo", "?")
@@ -789,9 +814,19 @@ class Nucleo:
         tipo = carga.get("tipo", "")
         frase = None
         if tipo == "respuesta" and self.turno_pendiente is not None:
+            # Si el eco de esta frase ya se hablo (entrega duplicada del broker),
+            # no se habla dos veces.
+            if self.turno_pendiente.t_decir is not None:
+                return
             frase = self.turno_pendiente
             frase.t_decir = reloj_ms()
-            self.turno_pendiente = None
+            # El final del WebSocket y el eco llegan por caminos distintos y en
+            # cualquier orden (la red puede reordenarlos): el turno pendiente
+            # NO se libera con el eco, sino cuando ya se tienen las dos marcas;
+            # si no, un final llegado despues del eco caeria en "frase
+            # desconocida" y se perderia fin->final.
+            if frase.t_final is not None:
+                self.turno_pendiente = None
         self._encolar_habla(texto, tipo, turno=frase)
 
     # --- cola de voz ---
@@ -814,7 +849,20 @@ class Nucleo:
             if item.turno is not None and t_sonido is not None:
                 item.turno.t_sonido = t_sonido
                 self._medir_primer_turno(item.turno)
-                self._escribir_frase(item.turno)
+                self._rematar_turno(item.turno)
+
+    def _rematar_turno(self, frase: Frase) -> None:
+        """Escribe la frase cuando ya esta completa, sea cual sea el orden.
+
+        El `final` del WebSocket y el eco por MQTT viajan por caminos distintos y
+        la red puede reordenarlos: el registro se cierra cuando el ULTIMO de los
+        dos llega, no al hablar. Antes se escribia al terminar de hablar, de modo
+        que un `final` tardio (llegado despues del eco) se descartaba por
+        desconocido y la frase salia sin fin->final.
+        """
+        if frase.t_final is None:
+            return
+        self._escribir_frase(frase)
 
     def _medir_primer_turno(self, frase: Frase) -> None:
         if self._primer_turno_hecho or frase.t_fin_voz is None:
@@ -914,7 +962,7 @@ async def ejecutar(args) -> int:
     if cfg.precargar_piper:
         registro.info("precargando Piper...")
         try:
-            await reproductor.decir("hola")
+            await reproductor.sintetizar("hola")
         except Exception as error:  # noqa: BLE001
             registro.warning("no se pudo precargar Piper: %s", error)
 

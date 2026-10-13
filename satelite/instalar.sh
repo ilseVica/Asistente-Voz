@@ -44,6 +44,7 @@ comprobar_sha() {
   real="$(sha256sum "${archivo}" | awk '{print $1}')"
   [ "${real}" = "${esperado}" ] || \
     fallo "SHA-256 no coincide para ${archivo}: ${real} != ${esperado}"
+  log "SHA-256 verificado: ${archivo}"
 }
 
 # --- 0. Plataforma ----------------------------------------------------------

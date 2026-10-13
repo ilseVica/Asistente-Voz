@@ -228,6 +228,55 @@ class TestNucleo(Base):
         finally:
             tarea.cancel()
 
+    async def test_final_tardio_tras_el_eco_no_se_pierde(self):
+        """Regresion: el final del WebSocket puede llegar DESPUES del eco.
+
+        El eco (satelite/decir) y el `final` viajan por caminos distintos y la red
+        puede reordenarlos. Antes, al llegar el eco se liberaba el turno pendiente
+        y el final llegado despues caia en <final para una frase desconocida>: la
+        frase se escribia sin fin->final (se reporto en la laptop, 3 de 10 frases).
+        """
+        nucleo = self.hacer_nucleo()
+        tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())
+        try:
+            nucleo.abrir_frase()
+            nucleo.cerrar_frase()
+            fid = nucleo.turno_pendiente.frase_id
+            # El eco llega ANTES que el final: la condicion de carrera reportada.
+            nucleo.al_decir({"texto": "Escuché: prende la luz",
+                             "tipo": "respuesta", "ts": int(reloj_ms() / 1000)})
+            await self.esperar(lambda: self.rep.dichos)
+            self.assertEqual(self.rep.dichos, ["Escuché: prende la luz"])
+            nucleo.al_recibir_final({"tipo": "final", "frase_id": fid,
+                                     "texto": "prende la luz"})
+            await self.esperar(lambda: os.path.getsize(self.tmp.name) > 0)
+            with open(self.tmp.name, encoding="utf-8") as archivo:
+                import json
+                entrada = json.loads(archivo.readline())
+            self.assertEqual(entrada["texto"], "prende la luz")
+            self.assertIsNotNone(entrada["fin_final_ms"])
+            self.assertIsNotNone(entrada["fin_decir_ms"])
+            self.assertIsNone(nucleo.turno_pendiente)
+        finally:
+            tarea.cancel()
+
+    async def test_eco_duplicado_no_se_dice_dos_veces(self):
+        """El eco entregado dos veces por el broker no debe hablar dos veces."""
+        nucleo = self.hacer_nucleo()
+        tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())
+        try:
+            nucleo.abrir_frase()
+            nucleo.cerrar_frase()
+            nucleo.al_decir({"texto": "Escuché: prende la luz",
+                             "tipo": "respuesta", "ts": int(reloj_ms() / 1000)})
+            nucleo.al_decir({"texto": "Escuché: prende la luz",
+                             "tipo": "respuesta", "ts": int(reloj_ms() / 1000)})
+            await self.esperar(lambda: self.rep.dichos)
+            await asyncio.sleep(0.1)
+            self.assertEqual(self.rep.dichos, ["Escuché: prende la luz"])
+        finally:
+            tarea.cancel()
+
     async def test_respuesta_vieja_se_descarta(self):
         nucleo = self.hacer_nucleo()
         tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())

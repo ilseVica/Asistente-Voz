@@ -88,10 +88,11 @@ def procesar(cuerpo: str, publicar) -> bool:
         return False
 
     respuesta = SIN_ENTENDER if no_entendido(texto) else textos.eco(texto)
-    publicar(
-        config.TOPICO_SATELITE_DECIR,
-        {"texto": respuesta, "tipo": "respuesta", "ts": int(time.time())},
-        qos=1,
-    )
+    salida = {"texto": respuesta, "tipo": "respuesta", "ts": int(time.time())}
+    # El `frase_id` vuelve con el eco: con dos satelites, es lo que hace que la
+    # respuesta la diga solo el que pregunto (Fase 2C). Sin el, la dirian todos.
+    if isinstance(frase_id, str) and frase_id:
+        salida["frase_id"] = frase_id
+    publicar(config.TOPICO_SATELITE_DECIR, salida, qos=1)
     registro.info("voz %s [%s]: %r -> %r", frase_id, modo, texto, respuesta)
     return True

@@ -111,12 +111,13 @@ def tarea_purga(base) -> None:
         time.sleep(config.SEGUNDOS_PURGA)
 
 
-def enrutar(topico, cuerpo, base, publicar) -> None:
+def enrutar(topico, cuerpo, base, publicar, retenido=False) -> None:
     """Reparte un mensaje de MQTT a quien lo procesa.
 
     Es una funcion y no un `if` suelto para que se pueda probar sola, y para que el
     punto donde se decide «que topico va con que procesador» sea uno solo y este a
-    la vista. Hoy hay dos caminos: el texto de voz y todo lo demas (las alertas).
+    la vista. Hay tres caminos: el texto de voz, el estado de los satelites (para
+    repetir el gas sin atender al que se conecta) y todo lo demas (las alertas).
 
     El texto de voz NO pasa por `alertas.procesar`: si pasara, y como esa funcion
     decide el tipo por el topico, un `casa/sala/voz/texto` caeria en su rama de
@@ -124,8 +125,10 @@ def enrutar(topico, cuerpo, base, publicar) -> None:
     """
     if topico == config.TOPICO_VOZ_TEXTO:
         voz.procesar(cuerpo, publicar)
+    elif alertas.client_id_de_estado(topico) is not None:
+        alertas.al_estado_satelite(topico, cuerpo, retenido, base, publicar)
     else:
-        alertas.procesar(topico, cuerpo, base)
+        alertas.procesar(topico, cuerpo, base, publicar)
 
 
 def main() -> int:
@@ -211,7 +214,8 @@ def main() -> int:
         cliente.publicar(topico, carga, qos=qos, retain=retain, esperar=False)
 
     cliente = mqtt_cliente.ClienteMQTT(
-        lambda topico, cuerpo: enrutar(topico, cuerpo, base, publicar_eco)
+        lambda topico, cuerpo, retenido=False: enrutar(topico, cuerpo, base,
+                                                       publicar_eco, retenido)
     )
 
     trabajador = cola.TrabajadorTelegram(base, remitente)

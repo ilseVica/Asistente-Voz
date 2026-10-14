@@ -33,6 +33,17 @@ Decisiones que se ven en este archivo:
   `~/.config/asistente-satelite/config.toml` (permisos 600). El token y la
   contrasena se pueden poner ahi o, mejor, apuntar a un archivo con
   `token_archivo` / `password_archivo`.
+
+- **Puede haber varios satelites** (Fase 2C). Cada uno tiene su `client_id`,
+  publica su estado en `casa/sala/satelite/<client_id>/estado` y numera sus
+  frases como `<client_id>-<epoch>-<n>`. En `satelite/decir`, una `respuesta` la
+  dice solo el satelite que hizo la pregunta (por su `frase_id`); los avisos y las
+  alertas los dicen todos, salvo que traigan `destino` (ver `Nucleo.al_decir`).
+
+- **Sin microfono ni bocinas** (la instancia de la VM): con `[audio] fuente =
+  "archivo"` las frases llegan como WAV por el socket (`asistente-tecla archivo
+  <ruta.wav>`), y con `[salida] modo = "archivo"` lo que se dice se guarda como WAV
+  en una carpeta en vez de sonar.
 """
 
 from __future__ import annotations
@@ -40,9 +51,11 @@ from __future__ import annotations
 import argparse
 import array
 import asyncio
+import collections
 import json
 import logging
 import os
+import re
 import signal
 import struct
 import sys
@@ -65,9 +78,24 @@ SEGUNDOS_SIN_RESPUESTA = 3   # Tras `fin`, si no llega decir, se registra.
 ANTIGUEDAD_S = 10            # Regla de antiguedad del contrato.
 # Tipos de satelite/decir que se dicen aunque lleguen tarde (P43).
 TIPOS_TARDIOS = frozenset({"recordatorio", "chat"})
+# Las alertas habladas (gas, ayuda). NO son tardias: una alerta de hace una hora no
+# se dice sola (para eso esta la repeticion al conectarse, que llega con `ts`
+# nuevo). Pero su ventana es mas ancha que la de una respuesta, para que un
+# desfase de reloj o un broker lento no se traguen un aviso de gas.
+TIPO_ALERTA = "alerta"
+ANTIGUEDAD_ALERTA_S = 60
 
-TOPICO_ESTADO_DEF = "casa/sala/satelite/estado"
+# El estado es POR satelite. `{client_id}` se sustituye al conectar.
+TOPICO_ESTADO_DEF = "casa/sala/satelite/{client_id}/estado"
+# El topico de antes de la Fase 2C. Un config viejo que lo traiga escrito se
+# corrige solo (la ACL ya no deja escribirlo).
+TOPICO_ESTADO_VIEJO = "casa/sala/satelite/estado"
 TOPICO_DECIR_DEF = "casa/sala/satelite/decir"
+
+FUENTES = ("pipewire", "archivo")
+MODOS_SALIDA = ("audio", "archivo")
+MAX_SALIDAS = 50              # WAV que se conservan en la carpeta de salida.
+FRASES_RECORDADAS = 100       # frase_id propios que se recuerdan (dedup/propiedad).
 
 # Los textos hablados viven en `textos.py`. Se reexportan aqui con los mismos
 # nombres de siempre para no romper a quien los importa de `satelite`.
@@ -97,7 +125,108 @@ def aceptar_por_antiguedad(carga: dict, ahora_s: int) -> bool:
     ts = carga.get("ts")
     if not isinstance(ts, (int, float)) or isinstance(ts, bool):
         return False
-    return abs(ahora_s - int(ts)) <= ANTIGUEDAD_S
+    limite = ANTIGUEDAD_ALERTA_S if carga.get("tipo") == TIPO_ALERTA else ANTIGUEDAD_S
+    return abs(ahora_s - int(ts)) <= limite
+
+
+def topico_estado_de(cfg) -> str:
+    """El topico de estado de ESTE satelite: `casa/sala/satelite/<client_id>/estado`.
+
+    Acepta `{client_id}` en el valor del config. Si el config trae escrito el
+    topico unico de antes (`casa/sala/satelite/estado`), se usa el nuevo y se
+    avisa: con la ACL de la Fase 2C ese topico ya no se puede escribir, y el
+    satelite saldria «desconectado» en el panel sin ningun error a la vista.
+    """
+    if not cfg.client_id or any(c in cfg.client_id for c in "/+#"):
+        raise ValueError("client_id %r no sirve para un topico MQTT" % cfg.client_id)
+    valor = cfg.topico_estado or TOPICO_ESTADO_DEF
+    if valor == TOPICO_ESTADO_VIEJO:
+        registro.warning("mqtt.topico_estado = %r es el de antes de la Fase 2C; se "
+                         "usa %r. Quitalo del config.", valor, TOPICO_ESTADO_DEF)
+        valor = TOPICO_ESTADO_DEF
+    return valor.replace("{client_id}", cfg.client_id)
+
+
+def leer_wav_estricto(ruta: str) -> bytes:
+    """PCM de un WAV que YA es 16 kHz, mono, 16 bits. Si no, `ValueError` claro.
+
+    Es la entrada por archivo del satelite de la VM. A diferencia de
+    `_leer_wav_16k` (modo de prueba), aqui no se convierte nada: un WAV con otro
+    formato se rechaza diciendo que tiene y que hace falta, para que quien lo
+    mando sepa como arreglarlo.
+    """
+    if not os.path.isabs(ruta):
+        raise ValueError("la ruta tiene que ser absoluta: %s" % ruta)
+    if not os.path.isfile(ruta):
+        raise ValueError("no existe el archivo %s" % ruta)
+    try:
+        with wave.open(ruta, "rb") as w:
+            canales = w.getnchannels()
+            ancho = w.getsampwidth()
+            frecuencia = w.getframerate()
+            datos = w.readframes(w.getnframes())
+    except (wave.Error, EOFError) as error:
+        raise ValueError("no es un WAV PCM valido (%s); se necesita PCM 16 kHz "
+                         "mono 16 bits" % error) from None
+    problemas = []
+    if frecuencia != TASA:
+        problemas.append("%d Hz en vez de %d Hz" % (frecuencia, TASA))
+    if canales != 1:
+        problemas.append("%d canales en vez de 1 (mono)" % canales)
+    if ancho != 2:
+        problemas.append("%d bits en vez de 16" % (8 * ancho))
+    if problemas:
+        raise ValueError("el WAV no es PCM 16 kHz mono 16 bits: tiene %s"
+                         % ", ".join(problemas))
+    if not datos:
+        raise ValueError("el WAV no tiene audio")
+    return datos
+
+
+_NO_SEGURO = re.compile(r"[^A-Za-z0-9_-]+")
+
+
+def _parte_de_nombre(texto: str) -> str:
+    return _NO_SEGURO.sub("-", texto).strip("-") or "x"
+
+
+def guardar_salida(carpeta: str, wav: bytes, tipo: str, frase_id,
+                   maximo: int = MAX_SALIDAS, ahora: float | None = None) -> str:
+    """Guarda lo dicho como `<AAAAMMDD-HHMMSS>_<tipo>_<frase_id|sistema>.wav`.
+
+    Se escribe primero a un temporal y se renombra, para que quien escuche la
+    carpeta no vea nunca un WAV a medias. Despues se conservan solo los `maximo`
+    mas recientes. Devuelve la ruta escrita.
+    """
+    os.makedirs(carpeta, exist_ok=True)
+    marca = time.strftime("%Y%m%d-%H%M%S", time.localtime(ahora))
+    base = "%s_%s_%s" % (marca, _parte_de_nombre(tipo or "sistema"),
+                         _parte_de_nombre(frase_id) if frase_id else "sistema")
+    ruta = os.path.join(carpeta, base + ".wav")
+    n = 2
+    while os.path.exists(ruta):
+        ruta = os.path.join(carpeta, "%s-%d.wav" % (base, n))
+        n += 1
+    temporal = ruta + ".parcial"
+    with open(temporal, "wb") as archivo:
+        archivo.write(wav)
+    os.replace(temporal, ruta)
+    podar_salida(carpeta, maximo)
+    return ruta
+
+
+def podar_salida(carpeta: str, maximo: int = MAX_SALIDAS) -> int:
+    """Borra los WAV mas viejos de la carpeta y deja `maximo`. Devuelve cuantos."""
+    wavs = []
+    for nombre in os.listdir(carpeta):
+        if nombre.endswith(".wav"):
+            ruta = os.path.join(carpeta, nombre)
+            wavs.append((os.stat(ruta).st_mtime_ns, nombre, ruta))
+    wavs.sort()
+    sobran = wavs[:-maximo] if maximo > 0 else wavs
+    for _, _, ruta in sobran:
+        os.unlink(ruta)
+    return len(sobran)
 
 
 def _leer_wav_16k(ruta: str) -> bytes:
@@ -174,6 +303,11 @@ class Config:
     registro_ruta: str = ""
     socket_ruta: str = ""
     precargar_piper: bool = False
+    # Fase 2C: entrada y salida sin dispositivo de audio (satelite de la VM).
+    fuente: str = "pipewire"
+    salida_modo: str = "audio"
+    salida_carpeta: str = ""
+    salida_max: int = MAX_SALIDAS
 
 
 def _expandir(ruta: str) -> str:
@@ -219,6 +353,7 @@ def cargar_config(ruta: str) -> Config:
     rutas = doc.get("rutas", {})
     voz = doc.get("voz", {})
     tecla = doc.get("tecla", {})
+    salida = doc.get("salida", {})
 
     cfg = Config()
     cfg.ws_url = servidor.get("ws_url", cfg.ws_url)
@@ -245,6 +380,17 @@ def cargar_config(ruta: str) -> Config:
     cfg.registro_ruta = rutas.get("registro", _ruta_estado_defecto())
     cfg.socket_ruta = tecla.get("socket", _ruta_socket_defecto())
     cfg.precargar_piper = bool(rutas.get("precargar_piper", cfg.precargar_piper))
+    cfg.fuente = audio.get("fuente", cfg.fuente)
+    if cfg.fuente not in FUENTES:
+        raise ValueError("audio.fuente = %r; se admite %s" % (cfg.fuente, FUENTES))
+    cfg.salida_modo = salida.get("modo", cfg.salida_modo)
+    if cfg.salida_modo not in MODOS_SALIDA:
+        raise ValueError("salida.modo = %r; se admite %s"
+                         % (cfg.salida_modo, MODOS_SALIDA))
+    cfg.salida_carpeta = salida.get("carpeta", cfg.salida_carpeta)
+    cfg.salida_max = int(salida.get("maximo", cfg.salida_max))
+    if cfg.salida_modo == "archivo" and not cfg.salida_carpeta:
+        raise ValueError("salida.modo = \"archivo\" necesita salida.carpeta")
     return cfg
 
 
@@ -328,6 +474,26 @@ class FuentePipeWire:
                 except asyncio.TimeoutError:
                     proceso.kill()
                     await proceso.wait()
+
+
+class FuentePCM:
+    """Entrega un PCM ya validado (16 kHz mono 16 bits) en tramas, a ritmo real.
+
+    Es la fuente de `asistente-tecla archivo`: el WAV se valida al recibir la orden
+    (`leer_wav_estricto`), y aqui solo se trocea. El ritmo de 100 ms por trama es
+    el de la captura real, para que el servicio de voz vea lo mismo que con
+    microfono.
+    """
+
+    def __init__(self, pcm: bytes, ritmo: float = 0.1):
+        self.pcm = pcm
+        self.ritmo = ritmo
+
+    async def tramas(self):
+        for i in range(0, len(self.pcm), TRAMA_BYTES):
+            yield self.pcm[i:i + TRAMA_BYTES]
+            if self.ritmo:
+                await asyncio.sleep(self.ritmo)
 
 
 class FuenteArchivo:
@@ -466,18 +632,47 @@ class Reproductor:
             await self._proceso.wait()
         self._proceso = None
 
-    async def decir(self, texto: str) -> int:
-        """Sintetiza y reproduce. Devuelve la marca de inicio del sonido (ms)."""
+    def _matar_piper(self) -> None:
+        """Mata Piper si una alerta corto la sintesis a mitad de un WAV.
+
+        Su `stdout` se quedaria con el resto de ese WAV, y la frase siguiente
+        leeria bytes de la anterior. Matarlo cuesta recargar el modelo una vez, que
+        es mejor que una frase corrupta.
+        """
+        if self._proceso is not None and self._proceso.returncode is None:
+            try:
+                self._proceso.kill()
+            except ProcessLookupError:
+                pass
+        self._proceso = None
+
+    async def decir(self, texto: str, tipo: str = "", frase_id=None) -> int:
+        """Sintetiza y reproduce (o guarda). Devuelve la marca del sonido (ms).
+
+        Se puede cancelar (una alerta interrumpe una respuesta): si se cancela
+        durante la sintesis se mata Piper, y si es durante la reproduccion se mata
+        `pw-play`. `tipo` y `frase_id` solo se usan para nombrar el WAV en la
+        salida a carpeta.
+        """
         await self.iniciar()
         proceso = self._proceso
         assert proceso is not None and proceso.stdin is not None
-        proceso.stdin.write((texto + "\n").encode("utf-8"))
-        await proceso.stdin.drain()
-        wav = await _leer_wav(proceso.stdout)
+        try:
+            proceso.stdin.write((texto + "\n").encode("utf-8"))
+            await proceso.stdin.drain()
+            wav = await _leer_wav(proceso.stdout)
+        except asyncio.CancelledError:
+            self._matar_piper()
+            raise
         t_sonido = reloj_ms()
         if self.al_sintesis is not None:
             self.al_sintesis(t_sonido)
         if self.salida_nula:
+            return t_sonido
+        if self.cfg.salida_modo == "archivo":
+            ruta = guardar_salida(_expandir(self.cfg.salida_carpeta), wav, tipo,
+                                  frase_id, self.cfg.salida_max)
+            registro.info("dicho guardado en %s", ruta)
             return t_sonido
 
         pcm = _pcm_de_wav(wav)
@@ -489,11 +684,16 @@ class Reproductor:
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         assert reproductor.stdin is not None
         try:
-            reproductor.stdin.write(pcm)
-            await reproductor.stdin.drain()
-        finally:
-            reproductor.stdin.close()
-        await reproductor.wait()
+            try:
+                reproductor.stdin.write(pcm)
+                await reproductor.stdin.drain()
+            finally:
+                reproductor.stdin.close()
+            await reproductor.wait()
+        except asyncio.CancelledError:
+            if reproductor.returncode is None:
+                reproductor.kill()
+            raise
         return t_sonido
 
     async def sintetizar(self, texto: str) -> int:
@@ -619,6 +819,7 @@ class PuenteMQTT:
         self.nucleo = nucleo
         self.loop = loop
         self.listo = asyncio.Event()
+        self.topico_estado = topico_estado_de(cfg)
         self.cliente = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=cfg.client_id,
@@ -629,7 +830,7 @@ class PuenteMQTT:
         self.cliente.reconnect_delay_set(min_delay=1, max_delay=30)
         # Last Will: si el satelite se cae, el broker publica {"conectado":false}.
         self.cliente.will_set(
-            cfg.topico_estado,
+            self.topico_estado,
             json.dumps({"conectado": False}, separators=(",", ":")),
             qos=0, retain=True)
         self.cliente.on_connect = self._al_conectar
@@ -644,9 +845,9 @@ class PuenteMQTT:
         if codigo.is_failure:
             registro.error("MQTT rechazado (rc=%s)", codigo)
             return
-        registro.info("MQTT conectado como %s (client_id=%s)", self.cfg.mqtt_usuario,
-                      self.cfg.client_id)
-        cliente.publish(self.cfg.topico_estado,
+        registro.info("MQTT conectado como %s (client_id=%s, estado en %s)",
+                      self.cfg.mqtt_usuario, self.cfg.client_id, self.topico_estado)
+        cliente.publish(self.topico_estado,
                         json.dumps({"conectado": True}, separators=(",", ":")),
                         qos=0, retain=True)
         cliente.subscribe(self.cfg.topico_decir, qos=1)
@@ -662,7 +863,7 @@ class PuenteMQTT:
 
     def cerrar(self) -> None:
         try:
-            self.cliente.publish(self.cfg.topico_estado,
+            self.cliente.publish(self.topico_estado,
                                  json.dumps({"conectado": False},
                                             separators=(",", ":")),
                                  qos=0, retain=True)
@@ -680,6 +881,12 @@ class ItemHabla:
     tipo: str
     turno: Frase | None = None
     recibido_ms: int = 0
+    frase_id: str | None = None
+
+
+# Prioridad en la cola de voz: menor = antes. Una alerta pasa delante de todo.
+PRIORIDAD_ALERTA = 0
+PRIORIDAD_NORMAL = 1
 
 
 class Nucleo:
@@ -695,7 +902,16 @@ class Nucleo:
         self.captura: asyncio.Task | None = None
         self.hablando = False
         self.turno_pendiente: Frase | None = None
-        self.cola: asyncio.Queue = asyncio.Queue()
+        # Cola con prioridad: (prioridad, orden de llegada, item). Las alertas van
+        # delante; entre iguales, en orden de llegada.
+        self.cola: asyncio.PriorityQueue = asyncio.PriorityQueue()
+        self._orden_cola = 0
+        self._item_actual: ItemHabla | None = None
+        self._tarea_decir: asyncio.Task | None = None
+        # Los frase_id que genero ESTE satelite (los ultimos FRASES_RECORDADAS), y
+        # si su respuesta ya se dijo. Es lo que decide si una `respuesta` es suya:
+        # comparar prefijos fallaria con client ids como `sala` y `sala-2`.
+        self._mis_frases: collections.OrderedDict = collections.OrderedDict()
         self._contador = 0
         self.primer_turno_ms: int | None = None
         self._primer_turno_hecho = False
@@ -703,6 +919,10 @@ class Nucleo:
 
     # --- tecla ---
     def presionar(self) -> None:
+        if self.cfg.fuente == "archivo":
+            registro.info("tecla ignorada: la fuente es archivo (use "
+                          "`asistente-tecla archivo <ruta.wav>`)")
+            return
         if self.hablando:
             registro.info("tecla ignorada: el asistente esta hablando (P14)")
             return
@@ -719,10 +939,36 @@ class Nucleo:
         if self.frase is not None:
             self.cerrar_frase(motivo="soltar")
 
+    def enviar_archivo(self, pcm: bytes) -> tuple:
+        """Manda un PCM ya validado como una frase completa. `(frase_id, error)`.
+
+        Las mismas condiciones que la tecla: no mientras el asistente habla (P14),
+        no con otra frase abierta y no sin WebSocket. Pero aqui se contesta el
+        motivo, porque quien manda el archivo esta esperando la respuesta en la
+        terminal.
+        """
+        if self.hablando:
+            return None, "el asistente esta hablando; intente en unos segundos"
+        if self.frase is not None:
+            return None, "ya hay una frase abierta"
+        if self.ws is None or not self.ws.listo:
+            return None, "el WebSocket no esta listo (sin conexion con el servidor)"
+        self.fuente = FuentePCM(pcm)
+        frase = self.abrir_frase(origen="archivo")
+        if self.frase is not frase:
+            return None, "no se pudo abrir la frase (sin conexion)"
+        return frase.frase_id, None
+
     # --- ciclo de una frase ---
     def abrir_frase(self, origen: str = "tecla") -> Frase:
         self._contador += 1
-        frase_id = "sat-%d-%03d" % (int(time.time()), self._contador)
+        # `<client_id>-<epoch>-<n>`: con dos satelites, el eco lleva el frase_id
+        # y cada uno sabe si la respuesta es para el.
+        frase_id = "%s-%d-%d" % (self.cfg.client_id, int(time.time()),
+                                 self._contador)
+        self._mis_frases[frase_id] = False
+        while len(self._mis_frases) > FRASES_RECORDADAS:
+            self._mis_frases.popitem(last=False)
         frase = Frase(frase_id=frase_id, origen=origen)
         self.frase = frase
         registro.info("frase %s abierta (%s)", frase_id, origen)
@@ -852,6 +1098,28 @@ class Nucleo:
 
     # --- respuesta por MQTT ---
     def al_decir(self, carga: dict) -> None:
+        """Decide si ESTE satelite dice un mensaje de `satelite/decir`.
+
+        Con dos satelites, el contrato es:
+
+        - `destino` (un client id), si viene, filtra antes que nada: solo lo dice
+          ese satelite, sea del tipo que sea.
+        - `respuesta` con `frase_id` de una frase de este satelite: la dice (una
+          vez; una entrega duplicada no se repite).
+        - `respuesta` con `frase_id` ajeno: es de otro satelite; se ignora.
+        - `respuesta` SIN `frase_id`: contrato viejo; se dice y se avisa.
+        - Cualquier otro tipo (`aviso`, `alerta`, `recordatorio`...): lo dicen
+          todos.
+        - Una `alerta` pasa delante de la cola y corta una respuesta que este
+          sonando (`_encolar_habla`).
+        """
+        if not isinstance(carga, dict):
+            return
+        destino = carga.get("destino")
+        if destino is not None and destino != self.cfg.client_id:
+            registro.debug("satelite/decir para %r, no para %s; se ignora",
+                           destino, self.cfg.client_id)
+            return
         ahora = int(time.time())
         if not aceptar_por_antiguedad(carga, ahora):
             registro.warning("satelite/decir descartado por antiguedad o sin ts: %s",
@@ -861,32 +1129,72 @@ class Nucleo:
         if not isinstance(texto, str) or not texto.strip():
             return
         tipo = carga.get("tipo", "")
+        frase_id = carga.get("frase_id")
+        if not isinstance(frase_id, str) or not frase_id:
+            frase_id = None
+        if tipo == "respuesta":
+            self._al_decir_respuesta(texto, frase_id)
+            return
+        self._encolar_habla(texto, tipo or "aviso", frase_id=frase_id)
+
+    def _al_decir_respuesta(self, texto: str, frase_id) -> None:
+        if frase_id is None:
+            registro.warning("respuesta sin frase_id en satelite/decir: se dice, pero "
+                             "con dos satelites la diran todos")
+            frase = None
+            if self.turno_pendiente is not None:
+                # Si el eco de esta frase ya se hablo (entrega duplicada del
+                # broker), no se habla dos veces.
+                if self.turno_pendiente.t_decir is not None:
+                    return
+                frase = self._marcar_decir(self.turno_pendiente)
+            self._encolar_habla(texto, "respuesta", turno=frase)
+            return
+        if frase_id not in self._mis_frases:
+            registro.debug("respuesta para %s, que no es de este satelite; se ignora",
+                           frase_id)
+            return
+        if self._mis_frases[frase_id]:
+            return  # entrega duplicada del broker: ya se dijo
+        self._mis_frases[frase_id] = True
         frase = None
-        if tipo == "respuesta" and self.turno_pendiente is not None:
-            # Si el eco de esta frase ya se hablo (entrega duplicada del broker),
-            # no se habla dos veces.
-            if self.turno_pendiente.t_decir is not None:
-                return
-            frase = self.turno_pendiente
-            frase.t_decir = reloj_ms()
-            # El final del WebSocket y el eco llegan por caminos distintos y en
-            # cualquier orden (la red puede reordenarlos): el turno pendiente
-            # NO se libera con el eco, sino cuando ya se tienen las dos marcas;
-            # si no, un final llegado despues del eco caeria en "frase
-            # desconocida" y se perderia fin->final.
-            if frase.t_final is not None:
-                self.turno_pendiente = None
-        self._encolar_habla(texto, tipo, turno=frase)
+        if self.turno_pendiente is not None and \
+                self.turno_pendiente.frase_id == frase_id:
+            frase = self._marcar_decir(self.turno_pendiente)
+        self._encolar_habla(texto, "respuesta", turno=frase, frase_id=frase_id)
+
+    def _marcar_decir(self, frase: Frase) -> Frase:
+        frase.t_decir = reloj_ms()
+        # El final del WebSocket y el eco llegan por caminos distintos y en
+        # cualquier orden (la red puede reordenarlos): el turno pendiente NO se
+        # libera con el eco, sino cuando ya se tienen las dos marcas; si no, un
+        # final llegado despues del eco caeria en "frase desconocida" y se
+        # perderia fin->final.
+        if frase.t_final is not None:
+            self.turno_pendiente = None
+        return frase
 
     # --- cola de voz ---
     def _encolar_habla(self, texto: str, tipo: str,
-                       turno: Frase | None = None) -> None:
-        self.cola.put_nowait(ItemHabla(texto=texto, tipo=tipo, turno=turno,
-                                       recibido_ms=reloj_ms()))
+                       turno: Frase | None = None, frase_id=None) -> None:
+        item = ItemHabla(texto=texto, tipo=tipo, turno=turno,
+                         recibido_ms=reloj_ms(), frase_id=frase_id)
+        prioridad = PRIORIDAD_ALERTA if tipo == TIPO_ALERTA else PRIORIDAD_NORMAL
+        self._orden_cola += 1
+        self.cola.put_nowait((prioridad, self._orden_cola, item))
+        # Una alerta corta lo que este sonando, salvo que sea otra alerta: el gas no
+        # espera a que termine «Usted dijo...». Lo cortado no se repite.
+        actual = self._item_actual
+        if tipo == TIPO_ALERTA and actual is not None and actual.tipo != TIPO_ALERTA \
+                and self._tarea_decir is not None and not self._tarea_decir.done():
+            registro.warning("alerta: se interrumpe lo que se estaba diciendo (%s)",
+                             actual.tipo)
+            self._tarea_decir.cancel()
 
     async def bucle_habla(self) -> None:
         while True:
-            item = await self.cola.get()
+            _, _, item = await self.cola.get()
+            self._item_actual = item
             self.hablando = True
             turno = item.turno
             if turno is not None:
@@ -900,11 +1208,21 @@ class Nucleo:
                     self._rematar_turno(turno)
                 self.rep.al_sintesis = al_sintesis
             t_sonido = None
+            self._tarea_decir = asyncio.get_running_loop().create_task(
+                self.rep.decir(item.texto, tipo=item.tipo, frase_id=item.frase_id))
             try:
-                t_sonido = await self.rep.decir(item.texto)
+                t_sonido = await self._tarea_decir
+            except asyncio.CancelledError:
+                # Si el que se cancela es este bucle (el satelite se apaga), se
+                # sigue cancelando. Si solo se cancelo la frase, fue una alerta.
+                if asyncio.current_task().cancelling():
+                    raise
+                registro.info("%s interrumpida por una alerta", item.tipo)
             except Exception as error:  # noqa: BLE001
                 registro.error("no se pudo hablar: %s", error)
             finally:
+                self._tarea_decir = None
+                self._item_actual = None
                 self.hablando = False
                 if turno is not None:
                     self.rep.al_sintesis = None
@@ -974,16 +1292,26 @@ class ServidorTecla:
 
     async def _atender(self, reader, writer):
         try:
-            datos = await reader.read(64)
+            datos = await reader.read(4096)
+            # `A <ruta>\n` (archivo) puede llegar en mas de un trozo.
+            while datos[:1] in (b"a", b"A") and not datos.endswith(b"\n") \
+                    and len(datos) < 8192:
+                mas = await asyncio.wait_for(reader.read(4096), timeout=2)
+                if not mas:
+                    break
+                datos += mas
             accion = datos.strip().lower()
+            respuesta = b"ok"
             # tecla.py envia P al presionar y R al soltar (P/R); tambien se
             # aceptan p/s. Sin esto, la R del cierre caia en desconocida y el
             # soltar se perdia: la frase quedaba abierta hasta el tope de altura.
-            if accion.startswith(b"p"):
+            if accion.startswith(b"a"):
+                respuesta = self._archivo(datos.strip()[1:].strip())
+            elif accion.startswith(b"p"):
                 self.nucleo.presionar()
             elif accion.startswith(b"s") or accion.startswith(b"r"):
                 self.nucleo.soltar()
-            writer.write(b"ok")
+            writer.write(respuesta)
             await writer.drain()
         except Exception as error:  # noqa: BLE001
             registro.warning("socket de tecla: %s", error)
@@ -993,6 +1321,24 @@ class ServidorTecla:
                 await writer.wait_closed()
             except Exception:  # noqa: BLE001
                 pass
+
+    def _archivo(self, ruta_bytes: bytes) -> bytes:
+        """`asistente-tecla archivo <ruta>`: valida el WAV y lo manda como frase."""
+        try:
+            ruta = ruta_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            return b"error: la ruta no es UTF-8"
+        try:
+            pcm = leer_wav_estricto(ruta)
+        except ValueError as error:
+            registro.warning("archivo rechazado: %s", error)
+            return ("error: %s" % error).encode("utf-8")
+        frase_id, error = self.nucleo.enviar_archivo(pcm)
+        if error is not None:
+            registro.warning("archivo %s no enviado: %s", ruta, error)
+            return ("error: %s" % error).encode("utf-8")
+        registro.info("archivo %s -> frase %s", ruta, frase_id)
+        return ("ok %s" % frase_id).encode("utf-8")
 
 
 # --- Programa ----------------------------------------------------------------

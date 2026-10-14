@@ -21,9 +21,13 @@ usuario = "satelite"
 # O bien:
 password_archivo = "/home/USUARIO/ruta/a/la/password"
 # Client id fijo: con uno aleatorio, cada reinicio dejaria una sesion abierta en el
-# broker durante 2 dias. Debe coincidir con el de la laptop (uno solo).
+# broker durante 2 dias. UNICO por satelite (la laptop es satelite-sala; la VM,
+# satelite-vm): de el salen el topico de estado y los frase_id.
 client_id = "satelite-sala"
-topico_estado = "casa/sala/satelite/estado"
+# El estado se publica en casa/sala/satelite/<client_id>/estado. Si se quiere
+# escribir, usar {client_id}; el topico unico de antes (casa/sala/satelite/estado)
+# ya no lo permite la ACL.
+# topico_estado = "casa/sala/satelite/{client_id}/estado"
 topico_decir = "casa/sala/satelite/decir"
 
 [audio]
@@ -36,6 +40,16 @@ salida_nodo = "alsa_output.pci-0000_00_1f.3.analog-stereo"
 latencia_captura = "20ms"
 # Tope de duracion de una frase: al alcanzarlo se cierra sola.
 altura_max_s = 8.0
+# De donde sale la voz: "pipewire" (microfono, por defecto) o "archivo" (WAV de
+# 16 kHz mono 16 bits por el socket: asistente-tecla archivo <ruta.wav>).
+# fuente = "pipewire"
+
+# [salida]
+# Que se hace con lo que dice el asistente: "audio" (bocinas, por defecto) o
+# "archivo" (un WAV por frase en `carpeta`, se conservan los ultimos `maximo`).
+# modo = "archivo"
+# carpeta = "/home/USUARIO/asistente-satelite-vm/salida"
+# maximo = 50
 
 [rutas]
 # Binario de Piper 2023.11.14-2 (el que instala instalar.sh). Ruta absoluta.

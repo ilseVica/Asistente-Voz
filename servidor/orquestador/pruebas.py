@@ -1886,8 +1886,10 @@ if remitente.ediciones:
            (chat, message_id))
     prueba("y dice ATENDIDA", "ATENDIDA." in texto, texto)
     prueba("y se le quitan los botones", teclado is None, teclado)
-    prueba("y pone la hora en que se atendio",
-           time.strftime("%H:%M:%S", time.localtime(atendida)) in texto, texto)
+    prueba("y pone la hora en que se atendio, sin segundos (HH:MM)",
+           ("a las %s." % time.strftime("%H:%M", time.localtime(atendida))) in texto
+           and time.strftime("%H:%M:%S", time.localtime(atendida)) not in texto,
+           texto)
 
 prueba("ya no queda nada en la cola de reescritura",
        base.envios_a_editar() == [], base.envios_a_editar())
@@ -2094,7 +2096,9 @@ orquestador_modulo.enrutar(
     base, publicar)
 prueba("enrutar manda la alerta de gas a alertas.procesar",
        base.obtener_alerta("000000-b0030-0001") is not None, None)
-prueba("y una alerta NO dispara el eco", apuntes == [], apuntes)
+prueba("y una alerta NO dispara el eco, sino la alerta hablada (Fase 2C)",
+       len(apuntes) == 1 and apuntes[0][1].get("tipo") == "alerta"
+       and "Usted dijo" not in apuntes[0][1].get("texto", ""), apuntes)
 base.cerrar()
 
 # --- El ACL: el usuario voz solo escribe su topico; el orquestador lo lee ---
@@ -2391,6 +2395,136 @@ prueba("motivo de codigo vencido, con sus minutos",
        textos.registro_fallido(textos.MOTIVO_VENCIDO.format(minutos=10))
        == "No se pudo completar el registro: el código ya venció (valía 10 "
           "minutos).\n\nPida un código nuevo.")
+
+
+# --- Fase 2C: frase_id en el eco, alertas habladas y repeticion al conectarse --
+titulo("Fase 2C: alertas habladas y estado por satelite")
+
+apuntes, publicar = publicar_que_recoge()
+voz.procesar(json.dumps({"frase_id": "satelite-vm-1791900000-1", "texto": "prende la luz",
+                         "modo": "comandos", "ts": int(time.time())}), publicar)
+prueba("el eco reenvia el frase_id del satelite que pregunto",
+       len(apuntes) == 1 and apuntes[0][1].get("frase_id") == "satelite-vm-1791900000-1"
+       and apuntes[0][1].get("tipo") == "respuesta", apuntes)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar(json.dumps({"texto": "prende la luz", "ts": int(time.time())}), publicar)
+prueba("sin frase_id, el eco sale sin frase_id (no se inventa uno)",
+       len(apuntes) == 1 and "frase_id" not in apuntes[0][1], apuntes)
+
+ubicacion_original = config.UBICACION_GAS
+config.UBICACION_GAS = "cocina"
+prueba("texto hablado del gas, con el lugar y su articulo",
+       textos.alerta_hablada("gas", textos.lugar_con_articulo("cocina"))
+       == "Atención: se detectó gas en la cocina. Por favor, no encienda ni apague "
+          "luces ni aparatos, abra las ventanas y salga de la casa. Estoy avisando a "
+          "su familia.")
+prueba("texto hablado del gas con un lugar masculino",
+       "se detectó gas en el comedor." in
+       textos.alerta_hablada("gas", textos.lugar_con_articulo("comedor")))
+prueba("texto hablado de la ayuda",
+       textos.alerta_hablada("ayuda", "x")
+       == "No se preocupe, estoy avisando a su familia. Alguien se comunicará con "
+          "usted pronto.")
+prueba("un tipo sin texto hablado no dice nada",
+       textos.alerta_hablada("inventado", "x") is None)
+
+base_2c, _ = base_nueva("fase2c-")
+base_2c.registrar_familiar("552000000001")
+for topico, cuerpo, tipo in (
+        (config.TOPICO_ALERTA_GAS, '{"id":"2c0000-b0001-0001","gas_adc":2100}', "gas"),
+        (config.TOPICO_ALERTA_AYUDA, '{"id":"2c0000-b0001-0002","origen":"boton"}',
+         "ayuda")):
+    apuntes, publicar = publicar_que_recoge()
+    alertas.procesar(topico, cuerpo, base_2c, publicar)
+    prueba("al registrar una alerta de %s se publica la alerta hablada" % tipo,
+           len(apuntes) == 1 and apuntes[0][0] == config.TOPICO_SATELITE_DECIR
+           and apuntes[0][1]["tipo"] == "alerta"
+           and apuntes[0][1]["texto"] == textos.alerta_hablada(
+               tipo, textos.lugar_con_articulo(config.UBICACION_GAS))
+           and "destino" not in apuntes[0][1]
+           and abs(apuntes[0][1]["ts"] - int(time.time())) <= 2
+           and apuntes[0][2] == 1, apuntes)
+    prueba("y la alerta sigue yendo a la cola de Telegram (%s)" % tipo,
+           base_2c.obtener_alerta(json.loads(cuerpo)["id"]) is not None)
+
+apuntes, publicar = publicar_que_recoge()
+alertas.procesar(config.TOPICO_ALERTA_GAS, '{"id":"2c0000-b0001-0001","gas_adc":2100}',
+                 base_2c, publicar)
+prueba("un duplicado NO vuelve a decir la alerta", apuntes == [], apuntes)
+# El antirrebote cuenta las ayudas que YA salieron a Telegram.
+base_2c.marcar_enviado("2c0000-b0001-0002", "552000000001")
+apuntes, publicar = publicar_que_recoge()
+alertas.procesar(config.TOPICO_ALERTA_AYUDA, '{"id":"2c0000-b0001-0003","origen":"voz"}',
+                 base_2c, publicar)
+prueba("una ayuda dentro del antirrebote NO se vuelve a decir", apuntes == [], apuntes)
+
+
+def publicar_que_falla(topico, carga, qos=1, retain=False):
+    raise RuntimeError("broker caido")
+
+
+prueba("si publicar la alerta hablada falla, la alerta se registra igual",
+       alertas.procesar(config.TOPICO_ALERTA_GAS,
+                        '{"id":"2c0000-b0001-0004","gas_adc":2200}', base_2c,
+                        publicar_que_falla) is True
+       and base_2c.obtener_alerta("2c0000-b0001-0004") is not None)
+
+# Repeticion al conectarse un satelite.
+TOPICO_VM = "casa/sala/satelite/satelite-vm/estado"
+prueba("client id del topico de estado",
+       alertas.client_id_de_estado(TOPICO_VM) == "satelite-vm"
+       and alertas.client_id_de_estado("casa/sala/satelite/estado") is None
+       and alertas.client_id_de_estado("casa/sala/satelite/+/estado") is None)
+
+ahora_2c = int(time.time())
+apuntes, publicar = publicar_que_recoge()
+n = alertas.al_estado_satelite(TOPICO_VM, '{"conectado":true}', False, base_2c,
+                               publicar, ahora=ahora_2c)
+prueba("al conectarse un satelite se le repite cada gas sin atender (hay 2)",
+       n == 2 and len(apuntes) == 2, (n, apuntes))
+prueba("solo a el (destino = su client id), con tipo alerta",
+       all(a[1].get("destino") == "satelite-vm" and a[1]["tipo"] == "alerta"
+           and a[1]["texto"].startswith("Atención: se detectó gas") for a in apuntes),
+       apuntes)
+prueba("la ayuda NO se repite al conectarse (solo el gas)",
+       not any("No se preocupe" in a[1]["texto"] for a in apuntes), apuntes)
+
+apuntes, publicar = publicar_que_recoge()
+n = alertas.al_estado_satelite(TOPICO_VM, '{"conectado":true}', True, base_2c,
+                               publicar, ahora=ahora_2c)
+prueba("con el estado RETENIDO (reinicio del orquestador) no repite nada",
+       n == 0 and apuntes == [], apuntes)
+apuntes, publicar = publicar_que_recoge()
+n = alertas.al_estado_satelite(TOPICO_VM, '{"conectado":false}', False, base_2c,
+                               publicar, ahora=ahora_2c)
+prueba("con conectado:false (Last Will) no repite nada", n == 0 and apuntes == [])
+apuntes, publicar = publicar_que_recoge()
+alertas.al_estado_satelite(TOPICO_VM, "no es json", False, base_2c, publicar)
+prueba("un estado que no es JSON no rompe ni repite", apuntes == [])
+
+apuntes, publicar = publicar_que_recoge()
+n = alertas.al_estado_satelite(TOPICO_VM, '{"conectado":true}', False, base_2c,
+                               publicar, ahora=ahora_2c + 2 * 3600 + 60)
+prueba("una alerta de gas de mas de 2 h NO se repite", n == 0 and apuntes == [],
+       apuntes)
+
+alertas.resolver(base_2c, None, "2c0000-b0001-0001", ahora_2c)
+alertas.resolver(base_2c, None, "2c0000-b0001-0004", ahora_2c)
+apuntes, publicar = publicar_que_recoge()
+n = alertas.al_estado_satelite(TOPICO_VM, '{"conectado":true}', False, base_2c,
+                               publicar, ahora=ahora_2c)
+prueba("sin alertas de gas pendientes no se dice nada", n == 0 and apuntes == [],
+       apuntes)
+
+apuntes, publicar = publicar_que_recoge()
+orquestador_modulo.enrutar(TOPICO_VM, '{"conectado":true}', base_2c, publicar,
+                           retenido=False)
+prueba("enrutar manda el estado de un satelite a al_estado_satelite, no a alertas",
+       base_2c.obtener_alerta("satelite-vm") is None and apuntes == [], apuntes)
+prueba("el orquestador se suscribe al estado de todos los satelites",
+       config.TOPICO_SATELITE_ESTADO == "casa/sala/satelite/+/estado")
+base_2c.cerrar()
+config.UBICACION_GAS = ubicacion_original
 
 
 print("\n" + "=" * 66)

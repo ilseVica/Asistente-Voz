@@ -106,8 +106,10 @@ class ClienteMQTT:
         # servicio escucha gas, ayuda y lo que reconocio el servicio de voz, y nada
         # mas. No se suscribe a `alerta/#` ni a `casa/#` a proposito, para que un
         # topico nuevo no empiece a llegar sin revisarlo.
+        # El estado de los satelites (Fase 2C) es para repetirle el gas sin
+        # atender al que se conecta (`alertas.al_estado_satelite`).
         for topico in (config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA,
-                       config.TOPICO_VOZ_TEXTO):
+                       config.TOPICO_VOZ_TEXTO, config.TOPICO_SATELITE_ESTADO):
             resultado, _ = self.cliente.subscribe(topico, qos=config.QOS_ALERTAS)
             if resultado != mqtt.MQTT_ERR_SUCCESS:
                 registro.error("NO se pudo suscribir a %s (error %d). La ACL de "
@@ -139,7 +141,8 @@ class ClienteMQTT:
         except UnicodeDecodeError:
             registro.warning("descartado de %s: no es UTF-8", mensaje.topic)
             return
-        registro.info("mensaje en %s: %s", mensaje.topic, cuerpo)
+        registro.info("mensaje en %s%s: %s", mensaje.topic,
+                      " (retenido)" if mensaje.retain else "", cuerpo)
         # El `try` NO es opcional, y esto es de lo más importante del archivo.
         #
         # `on_message` se llama DENTRO del hilo de red de paho. Si la función de
@@ -150,8 +153,12 @@ class ClienteMQTT:
         # de llegar a Telegram, y para entonces el corte lleva horas.
         #
         # Un mensaje mal formado no puede costar la recepción del resto.
+        #
+        # `retain` le dice al de arriba si es un retenido que llega por suscribirse
+        # (y no algo que acaba de pasar): MQTT 3.1.1 lo pone a 1 solo en ese caso,
+        # aunque quien publico lo hubiera retenido.
         try:
-            self.al_recibir(mensaje.topic, cuerpo)
+            self.al_recibir(mensaje.topic, cuerpo, mensaje.retain)
         except Exception:  # noqa: BLE001
             registro.exception("fallo al procesar el mensaje de %s; el resto de "
                                "los mensajes se sigue recibiendo", mensaje.topic)

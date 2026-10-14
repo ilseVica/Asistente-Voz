@@ -163,7 +163,9 @@ MQTT_SESION_LIMPIA_PANEL = True
 TOPICO_LUZ_ESTADO = "casa/sala/luz/estado"
 TOPICO_SENSORES = "casa/sala/sensores"
 TOPICO_NODO_ESTADO = "casa/sala/nodo/estado"
-TOPICO_SATELITE_ESTADO = "casa/sala/satelite/estado"
+# Un estado POR satelite (Fase 2C): `casa/sala/satelite/<client_id>/estado`. Es
+# un patron con `+`: el panel y el orquestador se suscriben a todos a la vez.
+TOPICO_SATELITE_ESTADO = "casa/sala/satelite/+/estado"
 TOPICO_ENLACE_SITIO = "$SYS/broker/connection/+/state"
 
 # El WebSocket. El servidor manda `latido` cada 20 s y espera un `pong`; si pasan

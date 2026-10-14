@@ -45,6 +45,25 @@ def aviso_atendida(tipo: str) -> str:
     return AVISO_ATENDIDA.get(tipo, AVISO_ATENDIDA_OTRO)
 
 
+# Las alertas habladas (Fase 2C): las dice el satelite en cuanto el orquestador
+# registra la alerta. `{lugar}` lleva su articulo (`lugar_con_articulo`).
+ALERTA_HABLADA_GAS = (
+    "Atención: se detectó gas en {lugar}. Por favor, no encienda ni apague luces "
+    "ni aparatos, abra las ventanas y salga de la casa. Estoy avisando a su familia."
+)
+ALERTA_HABLADA_AYUDA = ("No se preocupe, estoy avisando a su familia. Alguien se "
+                        "comunicará con usted pronto.")
+
+
+def alerta_hablada(tipo: str, lugar: str):
+    """El texto hablado de una alerta, o `None` si el tipo no tiene."""
+    if tipo == "gas":
+        return ALERTA_HABLADA_GAS.format(lugar=lugar)
+    if tipo == "ayuda":
+        return ALERTA_HABLADA_AYUDA
+    return None
+
+
 # =============================================================================
 # Utilidades de redacción
 # =============================================================================
@@ -162,7 +181,7 @@ ATENDIDA_FRASE_OTRO = "El aviso se marcó como atendido"
 def atendida(tipo: str, cuando: int, id_alerta: str) -> str:
     return ATENDIDA.format(
         frase=ATENDIDA_FRASE.get(tipo, ATENDIDA_FRASE_OTRO),
-        hora=time.strftime("%H:%M:%S", time.localtime(cuando)),
+        hora=time.strftime("%H:%M", time.localtime(cuando)),
         id=id_alerta,
     )
 

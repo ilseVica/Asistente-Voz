@@ -9,7 +9,7 @@ vez: no hay ningún estado que pueda quedarse viejo en el disco.
 ## Por qué en memoria
 
 Porque el estado de la casa ya está retenido en el broker. `luz/estado`, `nodo/estado`
-y `satelite/estado` son retenidos que el broker entrega a quien se suscriba, así que
+y `satelite/<client_id>/estado` son retenidos que el broker entrega a quien se suscriba, así que
 la copia del panel es una caché con una sola fuente de verdad detrás. Guardarla en
 SQLite añadiría una tabla que hay que migrar, purgar y poner de acuerdo con MQTT, y
 que se pondría vieja si el panel no arrancara.
@@ -66,6 +66,7 @@ tocarlo.
 import asyncio
 import json
 import logging
+import re
 import threading
 import time
 
@@ -150,6 +151,15 @@ class Oyente:
             return False
 
 
+_TOPICO_SATELITE = re.compile(r"\Acasa/sala/satelite/([^/+#]+)/estado\Z")
+
+
+def _client_id_satelite(topico: str):
+    """`casa/sala/satelite/<client_id>/estado` -> client_id; si no, `None`."""
+    coincide = _TOPICO_SATELITE.match(topico or "")
+    return coincide.group(1) if coincide else None
+
+
 class EstadoSala:
     """Lo último que ha llegado de cada tópico, más quién está escuchando."""
 
@@ -178,10 +188,20 @@ class EstadoSala:
         if componente is None:
             return
         ahora = int(self.reloj())
+        entrada = {"carga": _cargar(cuerpo), "recibido_en": ahora, "topico": topico}
         with self._candado:
-            self._datos[componente] = {"carga": _cargar(cuerpo),
-                                       "recibido_en": ahora,
-                                       "topico": topico}
+            if componente == "satelite":
+                # Uno por satelite (Fase 2C), con su client id. Un retenido vacio
+                # es un satelite que se dio de baja: se olvida.
+                satelites = dict(self._datos.get("satelites", {}))
+                client_id = _client_id_satelite(topico)
+                if cuerpo == "":
+                    satelites.pop(client_id, None)
+                else:
+                    satelites[client_id] = entrada
+                self._datos["satelites"] = satelites
+            else:
+                self._datos[componente] = entrada
             datos = dict(self._datos)
         for evento in self._eventos_de(componente, datos, ahora):
             self.emitir(evento)
@@ -200,7 +220,7 @@ class EstadoSala:
             return "sensores"
         if topico == config.TOPICO_NODO_ESTADO:
             return "nodo"
-        if topico == config.TOPICO_SATELITE_ESTADO:
+        if _client_id_satelite(topico) is not None:
             return "satelite"
         return "puente" if _es_enlace_sitio(topico) else None
 
@@ -223,6 +243,7 @@ class EstadoSala:
             "sensores": self.bloque_sensores(datos, ahora),
             "nodo": self.bloque_nodo(datos, ahora),
             "satelite": self.bloque_satelite(datos, ahora),
+            "satelites": self.bloque_satelite(datos, ahora)["satelites"],
             "sitio": self.bloque_sitio(datos, ahora),
             "modo": self.modo,
             "alertas": _conteo(base.contar_por_estado()),
@@ -281,17 +302,31 @@ class EstadoSala:
                 "ip": carga.get("ip"), "fw": carga.get("fw")}
 
     def bloque_satelite(self, datos, ahora) -> dict:
-        entrada = datos.get("satelite")
-        if entrada is None:
-            # El satélite todavía no existe. `no_instalado` y no `sin_datos`: no hay
+        """El estado agregado de los satélites, con la MISMA forma de siempre.
+
+        La app lee `satelite` como un componente (`estado`, `recibido_en`), así que
+        se conserva esa forma: `conectado` si al menos uno lo está. Al lado va
+        `satelites`, `{client_id: bool}`, que la app de hoy ignora.
+
+        La presencia sale de `conectado` (el estado al conectar y el Last Will), no
+        de la antigüedad: el satélite publica su estado una sola vez al conectarse,
+        así que con la regla de los 90 s salía «desconectado» a los 90 s de estar
+        conectado. Si se cae, el broker publica su `{"conectado": false}`.
+        """
+        satelites = datos.get("satelites") or {}
+        if not satelites:
+            # Ningún satélite todavía. `no_instalado` y no `sin_datos`: no hay
             # nadie a quien esperar, así que no es un fallo y no lleva cartel.
-            return {"estado": NO_INSTALADO, "recibido_en": None}
-        carga = entrada["carga"] if isinstance(entrada["carga"], dict) else {}
-        if carga.get("conectado") is False:
-            estado = DESCONECTADO
-        else:
-            estado = self._estado_por_antiguedad(entrada, ahora)
-        return {"estado": estado, "recibido_en": entrada["recibido_en"]}
+            return {"estado": NO_INSTALADO, "recibido_en": None, "satelites": {}}
+        por_satelite = {}
+        for client_id, entrada in satelites.items():
+            carga = entrada["carga"] if isinstance(entrada["carga"], dict) else {}
+            por_satelite[client_id] = carga.get("conectado") is True
+        return {
+            "estado": CONECTADO if any(por_satelite.values()) else DESCONECTADO,
+            "recibido_en": max(e["recibido_en"] for e in satelites.values()),
+            "satelites": por_satelite,
+        }
 
     def bloque_sitio(self, datos, ahora) -> dict:
         """El estado del sitio, según `MODO_SITIO`. Propuesta 4.4."""

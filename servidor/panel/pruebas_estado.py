@@ -175,10 +175,43 @@ prueba("y un retained normal vuelve a conectado",
 # El satélite: en cuanto llega UNA vez, deja de ser `no_instalado`.
 prueba("el satélite sigue en `no_instalado` mientras no llegue nunca",
        sala.instantanea(base1)["satelite"]["estado"] == "no_instalado")
-sala.recibir(config.TOPICO_SATELITE_ESTADO, '{"conectado":true}')
+sala.recibir("casa/sala/satelite/satelite-sala/estado", '{"conectado":true}')
 inst = sala.instantanea(base1)
 prueba("pero en cuanto llega una vez pasa a `conectado`",
        inst["satelite"]["estado"] == "conectado", inst["satelite"])
+
+# Fase 2C: estado POR satelite, y el agregado con la forma de siempre.
+prueba("`satelites` lista cada satelite con un booleano",
+       inst["satelites"] == {"satelite-sala": True}, inst["satelites"])
+prueba("`satelite` sigue siendo un componente (estado y recibido_en) para la app",
+       set(inst["satelite"]) >= {"estado", "recibido_en"}, inst["satelite"])
+sala.recibir("casa/sala/satelite/satelite-vm/estado", '{"conectado":true}')
+sala.recibir("casa/sala/satelite/satelite-sala/estado", '{"conectado":false}')
+inst = sala.instantanea(base1)
+prueba("con uno caido y otro conectado, el agregado es `conectado`",
+       inst["satelite"]["estado"] == "conectado"
+       and inst["satelites"] == {"satelite-sala": False, "satelite-vm": True},
+       inst)
+sala.recibir("casa/sala/satelite/satelite-vm/estado", '{"conectado":false}')
+inst = sala.instantanea(base1)
+prueba("con los dos caidos, el agregado es `desconectado`",
+       inst["satelite"]["estado"] == "desconectado"
+       and inst["satelites"] == {"satelite-sala": False, "satelite-vm": False},
+       inst)
+sala.recibir("casa/sala/satelite/satelite-vm/estado", '{"conectado":true}')
+reloj[0] += 500
+prueba("un satelite conectado NO caduca a los 90 s (solo publica al conectar)",
+       sala.instantanea(base1)["satelite"]["estado"] == "conectado",
+       sala.instantanea(base1)["satelite"])
+sala.recibir("casa/sala/satelite/satelite-vm/estado", "")
+prueba("un retenido vacio da de baja a ese satelite",
+       "satelite-vm" not in sala.instantanea(base1)["satelites"],
+       sala.instantanea(base1)["satelites"])
+prueba("el topico unico de antes ya no es del satelite",
+       EstadoSala.componente_de("casa/sala/satelite/estado") is None)
+prueba("ni un client id con comodin",
+       EstadoSala.componente_de("casa/sala/satelite/+/estado") is None)
+sala.recibir("casa/sala/satelite/satelite-sala/estado", '{"conectado":true}')
 
 # Los sensores: los nombres del contrato se renombran para la interfaz.
 sala.recibir(config.TOPICO_SENSORES,
@@ -522,7 +555,7 @@ leidos = {config.TOPICO_LUZ_ESTADO, config.TOPICO_SENSORES,
           config.TOPICO_NODO_ESTADO, config.TOPICO_SATELITE_ESTADO,
           config.TOPICO_ENLACE_SITIO}
 esperados = {"casa/sala/luz/estado", "casa/sala/sensores",
-             "casa/sala/nodo/estado", "casa/sala/satelite/estado",
+             "casa/sala/nodo/estado", "casa/sala/satelite/+/estado",
              "$SYS/broker/connection/+/state"}
 prueba("el panel lee exactamente los cinco tópicos que le deja la ACL",
        leidos == esperados, sorted(leidos ^ esperados))

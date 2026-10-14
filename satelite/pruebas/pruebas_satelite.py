@@ -15,6 +15,7 @@ import asyncio
 import os
 import sys
 import tempfile
+import time
 import unittest
 import wave
 
@@ -60,7 +61,7 @@ class FakeRep:
     def __init__(self):
         self.dichos = []
 
-    async def decir(self, texto):
+    async def decir(self, texto, **_kw):
         self.dichos.append(texto)
         return reloj_ms()
 
@@ -78,7 +79,7 @@ class FakeRepSintetizaYReproduce:
         self.duracion = duracion
         self.al_sintesis = None
 
-    async def decir(self, texto):
+    async def decir(self, texto, **_kw):
         self.dichos.append(texto)
         t_sonido = reloj_ms()
         if self.al_sintesis is not None:
@@ -528,6 +529,387 @@ class TestTextos(unittest.TestCase):
         self.assertEqual(MENSAJE_SIN_CONEXION,
                          "Disculpe, en este momento no tengo conexión. Por favor, "
                          "inténtelo de nuevo en unos minutos.")
+
+
+class FakeRepLento:
+    """Tarda en «decir»: sirve para que una alerta lo interrumpa."""
+
+    def __init__(self, duracion=1.0):
+        self.dichos = []
+        self.cortados = []
+        self.duracion = duracion
+
+    async def decir(self, texto, **_kw):
+        self.dichos.append(texto)
+        try:
+            await asyncio.sleep(self.duracion)
+        except asyncio.CancelledError:
+            self.cortados.append(texto)
+            raise
+        return reloj_ms()
+
+
+def _ahora_s():
+    return int(reloj_ms() / 1000)
+
+
+class TestDosSatelites(unittest.IsolatedAsyncioTestCase):
+    """Fase 2C: el contrato de satelite/decir con dos satelites."""
+
+    def _satelite(self, client_id):
+        tmp = tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False)
+        tmp.close()
+        self.addCleanup(lambda: os.path.exists(tmp.name) and os.unlink(tmp.name))
+        cfg = Config(altura_max_s=8.0, client_id=client_id)
+        rep = FakeRep()
+        nucleo = Nucleo(cfg, rep, RegistroLatencias(tmp.name),
+                        asyncio.get_running_loop())
+        nucleo.ws = FakeWS()
+        nucleo.fuente = FuenteQuieta()
+        tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())
+        self.addCleanup(tarea.cancel)
+        return nucleo, rep
+
+    async def asyncSetUp(self):
+        self.sala, self.rep_sala = self._satelite("satelite-sala")
+        self.vm, self.rep_vm = self._satelite("satelite-vm")
+
+    def _a_los_dos(self, carga):
+        self.sala.al_decir(dict(carga))
+        self.vm.al_decir(dict(carga))
+
+    async def _pausa(self):
+        await asyncio.sleep(0.1)
+
+    async def test_frase_id_lleva_el_client_id(self):
+        frase = self.vm.abrir_frase()
+        self.assertRegex(frase.frase_id, r"^satelite-vm-\d+-1$")
+
+    async def test_respuesta_la_dice_solo_el_emisor(self):
+        self.vm.abrir_frase()
+        self.vm.cerrar_frase()
+        fid = self.vm.turno_pendiente.frase_id
+        self._a_los_dos({"texto": "Usted dijo: hola.", "tipo": "respuesta",
+                         "frase_id": fid, "ts": _ahora_s()})
+        await self._pausa()
+        self.assertEqual(self.rep_vm.dichos, ["Usted dijo: hola."])
+        self.assertEqual(self.rep_sala.dichos, [])
+
+    async def test_respuesta_duplicada_con_frase_id_no_se_repite(self):
+        self.vm.abrir_frase()
+        self.vm.cerrar_frase()
+        fid = self.vm.turno_pendiente.frase_id
+        for _ in range(2):
+            self.vm.al_decir({"texto": "Usted dijo: hola.", "tipo": "respuesta",
+                              "frase_id": fid, "ts": _ahora_s()})
+        await self._pausa()
+        self.assertEqual(self.rep_vm.dichos, ["Usted dijo: hola."])
+
+    async def test_respuesta_sin_frase_id_la_dicen_los_dos(self):
+        with self.assertLogs("satelite", level="WARNING") as aviso:
+            self._a_los_dos({"texto": "Usted dijo: hola.", "tipo": "respuesta",
+                             "ts": _ahora_s()})
+        await self._pausa()
+        self.assertEqual(self.rep_sala.dichos, ["Usted dijo: hola."])
+        self.assertEqual(self.rep_vm.dichos, ["Usted dijo: hola."])
+        self.assertTrue(any("sin frase_id" in linea for linea in aviso.output))
+
+    async def test_alerta_la_dicen_los_dos(self):
+        self._a_los_dos({"texto": "Atención: gas.", "tipo": "alerta",
+                         "ts": _ahora_s()})
+        await self._pausa()
+        self.assertEqual(self.rep_sala.dichos, ["Atención: gas."])
+        self.assertEqual(self.rep_vm.dichos, ["Atención: gas."])
+
+    async def test_aviso_lo_dicen_los_dos(self):
+        self._a_los_dos({"texto": "Su familia ya recibió...", "tipo": "aviso",
+                         "ts": _ahora_s()})
+        await self._pausa()
+        self.assertEqual(len(self.rep_sala.dichos), 1)
+        self.assertEqual(len(self.rep_vm.dichos), 1)
+
+    async def test_destino_lo_dice_solo_uno(self):
+        self._a_los_dos({"texto": "Atención: gas.", "tipo": "alerta",
+                         "destino": "satelite-vm", "ts": _ahora_s()})
+        await self._pausa()
+        self.assertEqual(self.rep_vm.dichos, ["Atención: gas."])
+        self.assertEqual(self.rep_sala.dichos, [])
+
+    async def test_destino_filtra_tambien_una_respuesta(self):
+        self._a_los_dos({"texto": "hola", "tipo": "respuesta",
+                         "destino": "satelite-sala", "ts": _ahora_s()})
+        await self._pausa()
+        self.assertEqual(self.rep_vm.dichos, [])
+
+
+class TestAlertaPrioridad(Base):
+    async def test_alerta_de_hace_30_s_se_dice_y_una_respuesta_no(self):
+        nucleo = self.hacer_nucleo()
+        tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())
+        try:
+            nucleo.al_decir({"texto": "vieja", "tipo": "respuesta",
+                             "ts": _ahora_s() - 30})
+            nucleo.al_decir({"texto": "Atención: gas.", "tipo": "alerta",
+                             "ts": _ahora_s() - 30})
+            await asyncio.sleep(0.1)
+            self.assertEqual(self.rep.dichos, ["Atención: gas."])
+        finally:
+            tarea.cancel()
+
+    async def test_alerta_de_hace_una_hora_no_se_dice(self):
+        nucleo = self.hacer_nucleo()
+        tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())
+        try:
+            nucleo.al_decir({"texto": "Atención: gas.", "tipo": "alerta",
+                             "ts": _ahora_s() - 3600})
+            await asyncio.sleep(0.1)
+            self.assertEqual(self.rep.dichos, [])
+        finally:
+            tarea.cancel()
+
+    async def test_alerta_corta_una_respuesta_que_suena(self):
+        rep = FakeRepLento(duracion=1.0)
+        nucleo = self.hacer_nucleo(repes=rep)
+        tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())
+        try:
+            nucleo.al_decir({"texto": "respuesta larga", "tipo": "respuesta",
+                             "ts": _ahora_s()})
+            await self.esperar(lambda: rep.dichos)
+            nucleo.al_decir({"texto": "Atención: gas.", "tipo": "alerta",
+                             "ts": _ahora_s()})
+            await self.esperar(lambda: len(rep.dichos) == 2)
+            self.assertEqual(rep.cortados, ["respuesta larga"])
+            self.assertEqual(rep.dichos, ["respuesta larga", "Atención: gas."])
+        finally:
+            tarea.cancel()
+
+    async def test_alerta_pasa_delante_en_la_cola(self):
+        rep = FakeRepLento(duracion=0.2)
+        nucleo = self.hacer_nucleo(repes=rep)
+        tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())
+        try:
+            nucleo.al_decir({"texto": "aviso 1", "tipo": "aviso", "ts": _ahora_s()})
+            await self.esperar(lambda: rep.dichos)
+            nucleo.al_decir({"texto": "aviso 2", "tipo": "aviso", "ts": _ahora_s()})
+            nucleo.al_decir({"texto": "gas", "tipo": "alerta", "ts": _ahora_s()})
+            await self.esperar(lambda: len(rep.dichos) == 3, timeout=3)
+            # «aviso 1» se corta, la alerta va antes que «aviso 2».
+            self.assertEqual(rep.dichos, ["aviso 1", "gas", "aviso 2"])
+        finally:
+            tarea.cancel()
+
+    async def test_una_alerta_no_corta_otra_alerta(self):
+        rep = FakeRepLento(duracion=0.2)
+        nucleo = self.hacer_nucleo(repes=rep)
+        tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())
+        try:
+            nucleo.al_decir({"texto": "gas 1", "tipo": "alerta", "ts": _ahora_s()})
+            await self.esperar(lambda: rep.dichos)
+            nucleo.al_decir({"texto": "gas 2", "tipo": "alerta", "ts": _ahora_s()})
+            await self.esperar(lambda: len(rep.dichos) == 2, timeout=3)
+            self.assertEqual(rep.cortados, [])
+        finally:
+            tarea.cancel()
+
+
+class TestTopicoEstado(unittest.TestCase):
+    def test_por_satelite(self):
+        self.assertEqual(satelite.topico_estado_de(Config(client_id="satelite-vm")),
+                         "casa/sala/satelite/satelite-vm/estado")
+
+    def test_config_viejo_se_corrige(self):
+        cfg = Config(client_id="satelite-sala",
+                     topico_estado="casa/sala/satelite/estado")
+        with self.assertLogs("satelite", level="WARNING"):
+            self.assertEqual(satelite.topico_estado_de(cfg),
+                             "casa/sala/satelite/satelite-sala/estado")
+
+    def test_client_id_con_comodin_se_rechaza(self):
+        with self.assertRaises(ValueError):
+            satelite.topico_estado_de(Config(client_id="sat/+"))
+
+
+def _wav(ruta, frecuencia=16000, canales=1, ancho=2, cuadros=1600):
+    with wave.open(ruta, "wb") as w:
+        w.setnchannels(canales)
+        w.setsampwidth(ancho)
+        w.setframerate(frecuencia)
+        w.writeframes(b"\x01" * (ancho * canales * cuadros))
+
+
+class TestEntradaArchivo(Base):
+    def test_wav_correcto(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = os.path.join(tmp, "bien.wav")
+            _wav(ruta)
+            self.assertEqual(len(satelite.leer_wav_estricto(ruta)), 3200)
+
+    def test_rechazos_claros(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            casos = (({"frecuencia": 22050}, "22050 Hz en vez de 16000 Hz"),
+                     ({"canales": 2}, "2 canales en vez de 1"),
+                     ({"ancho": 1}, "8 bits en vez de 16"))
+            for parametros, mensaje in casos:
+                ruta = os.path.join(tmp, "malo.wav")
+                _wav(ruta, **parametros)
+                with self.assertRaisesRegex(ValueError, mensaje):
+                    satelite.leer_wav_estricto(ruta)
+            ruta = os.path.join(tmp, "texto.wav")
+            with open(ruta, "w") as archivo:
+                archivo.write("no soy un wav")
+            with self.assertRaisesRegex(ValueError, "no es un WAV PCM valido"):
+                satelite.leer_wav_estricto(ruta)
+            with self.assertRaisesRegex(ValueError, "no existe"):
+                satelite.leer_wav_estricto(os.path.join(tmp, "no.wav"))
+            with self.assertRaisesRegex(ValueError, "absoluta"):
+                satelite.leer_wav_estricto("relativa.wav")
+
+    async def test_socket_archivo_manda_la_frase(self):
+        nucleo = self.hacer_nucleo()
+        nucleo.cfg.fuente = "archivo"
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta_wav = os.path.join(tmp, "frase.wav")
+            _wav(ruta_wav, cuadros=16000)  # 1 s = 10 tramas
+            ruta_sock = os.path.join(tmp, "s.sock")
+            servidor = await ServidorTecla(ruta_sock, nucleo).servir()
+            try:
+                reader, writer = await asyncio.open_unix_connection(ruta_sock)
+                writer.write(b"A " + ruta_wav.encode() + b"\n")
+                await writer.drain()
+                writer.write_eof()
+                respuesta = (await reader.read()).decode()
+                writer.close()
+                self.assertRegex(respuesta, r"^ok satelite-sala-\d+-1$")
+                await self.esperar(lambda: nucleo.turno_pendiente is not None)
+                self.assertEqual(len(nucleo.ws.frames), 10)
+                self.assertEqual(nucleo.ws.cuantos("frase"), 1)
+                self.assertTrue(any(o.get("fin") for o in nucleo.ws.json))
+            finally:
+                servidor.close()
+
+    async def test_socket_archivo_rechaza_y_lo_dice(self):
+        nucleo = self.hacer_nucleo()
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta_wav = os.path.join(tmp, "malo.wav")
+            _wav(ruta_wav, canales=2)
+            ruta_sock = os.path.join(tmp, "s.sock")
+            servidor = await ServidorTecla(ruta_sock, nucleo).servir()
+            try:
+                reader, writer = await asyncio.open_unix_connection(ruta_sock)
+                writer.write(b"A " + ruta_wav.encode() + b"\n")
+                writer.write_eof()
+                respuesta = (await reader.read()).decode()
+                writer.close()
+            finally:
+                servidor.close()
+        self.assertIn("error: el WAV no es PCM 16 kHz mono 16 bits", respuesta)
+        self.assertEqual(nucleo.ws.cuantos("frase"), 0)
+
+    async def test_tecla_ignorada_con_fuente_archivo(self):
+        nucleo = self.hacer_nucleo()
+        nucleo.cfg.fuente = "archivo"
+        nucleo.presionar()
+        self.assertIsNone(nucleo.frase)
+
+    def test_tecla_py_archivo_contra_el_socket(self):
+        """El cliente real (tecla.py) con un servidor de socket minimo."""
+        import socket
+        import subprocess
+        import threading
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta_sock = os.path.join(tmp, "s.sock")
+            recibido = []
+            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            srv.bind(ruta_sock)
+            srv.listen(1)
+
+            def atender():
+                con, _ = srv.accept()
+                datos = b""
+                while True:
+                    trozo = con.recv(4096)
+                    if not trozo:
+                        break
+                    datos += trozo
+                recibido.append(datos)
+                con.sendall(b"ok satelite-vm-1-1")
+                con.close()
+
+            hilo = threading.Thread(target=atender)
+            hilo.start()
+            tecla = os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), "tecla.py")
+            salida = subprocess.run(
+                [sys.executable, tecla, "--socket", ruta_sock, "archivo", "x.wav"],
+                capture_output=True, text=True, cwd=tmp, timeout=10)
+            hilo.join(5)
+            srv.close()
+        self.assertEqual(salida.returncode, 0, salida.stderr)
+        self.assertEqual(salida.stdout.strip(), "ok satelite-vm-1-1")
+        self.assertEqual(recibido, [b"A " + os.path.join(tmp, "x.wav").encode()
+                                    + b"\n"])
+
+
+class TestSalidaArchivo(unittest.TestCase):
+    def test_nombre_y_contenido(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ahora = time.mktime((2026, 10, 14, 1, 2, 3, 0, 0, -1))
+            ruta = satelite.guardar_salida(tmp, b"RIFFdatos", "respuesta",
+                                           "satelite-vm-1791-1", ahora=ahora)
+            self.assertEqual(os.path.basename(ruta),
+                             "20261014-010203_respuesta_satelite-vm-1791-1.wav")
+            with open(ruta, "rb") as archivo:
+                self.assertEqual(archivo.read(), b"RIFFdatos")
+            ruta2 = satelite.guardar_salida(tmp, b"x", "alerta", None, ahora=ahora)
+            self.assertEqual(os.path.basename(ruta2),
+                             "20261014-010203_alerta_sistema.wav")
+            ruta3 = satelite.guardar_salida(tmp, b"y", "alerta", None, ahora=ahora)
+            self.assertEqual(os.path.basename(ruta3),
+                             "20261014-010203_alerta_sistema-2.wav")
+            self.assertFalse([n for n in os.listdir(tmp) if n.endswith(".parcial")])
+
+    def test_conserva_solo_los_ultimos_50(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = time.mktime((2026, 10, 14, 0, 0, 0, 0, 0, -1))
+            for i in range(55):
+                ruta = satelite.guardar_salida(tmp, b"x", "aviso", "f-%d" % i,
+                                               ahora=base + i)
+                os.utime(ruta, ns=(int((base + i) * 1e9),) * 2)
+            nombres = sorted(os.listdir(tmp))
+            self.assertEqual(len(nombres), 50)
+            self.assertNotIn("20261014-000000_aviso_f-0.wav", nombres)
+            self.assertIn("20261014-000054_aviso_f-54.wav", nombres)
+
+    def test_frase_id_raro_no_escapa_de_la_carpeta(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = satelite.guardar_salida(tmp, b"x", "respuesta", "../../etc/x")
+            self.assertEqual(os.path.dirname(ruta), tmp)
+
+    def test_config_de_la_vm(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False,
+                                         encoding="utf-8") as archivo:
+            archivo.write('[audio]\nfuente = "archivo"\n'
+                          '[salida]\nmodo = "archivo"\ncarpeta = "/tmp/x"\n')
+        try:
+            cfg = satelite.cargar_config(archivo.name)
+        finally:
+            os.unlink(archivo.name)
+        self.assertEqual((cfg.fuente, cfg.salida_modo, cfg.salida_carpeta,
+                          cfg.salida_max), ("archivo", "archivo", "/tmp/x", 50))
+
+    def test_config_sin_carpeta_se_rechaza(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False,
+                                         encoding="utf-8") as archivo:
+            archivo.write('[salida]\nmodo = "archivo"\n')
+        try:
+            with self.assertRaisesRegex(ValueError, "carpeta"):
+                satelite.cargar_config(archivo.name)
+        finally:
+            os.unlink(archivo.name)
+
+    def test_laptop_por_defecto_sin_cambios(self):
+        cfg = Config()
+        self.assertEqual((cfg.fuente, cfg.salida_modo), ("pipewire", "audio"))
 
 
 if __name__ == "__main__":

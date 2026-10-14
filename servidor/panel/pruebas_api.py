@@ -351,9 +351,9 @@ titulo("4. El estado")
 r = cliente.get("/api/estado", headers=cab(token_marta))
 inst = r.json()
 claves = set(inst)
-esperadas = {"servidor_hora", "luz", "sensores", "nodo", "satelite", "sitio", "modo",
-             "alertas", "familiares", "conexiones"}
-prueba("/api/estado trae los diez campos de la instantánea",
+esperadas = {"servidor_hora", "luz", "sensores", "nodo", "satelite", "satelites",
+             "sitio", "modo", "alertas", "familiares", "conexiones"}
+prueba("/api/estado trae los once campos de la instantánea (Fase 2C: `satelites`)",
        claves == esperadas, claves.symmetric_difference(esperadas))
 prueba("cada bloque de la casa lleva `recibido_en`, aunque sea null",
        all("recibido_en" in inst[c] for c in ("luz", "sensores", "nodo", "satelite",

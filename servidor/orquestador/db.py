@@ -1182,6 +1182,19 @@ class BaseDatos:
                 "SELECT * FROM alertas WHERE id = ?", (id_alerta,)
             ).fetchone()
 
+    def gas_sin_atender_desde(self, desde: int) -> list:
+        """Alertas de gas sin atender ni descartar creadas desde `desde`.
+
+        Las usa la repeticion al conectarse un satelite (Fase 2C): un satelite
+        que entra con un gas abierto lo dice, aunque no estuviera cuando llego.
+        """
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT * FROM alertas WHERE tipo = 'gas' AND resuelto_en IS NULL "
+                "AND descartada_en IS NULL AND creado_en >= ? ORDER BY creado_en",
+                (desde,),
+            ))
+
     def obtener_envio(self, id_alerta: str, chat_id: str):
         with _candado:
             return self.conexion.execute(

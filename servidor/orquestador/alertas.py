@@ -352,7 +352,93 @@ def resolver(base, publicar, id_alerta: str, ahora: int = None,
     return fila, fresca
 
 
-def procesar(topico: str, cuerpo: str, base) -> bool:
+# --- Alertas habladas (Fase 2C) ------------------------------------------------
+
+# Cuanto hacia atras se repite un gas sin atender a un satelite que se conecta.
+SEGUNDOS_REPETIR_GAS = 2 * 3600
+
+# `casa/sala/satelite/<client_id>/estado`: el client id es el cuarto nivel.
+_TOPICO_ESTADO_SATELITE = re.compile(r"\Acasa/sala/satelite/([^/+#]+)/estado\Z")
+
+
+def client_id_de_estado(topico: str):
+    """El client id de un topico de estado de satelite, o `None` si no lo es."""
+    coincide = _TOPICO_ESTADO_SATELITE.match(topico or "")
+    return coincide.group(1) if coincide else None
+
+
+def anunciar(tipo: str, publicar, destino: str = None, ahora: int = None) -> bool:
+    """Publica en `satelite/decir` la alerta hablada. Devuelve si se publico.
+
+    Tipo `alerta`, con `ts` de AHORA (el de la publicacion, no el de la alerta):
+    asi la regla de antiguedad del satelite la deja pasar. Sin `destino`, la dicen
+    todos los satelites; con `destino`, solo ese.
+
+    Nunca lanza: un fallo aqui no puede impedir que la alerta llegue a la familia
+    por Telegram, que va por otro camino (la cola), y ya esta guardada.
+    """
+    texto = textos.alerta_hablada(tipo, textos.lugar_con_articulo(config.UBICACION_GAS))
+    if texto is None or publicar is None:
+        return False
+    carga = {"texto": texto, "tipo": "alerta",
+             "ts": int(time.time()) if ahora is None else ahora}
+    if destino is not None:
+        carga["destino"] = destino
+    try:
+        publicar(config.TOPICO_SATELITE_DECIR, carga, qos=1)
+    except Exception as error:  # noqa: BLE001
+        registro.error("no se pudo publicar la alerta hablada (%s): %s", tipo,
+                       sanear_modulo.sanear(error))
+        return False
+    registro.warning("alerta hablada de %s publicada en satelite/decir%s", tipo,
+                     " para %s" % destino if destino else "")
+    return True
+
+
+def al_estado_satelite(topico: str, cuerpo: str, retenido: bool, base, publicar,
+                       ahora: int = None) -> int:
+    """Un satelite cambio de estado. Devuelve cuantas alertas se le repitieron.
+
+    Solo reacciona al paso a `conectado: true` de un mensaje NO retenido. Los
+    retenidos llegan cada vez que el orquestador se suscribe (al arrancar o al
+    reconectar con el broker), y no significan que el satelite acabe de entrar: si
+    contaran, cada reinicio del orquestador repetiria el gas en todas las casas.
+
+    Lo que se repite, y solo a ese satelite (`destino`), es cada alerta de gas sin
+    atender de las ultimas 2 horas. Si no hay ninguna, no se dice nada.
+    """
+    client_id = client_id_de_estado(topico)
+    if client_id is None:
+        return 0
+    try:
+        carga = json.loads(cuerpo)
+    except ValueError:
+        registro.warning("estado del satelite %s que no es JSON; se ignora", client_id)
+        return 0
+    if not isinstance(carga, dict) or carga.get("conectado") is not True:
+        registro.info("satelite %s: %s", client_id, "desconectado"
+                      if isinstance(carga, dict) and carga.get("conectado") is False
+                      else "estado sin conectado:true")
+        return 0
+    if retenido:
+        registro.info("satelite %s conectado (retenido): no se repite nada", client_id)
+        return 0
+    if ahora is None:
+        ahora = int(time.time())
+    pendientes = base.gas_sin_atender_desde(ahora - SEGUNDOS_REPETIR_GAS)
+    if not pendientes:
+        registro.info("satelite %s conectado; no hay gas sin atender", client_id)
+        return 0
+    repetidas = 0
+    for fila in pendientes:
+        if anunciar("gas", publicar, destino=client_id, ahora=ahora):
+            repetidas += 1
+    registro.warning("satelite %s conectado: alertas de gas sin atender que se le "
+                     "repiten: %d", client_id, repetidas)
+    return repetidas
+
+
+def procesar(topico: str, cuerpo: str, base, publicar=None) -> bool:
     """El camino completo de un mensaje. Devuelve si la alerta quedó en la cola.
 
     El orden importa y no es al revés: primero se valida, después se mira si el
@@ -399,6 +485,10 @@ def procesar(topico: str, cuerpo: str, base) -> bool:
     if not base.insertar_alerta(id_alerta, tipo, texto):
         registro.info("la alerta %s ya estaba en la cola", id_alerta)
         return False
+
+    # La casa se entera en voz alta. Va DESPUES de guardar la alerta, y un fallo
+    # aqui no la deshace: lo de la familia (Telegram, la cola) no cambia.
+    anunciar(tipo, publicar)
 
     # `insertar_alerta` ya ha creado un envio por cada familiar registrado. Que no
     # haya ninguno no es un error: el aviso queda pendiente a la espera de que se

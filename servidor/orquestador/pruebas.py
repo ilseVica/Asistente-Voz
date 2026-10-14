@@ -61,6 +61,7 @@ import db as db_modulo  # noqa: E402
 import mqtt_cliente  # noqa: E402
 import panel_acceso as panel_acceso_modulo  # noqa: E402
 import registro as registro_modulo  # noqa: E402
+import textos  # noqa: E402
 import voz  # noqa: E402
 import orquestador as orquestador_modulo  # noqa: E402
 
@@ -833,14 +834,16 @@ prueba("ni siquiera con un codigo: el silencio no depende de los argumentos",
 u = UpdateFalso("222")
 asyncio.run(cliente_bot.cmd_registro(u, ContextoFalso([])))
 prueba("a un chat NUEVO se le pide el codigo", len(u.contestado) == 1
-       and "Falta el codigo" in u.contestado[0], u.contestado)
-prueba("y se le dice que los avisos serian para los dos",
-       "los dos" in u.contestado[0], u.contestado[0])
+       and "Falta el código" in u.contestado[0], u.contestado)
+prueba("y se le dice que ya hay una persona y que ambos recibirán las alertas",
+       "Ya hay una persona registrada" in u.contestado[0]
+       and "ambos recibirán" in u.contestado[0], u.contestado[0])
 
 u = UpdateFalso("222")
 asyncio.run(cliente_bot.cmd_registro(u, ContextoFalso(["codigo-que-no-existe"])))
 prueba("un codigo invalido se rechaza y se pide otro",
-       len(u.contestado) == 1 and "No se pudo registrar" in u.contestado[0],
+       len(u.contestado) == 1
+       and u.contestado[0] == textos.registro_fallido(textos.MOTIVO_NO_EXISTE),
        u.contestado)
 prueba("y el chat NO se ha registrado igual", not base.familiar_registrado("222"))
 
@@ -858,7 +861,7 @@ prueba("y la alerta que ya se habia repartido NO se le reenvia como nueva",
        base.obtener_envio("000000-b0009-0001", "222") is None,
        base.obtener_envio("000000-b0009-0001", "222"))
 prueba("el codigo queda gastado",
-       registro_modulo.comprobar_codigo(codigo) == "ese codigo ya se uso")
+       registro_modulo.comprobar_codigo(codigo) == textos.MOTIVO_YA_USADO)
 
 # El otro caso, el que si es un backfill: la alerta entra sin NINGUN familiar, asi
 # que no se le ofrecio a nadie y sigue siendo de ahora. Sale con el primero que se
@@ -877,7 +880,8 @@ prueba("la alerta que no habia tenido a nadie sale al registrarse el primero",
        base_espera.obtener_envio("000000-b0009-0002", "333") is not None,
        base_espera.obtener_envio("000000-b0009-0002", "333"))
 prueba("y el bot se lo dice, para que no se quede creyendo que se perdio",
-       "esperando" in u_espera.contestado[0], u_espera.contestado[0])
+       "le llegará un aviso que estaba pendiente" in u_espera.contestado[0],
+       u_espera.contestado[0])
 base_espera.cerrar()
 
 # Y el primero sigue siendo familiar de pleno derecho.
@@ -944,11 +948,11 @@ texto = u.contestado[0]
 # «enviada» haría que /alertas>dijera que el aviso esta entregado mientras una de
 # las dos personas no lo tiene.
 prueba("el conteo de estados sale, y dice pendiente lo que falta",
-       "pendiente: 1" in texto and "enviada: 0" in texto, texto)
+       "Pendientes: 1" in texto and "Enviadas: 0" in texto, texto)
 prueba("con dos personas registradas, avisa de cuantas hay",
        "2 personas registradas" in texto, texto)
 prueba("y dice cuantas copias salieron y cuantas no",
-       "(1 de 2)" in texto, texto)
+       "(enviada a 1 de 2 personas)" in texto, texto)
 
 base.cerrar()
 
@@ -1020,12 +1024,12 @@ prueba("el boton lo puede pulsar CUALQUIER familiar registrado",
        base.obtener_alerta("000000-b0011-0001"))
 prueba("la edicion va al chat de quien pulso", remitente.ediciones
        and remitente.ediciones[0][0] == "222", remitente.ediciones)
-prueba("y el mensaje editado dice ATENDIDO",
-       remitente.ediciones and "ATENDIDO" in remitente.ediciones[0][1])
+prueba("y el mensaje editado dice ATENDIDA",
+       remitente.ediciones and "ATENDIDA." in remitente.ediciones[0][1])
 prueba("y sin boton, para que no se pueda pulsar otra vez",
        remitente.ediciones and remitente.ediciones[0][2] is None)
 prueba("el boton contesta al que pulso",
-       consulta.answer_texts and "Ya esta" in consulta.answer_texts[0],
+       consulta.answer_texts and consulta.answer_texts[0] == "Ya está atendida.",
        consulta.answer_texts)
 
 # Un chat que no esta en la lista no resuelve ni lee el aviso.
@@ -1612,7 +1616,7 @@ try:
     asyncio.run(bot_panel.cmd_panel(u, ContextoFalso([])))
     prueba("sin PANEL_URL el bot lo dice y no manda botón",
            getattr(u.effective_message, "teclado", None) is None
-           and u.contestado and "no esta disponible" in u.contestado[0],
+           and u.contestado and u.contestado[0] == textos.PANEL_NO_DISPONIBLE,
            u.contestado)
     config.PANEL_URL = PANEL_URL_DE_PRUEBA
 
@@ -1880,7 +1884,7 @@ if remitente.ediciones:
     prueba("y va al chat y al message_id del aviso que se mando",
            (chat, message_id) == ("551999991", envio["mensaje_id"]),
            (chat, message_id))
-    prueba("y dice ATENDIDO", "ATENDIDO" in texto, texto)
+    prueba("y dice ATENDIDA", "ATENDIDA." in texto, texto)
     prueba("y se le quitan los botones", teclado is None, teclado)
     prueba("y pone la hora en que se atendio",
            time.strftime("%H:%M:%S", time.localtime(atendida)) in texto, texto)
@@ -1966,8 +1970,8 @@ if apuntes:
     topico, carga, qos, retain = apuntes[0]
     prueba("el eco va al topico satelite/decir",
            topico == config.TOPICO_SATELITE_DECIR, topico)
-    prueba("el eco dice 'Escuche: ' + lo reconocido",
-           carga.get("texto") == "Escuché: prende la luz", carga)
+    prueba("el eco dice 'Usted dijo: ' + lo reconocido + punto",
+           carga.get("texto") == "Usted dijo: prende la luz.", carga)
     prueba("el eco lleva tipo respuesta", carga.get("tipo") == "respuesta", carga)
     prueba("el eco lleva ts entero", isinstance(carga.get("ts"), int), carga)
     prueba("el eco va con QoS 1", qos == 1, qos)
@@ -1978,9 +1982,10 @@ for texto_raro in ("[unk]", "", "   "):
     apuntes, publicar = publicar_que_recoge()
     voz.procesar('{"frase_id":"f","texto":"%s","modo":"comandos","ts":%d}'
                  % (texto_raro, AHORA), publicar)
-    prueba("texto %r contesta 'No entendi'" % texto_raro,
+    prueba("texto %r contesta la frase de no entendido" % texto_raro,
            len(apuntes) == 1
-           and apuntes[0][1].get("texto") == voz.SIN_ENTENDER, apuntes)
+           and apuntes[0][1].get("texto")
+           == "Disculpe, no le entendí. ¿Me lo puede repetir?", apuntes)
 
 # --- Cuerpos que no son una frase ---
 apuntes, publicar = publicar_que_recoge()
@@ -2229,6 +2234,163 @@ if os.path.exists(ruta_compose):
            "MQTT_VOZ_PASSWORD: ${MQTT_VOZ_PASSWORD:?" in bloque_voz, None)
 else:
     prueba("existe el docker-compose.yml con los client ids", False, ruta_compose)
+
+
+# --- Textos (Fase 2B): plurales, origen de la ayuda, lugar del gas, eco ------
+titulo("Textos de la Fase 2B")
+
+prueba("pedir registro con 0 personas: sin aviso de cuantas hay",
+       textos.pedir_registro(0) == textos.PEDIR_REGISTRO, textos.pedir_registro(0))
+prueba("pedir registro con 1 persona: singular y «ambos»",
+       textos.pedir_registro(1).endswith(
+           "Ya hay una persona registrada. Si usted se registra, ambos recibirán "
+           "las alertas."), textos.pedir_registro(1))
+prueba("pedir registro con 2 personas: plural y «todos»",
+       textos.pedir_registro(2).endswith(
+           "Ya hay 2 personas registradas. Si usted se registra, todos recibirán "
+           "las alertas."), textos.pedir_registro(2))
+
+prueba("registro listo con 0 avisos pendientes: sin «Además»",
+       textos.registro_listo(0, False) == textos.REGISTRO_LISTO,
+       textos.registro_listo(0, False))
+prueba("registro listo con 1 aviso pendiente: singular",
+       "Además, le llegará un aviso que estaba pendiente." in
+       textos.registro_listo(1, False), textos.registro_listo(1, False))
+prueba("registro listo con 2 avisos pendientes: plural",
+       "Además, le llegarán 2 avisos que estaban pendientes." in
+       textos.registro_listo(2, False), textos.registro_listo(2, False))
+prueba("registro listo con más personas: lo dice",
+       textos.registro_listo(0, True).endswith(
+           "Las próximas alertas las recibirán todas las personas registradas."),
+       textos.registro_listo(0, True))
+
+prueba("/alertas con 0 personas",
+       textos.personas_registradas(0) == "Todavía no hay ninguna persona registrada.")
+prueba("/alertas con 1 persona: singular",
+       textos.personas_registradas(1) == "Hay una persona registrada.")
+prueba("/alertas con 2 personas: plural",
+       textos.personas_registradas(2) == "Hay 2 personas registradas.")
+prueba("destinos: 1 de 2", textos.destinos(1, 2) == "enviada a 1 de 2 personas",
+       textos.destinos(1, 2))
+prueba("destinos: 2 de 2", textos.destinos(2, 2) == "enviada a las 2 personas",
+       textos.destinos(2, 2))
+prueba("destinos: 1 de 1", textos.destinos(1, 1) == "enviada a 1 persona",
+       textos.destinos(1, 1))
+prueba("destinos: 0 de 2",
+       textos.destinos(0, 2) == "todavía no se ha enviado a ninguna de las 2 personas",
+       textos.destinos(0, 2))
+prueba("destinos: sin copias, nada", textos.destinos(0, 0) == "")
+
+for codigo, esperado in (("boton", "Se pidió ayuda por medio del botón de ayuda."),
+                         ("voz", "Se pidió ayuda por medio del asistente de voz."),
+                         ("alexa", "Se pidió ayuda por medio de Alexa."),
+                         ("panel", "Se pidió ayuda por medio del panel.")):
+    texto = alertas.texto_para_telegram({"id": "a-1", "origen": codigo}, "ayuda")
+    prueba("ayuda con origen %s se traduce" % codigo, esperado in texto, texto)
+    prueba("y no deja el codigo %r a la vista" % codigo,
+           "(origen" not in texto and "medio de %s." % codigo not in texto, texto)
+
+salida_log = io.StringIO()
+manejador = logging.StreamHandler(salida_log)
+logging.getLogger("alertas").addHandler(manejador)
+texto = alertas.texto_para_telegram({"id": "a-2", "origen": "telepatia"}, "ayuda")
+logging.getLogger("alertas").removeHandler(manejador)
+prueba("ayuda con origen desconocido: «desde la casa»",
+       "Se pidió ayuda desde la casa." in texto and "telepatia" not in texto, texto)
+prueba("y el codigo desconocido queda en el log",
+       "telepatia" in salida_log.getvalue(), salida_log.getvalue())
+texto = alertas.texto_para_telegram({"id": "a-3"}, "ayuda")
+prueba("ayuda sin origen: «desde la casa»",
+       "Se pidió ayuda desde la casa." in texto, texto)
+texto = alertas.texto_para_telegram({"id": "a-4", "origen": ["raro"]}, "ayuda")
+prueba("ayuda con origen que no es texto: no revienta",
+       "Se pidió ayuda desde la casa." in texto, texto)
+
+esperado_ayuda = (
+    "PETICIÓN DE AYUDA desde la casa.\n\n"
+    "Se pidió ayuda por medio del botón de ayuda.\n\n"
+    "Qué hacer:\n"
+    "1. Llame de inmediato a la persona que está en la casa.\n"
+    "2. Si no contesta o la situación es grave, llame al 911.\n"
+    "3. Cuando todo esté resuelto, presione «Ya lo atendí».\n\n"
+    "Este aviso lo envía el asistente de la casa de forma automática.\n"
+    "Referencia de la alerta: a-5")
+texto = alertas.texto_para_telegram({"id": "a-5", "origen": "boton"}, "ayuda")
+prueba("el texto de ayuda es exactamente el aprobado", texto == esperado_ayuda, texto)
+
+ubicacion_original = config.UBICACION_GAS
+config.UBICACION_GAS = "cocina"
+esperado_gas = (
+    "ALERTA DE GAS en la casa.\n\n"
+    "El sensor de la cocina detectó gas (valor: 2100).\n\n"
+    "Qué hacer:\n"
+    "1. Llame de inmediato a la persona que está en la casa. Pídale que no "
+    "encienda ni apague luces ni aparatos, que abra puertas y ventanas y que "
+    "salga de la casa.\n"
+    "2. Si no contesta o la situación es grave, llame al 911.\n"
+    "3. Cuando todo esté resuelto, presione «Ya lo atendí».\n\n"
+    "Este aviso lo envía el asistente de la casa de forma automática.\n"
+    "Referencia de la alerta: g-1")
+texto = alertas.texto_para_telegram({"id": "g-1", "gas_adc": 2100}, "gas")
+prueba("el texto de gas por defecto es exactamente el aprobado (la cocina)",
+       texto == esperado_gas, texto)
+config.UBICACION_GAS = "comedor"
+texto = alertas.texto_para_telegram({"id": "g-2", "gas_adc": 2100}, "gas")
+prueba("gas con lugar configurado y masculino: «del comedor»",
+       "El sensor del comedor detectó gas" in texto, texto)
+config.UBICACION_GAS = "la Sala "
+texto = alertas.texto_para_telegram({"id": "g-3", "gas_adc": 2100}, "gas")
+prueba("gas con lugar que ya trae articulo: se respeta",
+       "El sensor de la sala detectó gas" in texto, texto)
+config.UBICACION_GAS = ubicacion_original
+prueba("lugar vacio = la cocina", textos.lugar_con_articulo("") == "la cocina")
+_entorno_original = os.environ.pop("UBICACION_GAS", None)
+import importlib  # noqa: E402
+importlib.reload(config)
+prueba("sin UBICACION_GAS en el entorno, config dice cocina",
+       config.UBICACION_GAS == "cocina", config.UBICACION_GAS)
+os.environ["UBICACION_GAS"] = "baño"
+importlib.reload(config)
+prueba("con UBICACION_GAS=baño en el entorno, config lo lee",
+       config.UBICACION_GAS == "baño", config.UBICACION_GAS)
+if _entorno_original is None:
+    os.environ.pop("UBICACION_GAS", None)
+else:
+    os.environ["UBICACION_GAS"] = _entorno_original
+importlib.reload(config)
+
+texto = alertas.texto_para_telegram({"id": "x-1", "algo": 1}, "inventado")
+prueba("tipo desconocido: «Aviso de la casa» y la referencia",
+       texto == 'Aviso de la casa: {"id":"x-1","algo":1}\n\nReferencia de la alerta: x-1',
+       texto)
+
+for tipo, frase in (("gas", "La alerta de gas se marcó como atendida a las "),
+                    ("ayuda", "La petición de ayuda se marcó como atendida a las ")):
+    texto = alertas.texto_atendido(tipo, AHORA, "r-1")
+    prueba("atendida (%s) con su frase" % tipo,
+           texto.startswith("ATENDIDA.\n\n" + frase)
+           and texto.endswith("\n\nReferencia de la alerta: r-1"), texto)
+for tipo, frase in (("gas", "Su familia ya recibió la alerta de gas y la está atendiendo."),
+                    ("ayuda", "Su familia ya recibió su petición de ayuda y la está atendiendo."),
+                    ("otro", "Su familia ya recibió el aviso y lo está atendiendo.")):
+    prueba("aviso hablado de atendida (%s)" % tipo,
+           textos.aviso_atendida(tipo) == frase, textos.aviso_atendida(tipo))
+
+for texto_raro in ("[unk]", "", "  [unk]  "):
+    apuntes, publicar = publicar_que_recoge()
+    voz.procesar(json.dumps({"frase_id": "f", "texto": texto_raro,
+                             "modo": "comandos", "ts": int(time.time())}), publicar)
+    prueba("eco con %r: frase de no entendido, no «Usted dijo»" % texto_raro,
+           len(apuntes) == 1 and apuntes[0][1]["texto"] == textos.NO_ENTENDIDO,
+           apuntes)
+
+prueba("ningun texto de cara al usuario lleva «(s)»",
+       not any("(s)" in v for k, v in vars(textos).items()
+               if isinstance(v, str) and not k.startswith("__")))
+prueba("motivo de codigo vencido, con sus minutos",
+       textos.registro_fallido(textos.MOTIVO_VENCIDO.format(minutos=10))
+       == "No se pudo completar el registro: el código ya venció (valía 10 "
+          "minutos).\n\nPida un código nuevo.")
 
 
 print("\n" + "=" * 66)

@@ -149,6 +149,9 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_ACTIVAR_BOT: ${TELEGRAM_ACTIVAR_BOT:-0}
       PANEL_URL: ${PANEL_URL:-}
+      # Lugar del sensor de gas para el aviso de Telegram («El sensor de la
+      # cocina...»). Formato en orquestador/config.py. Sin valor, «cocina».
+      UBICACION_GAS: ${UBICACION_GAS:-cocina}
       ORQUESTADOR_DB: /datos/orquestador.sqlite3
       NIVEL_LOG: ${NIVEL_LOG:-INFO}
 

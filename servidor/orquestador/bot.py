@@ -100,6 +100,7 @@ import db as db_modulo
 import panel_acceso
 import registro as registro_modulo
 import telegram_cliente
+import textos
 
 registro = logging.getLogger("bot")
 
@@ -122,10 +123,10 @@ def teclado_alerta(id_alerta: str) -> InlineKeyboardMarkup:
     botones = []
     if config.PANEL_URL:
         botones.append(
-            InlineKeyboardButton("Abrir panel", url=config.PANEL_URL)
+            InlineKeyboardButton(textos.BOTON_ABRIR_PANEL, url=config.PANEL_URL)
         )
     botones.append(
-        InlineKeyboardButton("Ya lo atendí",
+        InlineKeyboardButton(textos.BOTON_ATENDI,
                              callback_data=PREFIJO_CODIGO + id_alerta)
     )
     return InlineKeyboardMarkup([[boton] for boton in botones])
@@ -145,16 +146,7 @@ def texto_pedir_registro(base) -> str:
     de que un día una diga «panel» y la otra no, y esa diferencia es medio punto de
     entrada a lo que sea que haya detrás.
     """
-    ya_hay = base.contar_familiares()
-    plural = "persona" if ya_hay == 1 else "personas"
-    aviso = ""
-    if ya_hay:
-        aviso = ("\n\nAhora mismo hay %d %s registrado(s). Si te registras, "
-                 "recibireis las alertas los dos." % (ya_hay, plural))
-    return ("Falta el codigo.\n\n"
-            "Escribe:\n"
-            "/registro CODIGO\n\n"
-            "El codigo te lo da quien instalo el asistente." + aviso)
+    return textos.pedir_registro(base.contar_familiares())
 
 
 class ClienteBot:
@@ -278,7 +270,7 @@ class ClienteBot:
             registro.warning("/registro desde el familiar %s con un codigo que no "
                              "sirve (%s)", quien, motivo)
             await update.effective_message.reply_text(
-                "No se pudo registrar: %s.\n\nPide un codigo nuevo." % motivo
+                textos.registro_fallido(motivo)
             )
             return
 
@@ -301,17 +293,8 @@ class ClienteBot:
                              "hubiera un familiar, ahora para %s",
                              atrasados, quien)
 
-        respuesta = (
-            "Listo. Desde ahora te aviso aqui si hay una alerta de gas o una "
-            "peticion de ayuda.\n\n"
-            "Comando: /alertas, para ver el estado."
-        )
-        if atrasados:
-            respuesta += ("\n\n%d aviso(s) que estaban esperando tambien van para "
-                          "ti." % atrasados)
-        if nuevo and self.base.contar_familiares() > 1:
-            respuesta += ("\n\nLas alertas siguientes las recibireis todos los que "
-                          "estais registrados.")
+        respuesta = textos.registro_listo(
+            atrasados, nuevo and self.base.contar_familiares() > 1)
         await update.effective_message.reply_text(respuesta)
 
     # --- /alertas ----------------------------------------------------------
@@ -340,36 +323,29 @@ class ClienteBot:
             return
         conteo = self.base.contar_por_estado()
         recientes = self.base.listar_recientes(limite=5)
-        lineas = ["Estado de las alertas:", ""]
-        for estado in ("pendiente", "enviada", "resuelta", "descartada"):
-            lineas.append("  %s: %d" % (estado, conteo.get(estado, 0)))
+        lineas = [textos.ALERTAS_TITULO, ""]
+        for estado, etiqueta in textos.ALERTAS_ESTADOS:
+            lineas.append("%s: %d" % (etiqueta, conteo.get(estado, 0)))
 
         #
         # Con más de un familiar, el estado de un aviso tiene una parte que antes no
-        # existía: cuántas copias salieron y cuántas no. "Enviada" con 1 de 2 es
-        # información distinta de "enviada" con 2 de 2, y es justo el caso que hace
+        # existía: cuántas copias salieron y cuántas no. "Enviada" a 1 de 2 es
+        # información distinta de "enviada" a las 2, y es justo el caso que hace
         # falta cuando un móvil lleva sin cobertura: el familiar ve que le llegó,
-        # el otro no, y `/alertas` lo dice en las dos casas.
+        # el otro no, y `/alertas` lo dice en las dos casas (`textos.destinos`).
         #
-        if self.base.contar_familiares() > 1:
-            lineas.append("")
-            lineas.append("Hay %d personas registradas." % self.base.contar_familiares())
+        lineas.append("")
+        lineas.append(textos.personas_registradas(self.base.contar_familiares()))
 
+        lineas.append("")
         if recientes:
-            lineas.append("")
-            lineas.append("Ultimas cinco:")
+            lineas.append(textos.ALERTAS_ULTIMAS)
             for fila in recientes:
-                destinos = ""
-                if fila["enviados"] or fila["sin_mandar"]:
-                    destinos = "  (%d de %d)" % (fila["enviados"],
-                                                 fila["enviados"] + fila["sin_mandar"])
-                lineas.append("  %s  %s  %s%s" % (
-                    time.strftime("%Y-%m-%d %H:%M",
-                                  time.localtime(fila["creado_en"])),
-                    fila["tipo"], fila["estado"], destinos))
+                lineas.append(textos.linea_reciente(
+                    fila["creado_en"], fila["tipo"], fila["estado"],
+                    fila["enviados"], fila["enviados"] + fila["sin_mandar"]))
         else:
-            lineas.append("")
-            lineas.append("No hay ninguna alerta todavia.")
+            lineas.append(textos.ALERTAS_NINGUNA)
         await update.effective_message.reply_text("\n".join(lineas))
 
     # --- /panel: el enlace al panel web -------------------------------------
@@ -417,10 +393,7 @@ class ClienteBot:
         if not config.PANEL_URL:
             registro.warning("/panel sin PANEL_URL en el entorno: no se manda ningun "
                              "enlace. El panel todavia no esta desplegado.")
-            await update.effective_message.reply_text(
-                "El panel todavia no esta disponible.\n\n"
-                "Sigue con /alertas: por ahi te aviso igual."
-            )
+            await update.effective_message.reply_text(textos.PANEL_NO_DISPONIBLE)
             return
 
         ahora = int(time.time())
@@ -432,13 +405,10 @@ class ClienteBot:
                                        time.localtime(ahora + registro_modulo.SEGUNDOS_CODIGO)))
 
         teclado = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("Abrir panel", url=url)]]
+            [[InlineKeyboardButton(textos.BOTON_ABRIR_PANEL, url=url)]]
         )
         await update.effective_message.reply_text(
-            "Tu enlace al panel.\n\n"
-            "Abrelo y entras. Vale 10 minutos y es de un solo uso: si se lo "
-            "abres a alguien mas, al otro le dira que ya no sirve.\n\n"
-            "El enlace abre este panel, no la pagina principal del sitio.",
+            textos.PANEL_ENLACE,
             reply_markup=teclado,
         )
 
@@ -471,12 +441,11 @@ class ClienteBot:
 
         id_alerta = (consulta.data or "")[len(PREFIJO_CODIGO):]
         if not id_alerta:
-            await consulta.answer("Este boton no trae la alerta.", show_alert=True)
+            await consulta.answer(textos.BOTON_SIN_ALERTA, show_alert=True)
             return
 
         if not await self._es_privado(update, avisar=False):
-            await consulta.answer("Este bot solo funciona en un chat privado.",
-                                  show_alert=True)
+            await consulta.answer(textos.SOLO_CHAT_PRIVADO, show_alert=True)
             return
 
         # Que el que pulsó sea un familiar registrado. Un bot de la casa no va a
@@ -495,8 +464,7 @@ class ClienteBot:
         if chat_id is None or not self.base.familiar_registrado(chat_id):
             registro.warning("el boton 'Ya lo atendi' de la alerta %s se pulso desde "
                              "un chat que no esta registrado; se ignora", id_alerta)
-            await consulta.answer("Este bot solo acepta el aviso de los familiares "
-                                  "registrados.", show_alert=True)
+            await consulta.answer(textos.SOLO_REGISTRADOS, show_alert=True)
             return
         chat_id = str(chat_id)
 
@@ -539,13 +507,11 @@ class ClienteBot:
             registro.error("no se pudo editar el mensaje de la alerta %s: %s",
                            id_alerta, telegram_cliente.sanear(error))
             self.base.marcar_editado(id_alerta, chat_id, ahora)
-            await consulta.answer(
-                "Anotado. El mensaje viejo no se pudo editar.", show_alert=True
-            )
+            await consulta.answer(textos.ANOTADO_SIN_EDITAR, show_alert=True)
         else:
             self.base.marcar_editado(id_alerta, chat_id, ahora)
             await consulta.answer(
-                "Ya esta atendida." if fresca else "Esta alerta ya estaba atendida."
+                textos.YA_ATENDIDA if fresca else textos.YA_ESTABA_ATENDIDA
             )
 
     # --- Utilidades --------------------------------------------------------
@@ -568,16 +534,14 @@ class ClienteBot:
         consulta = getattr(update, "callback_query", None)
         if consulta is not None:
             try:
-                await consulta.answer("Algo fallo. Intentalo de nuevo.",
-                                      show_alert=True)
+                await consulta.answer(textos.ERROR_BOTON, show_alert=True)
             except telegram_cliente.TelegramError:
                 pass
             return
         mensaje = getattr(update, "effective_message", None)
         if mensaje is not None:
             try:
-                await mensaje.reply_text("Algo fallo al procesar el comando. "
-                                         "Intentalo de nuevo.")
+                await mensaje.reply_text(textos.ERROR_COMANDO)
             except telegram_cliente.TelegramError:
                 pass
 
@@ -597,7 +561,7 @@ class ClienteBot:
         if update.effective_chat.type != "private":
             if avisar and update.effective_message is not None:
                 await update.effective_message.reply_text(
-                    "Este comando solo funciona en un chat privado."
+                    textos.SOLO_CHAT_PRIVADO
                 )
             return False
         return True

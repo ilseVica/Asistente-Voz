@@ -54,6 +54,8 @@ import paho.mqtt.client as mqtt
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
+import textos
+
 # --- Constantes del contrato ------------------------------------------------
 
 TASA = 16000                 # Hz de captura y del contrato.
@@ -67,8 +69,10 @@ TIPOS_TARDIOS = frozenset({"recordatorio", "chat"})
 TOPICO_ESTADO_DEF = "casa/sala/satelite/estado"
 TOPICO_DECIR_DEF = "casa/sala/satelite/decir"
 
-MENSAJE_REPETIR = "No te escuché bien, ¿puedes repetir?"
-MENSAJE_SIN_CONEXION = "No tengo conexión con el servidor"
+# Los textos hablados viven en `textos.py`. Se reexportan aqui con los mismos
+# nombres de siempre para no romper a quien los importa de `satelite`.
+MENSAJE_REPETIR = textos.MENSAJE_REPETIR
+MENSAJE_SIN_CONEXION = textos.MENSAJE_SIN_CONEXION
 
 registro = logging.getLogger("satelite")
 
@@ -161,6 +165,12 @@ class Config:
     altura_max_s: float = 8.0
     piper: str = ""
     voz: str = ""
+    # Parametros de Piper. `None` significa "no lo pases": sin valor en el config,
+    # Piper usa su valor por defecto y el comportamiento es el de siempre.
+    length_scale: float | None = None
+    sentence_silence: float | None = None
+    noise_scale: float | None = None
+    noise_w: float | None = None
     registro_ruta: str = ""
     socket_ruta: str = ""
     precargar_piper: bool = False
@@ -168,6 +178,17 @@ class Config:
 
 def _expandir(ruta: str) -> str:
     return os.path.expanduser(os.path.expandvars(ruta))
+
+
+def _opcional_float(valor):
+    """Convierte a `float`, o devuelve `None` si no hay valor.
+
+    `None` no es "cero": es "no lo pases", y es lo que distingue un config sin el
+    parametro (Piper pone su valor por defecto) de uno que lo pide a 0.0.
+    """
+    if valor is None:
+        return None
+    return float(valor)
 
 
 def _leer_secreto(ruta: str) -> str:
@@ -196,6 +217,7 @@ def cargar_config(ruta: str) -> Config:
     mq = doc.get("mqtt", {})
     audio = doc.get("audio", {})
     rutas = doc.get("rutas", {})
+    voz = doc.get("voz", {})
     tecla = doc.get("tecla", {})
 
     cfg = Config()
@@ -213,7 +235,13 @@ def cargar_config(ruta: str) -> Config:
     cfg.latencia_captura = audio.get("latencia_captura", cfg.latencia_captura)
     cfg.altura_max_s = float(audio.get("altura_max_s", cfg.altura_max_s))
     cfg.piper = rutas.get("piper", cfg.piper)
-    cfg.voz = rutas.get("voz", cfg.voz)
+    # La voz sale de `[voz].modelo` y, si no esta, de `[rutas].voz` (configs
+    # antiguos). Los parametros son opcionales: `None` = valor por defecto de Piper.
+    cfg.voz = voz.get("modelo", rutas.get("voz", cfg.voz))
+    cfg.length_scale = _opcional_float(voz.get("length_scale"))
+    cfg.sentence_silence = _opcional_float(voz.get("sentence_silence"))
+    cfg.noise_scale = _opcional_float(voz.get("noise_scale"))
+    cfg.noise_w = _opcional_float(voz.get("noise_w"))
     cfg.registro_ruta = rutas.get("registro", _ruta_estado_defecto())
     cfg.socket_ruta = tecla.get("socket", _ruta_socket_defecto())
     cfg.precargar_piper = bool(rutas.get("precargar_piper", cfg.precargar_piper))
@@ -400,6 +428,18 @@ class Reproductor:
         # `-f -` = WAV a stdout. Sin `--output_raw` a proposito: el WAV trae su
         # propio tamano y eso da una frontera limpia entre frases.
         orden = [self.piper, "--model", self.voz, "-f", "-"]
+        # Cada parametro se pasa SOLO si esta definido. Sin valor en el config,
+        # Piper usa su propio valor por defecto, que es lo que hacia antes de que
+        # estos parametros existieran.
+        opciones = (
+            ("--length_scale", self.cfg.length_scale),
+            ("--sentence_silence", self.cfg.sentence_silence),
+            ("--noise_scale", self.cfg.noise_scale),
+            ("--noise_w", self.cfg.noise_w),
+        )
+        for nombre, valor in opciones:
+            if valor is not None:
+                orden += [nombre, str(valor)]
         if os.path.isdir(self.espeak):
             orden += ["--espeak_data", self.espeak]
         return orden

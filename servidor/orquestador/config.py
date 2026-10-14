@@ -91,8 +91,15 @@ TOPICO_VOZ_TEXTO = "casa/sala/voz/texto"
 
 QOS_ALERTAS = 1
 
+# Donde esta el sensor de gas, para el aviso de Telegram («El sensor de la cocina
+# detectó gas»). Formato: el nombre del lugar en minusculas, con o sin articulo
+# (`cocina`, `la cocina`, `el cuarto de lavado`). Sin articulo, lo pone
+# `textos.lugar_con_articulo`; un lugar que no este en su tabla conviene escribirlo
+# con el suyo. Sin valor, «cocina».
+UBICACION_GAS = os.environ.get("UBICACION_GAS", "").strip() or "cocina"
+
 # El eco de voz. Con 1, el orquestador publica en `satelite/decir` lo que
-# entendio ("Escuche: ..."), para poder demostrar el camino completo (audio ->
+# entendio ("Usted dijo: ...", ver textos.py), para poder demostrar el camino completo (audio ->
 # texto -> respuesta) sin el satelite, que todavia no existe. Con 0, solo lo
 # registra en el log.
 #
@@ -410,5 +417,6 @@ def resumen() -> dict:
         "bot": "activo" if TELEGRAM_ACTIVAR_BOT else "inactivo",
         "panel": PANEL_URL if PANEL_URL else "vacio",
         "modo_sitio": MODO_SITIO,
+        "ubicacion_gas": UBICACION_GAS,
         "db": RUTA_DB,
     }

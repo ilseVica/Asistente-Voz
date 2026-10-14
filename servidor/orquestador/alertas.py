@@ -34,6 +34,7 @@ import time
 
 import config
 import sanear as sanear_modulo
+import textos
 
 registro = logging.getLogger("alertas")
 
@@ -222,42 +223,33 @@ def texto_para_telegram(carga: dict, tipo: str) -> str:
     Tampoco se incluye el nombre de usuario del bot. El plan lo pedía en un
     punto, pero el usuario confirmó que no hace falta: el chat es privado con la
     familia, y un bot no necesita presentarse en cada mensaje. Lo que sí se
-    incluye es el id de la alerta al final, para que la familia pueda leerlo en
-    voz alta y quien atienda pueda buscarlo en la base.
-    """
-    if tipo == "gas":
-        gas_adc = carga.get("gas_adc", "?")
-        texto = (
-            "ALERTA DE GAS en casa.\n\n"
-            "Se detecto gas en el sensor de la sala.\n"
-            "Lectura del sensor: %s\n\n"
-            "Por favor:\n"
-            "1. No uses el interruptor de la luz.\n"
-            "2. Abre las ventanas y la puerta.\n"
-            "3. Sal de la casa y cierra la puerta.\n"
-            "4. Llama a los servicios de emergencia.\n\n"
-            "Esta alerta la manda el asistente de la casa, de forma automatica."
-            % (gas_adc,)
-        )
-    elif tipo == "ayuda":
-        origen = carga.get("origen") or ""
-        if origen:
-            de_quien = "(origen: %s)" % origen
-        else:
-            # La peticion se acepta sin `origen` (ver `_validar_ayuda`), asi que
-            # el texto tiene que salir bien tambien sin el. Decir «origen:
-            # desconocido» sería confuso: no es que no se sepa, es que no vino.
-            de_quien = "(no dice de donde)"
-        texto = (
-            "PETICION DE AYUDA desde casa.\n\n"
-            "Alguien en la casa pidio ayuda %s.\n\n"
-            "La alerta la manda el asistente de la casa, de forma automatica."
-            % de_quien
-        )
-    else:
-        texto = "Alerta de la casa: %s" % json.dumps(carga, separators=(",", ":"))
+    incluye es el id de la alerta al final («Referencia de la alerta»), para que
+    la familia pueda leerlo en voz alta y quien atienda pueda buscarlo en la base.
 
-    return "%s\n\nId de la alerta: %s" % (texto, carga.get("id", "?"))
+    Las frases viven en `textos.py`. El lugar del sensor sale de
+    `config.UBICACION_GAS`, y el origen de la ayuda se traduce a palabras
+    (`textos.ORIGENES`); un origen que no se sabe traducir sale como «desde la
+    casa» y su código queda en el log.
+    """
+    id_alerta = carga.get("id", "?")
+    if tipo == "gas":
+        if not textos.lugar_conocido(config.UBICACION_GAS):
+            registro.warning("UBICACION_GAS=%r no esta en la tabla de lugares; el "
+                             "articulo se deduce. Escribalo con articulo si sale mal",
+                             config.UBICACION_GAS)
+        return textos.alerta_gas(textos.lugar_con_articulo(config.UBICACION_GAS),
+                                 carga.get("gas_adc", "?"), id_alerta)
+    if tipo == "ayuda":
+        # La peticion se acepta sin `origen` (ver `_validar_ayuda`), asi que el
+        # texto tiene que salir bien tambien sin el.
+        origen = carga.get("origen")
+        if origen and not (isinstance(origen, str) and origen in textos.ORIGENES):
+            registro.warning("alerta de ayuda %s con origen %r, que no se sabe "
+                             "decir con palabras; el aviso dice «desde la casa»",
+                             id_alerta, origen)
+        return textos.alerta_ayuda(origen, id_alerta)
+    return textos.alerta_desconocida(json.dumps(carga, separators=(",", ":")),
+                                     id_alerta)
 
 
 def teclado_alerta(id_alerta: str):
@@ -282,12 +274,7 @@ def texto_atendido(tipo: str, cuando: int, id_alerta: str) -> str:
     `cuando` es `alertas.resuelto_en`, la hora en que se atendió, y no la del envío
     ni la de la reescritura: es la que responde a «¿a qué hora atendiste?».
     """
-    return (
-        "ATENDIDO.\n\n"
-        "La alerta de %s se marco como atendida a las %s.\n\n"
-        "Id de la alerta: %s"
-        % (tipo, time.strftime("%H:%M:%S", time.localtime(cuando)), id_alerta)
-    )
+    return textos.atendida(tipo, cuando, id_alerta)
 
 
 def resolver(base, publicar, id_alerta: str, ahora: int = None,
@@ -316,8 +303,8 @@ def resolver(base, publicar, id_alerta: str, ahora: int = None,
     Con un solo botón eso era un detalle. Con dos, resolver dos veces es lo
     NORMAL: el familiar lo atiende en el panel y luego pulsa el botón de Telegram
     que tenía abierto, o lo pulsan dos familiares a la vez. Sin este `if`, cada
-    pulsación publicaba en `satelite/decir` y el sitio oía «ya atendiste la
-    alerta» tantas veces como se pulsara.
+    pulsación publicaba en `satelite/decir` y el sitio oía «su familia ya
+    recibió la alerta» tantas veces como se pulsara.
 
     Que avise solo la primera vez no pierde información: el sitio solo necesita
     saber que ya hay alguien con el aviso. Volver a decirlo es ruido, y en una
@@ -343,7 +330,7 @@ def resolver(base, publicar, id_alerta: str, ahora: int = None,
             registro.info("alerta %s resuelta; no hay cliente MQTT, no se avisa a "
                           "satelite/decir", id_alerta)
         else:
-            texto = ("Ya atendiste la alerta de %s." % tipo)
+            texto = textos.aviso_atendida(tipo)
             try:
                 publicar(
                     config.TOPICO_SATELITE_DECIR,

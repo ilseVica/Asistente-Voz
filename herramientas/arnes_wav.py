@@ -45,6 +45,7 @@ import sys
 import tempfile
 import threading
 import time
+import tomllib
 import unicodedata
 import wave
 
@@ -118,9 +119,29 @@ def leer_password_env(nombre: str) -> str:
     return ""
 
 
+def cargar_voz_config(ruta: str) -> dict:
+    """Lee la seccion `[voz]` del config del satelite, para reusar su voz.
+
+    Devuelve las claves que falten como `None`: el llamador decide con que
+    rellenarlas. Es la forma de que el arnes hable con la MISMA voz y los MISMOS
+    parametros que el satelite sin copiarlos a mano y sin que se desincronicen.
+    """
+    with open(ruta, "rb") as archivo:
+        doc = tomllib.load(archivo)
+    voz = doc.get("voz", {})
+    return {
+        "modelo": voz.get("modelo"),
+        "length_scale": voz.get("length_scale"),
+        "sentence_silence": voz.get("sentence_silence"),
+        "noise_scale": voz.get("noise_scale"),
+        "noise_w": voz.get("noise_w"),
+    }
+
+
 # --- Sintesis y audio -------------------------------------------------------
 
-def sintetizar(texto: str, piper_dir: str, voz: str, largo: float = 1.0):
+def sintetizar(texto: str, piper_dir: str, voz: str, largo: float = 1.0,
+               sentence_silence=None, noise_scale=None, noise_w=None):
     """Devuelve PCM 16 kHz mono 16-bit LE de la frase, usando Piper.
 
     Piper genera a 22050 Hz; Vosk quiere 16 kHz. No hay ffmpeg ni sox en la VM, asi
@@ -129,13 +150,24 @@ def sintetizar(texto: str, piper_dir: str, voz: str, largo: float = 1.0):
 
     `largo` es el `--length_scale` de Piper: mas de 1 habla mas despacio. Existe
     porque la velocidad de habla cambia el acierto, y conviene poder medirlo.
+
+    `sentence_silence`, `noise_scale` y `noise_w` se pasan SOLO si tienen valor. Con
+    los tres en `None` el comando es exactamente el de siempre y Piper usa sus
+    valores por defecto.
     """
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temporal:
         ruta = temporal.name
+    orden = [os.path.join(piper_dir, "piper"), "--model", voz,
+             "--length_scale", str(largo)]
+    for nombre, valor in (("--sentence_silence", sentence_silence),
+                          ("--noise_scale", noise_scale),
+                          ("--noise_w", noise_w)):
+        if valor is not None:
+            orden += [nombre, str(valor)]
+    orden += ["--output_file", ruta]
     try:
         subprocess.run(
-            [os.path.join(piper_dir, "piper"), "--model", voz,
-             "--length_scale", str(largo), "--output_file", ruta],
+            orden,
             input=(texto + "\n").encode("utf-8"),
             cwd=piper_dir,
             env={**os.environ, "LD_LIBRARY_PATH": piper_dir},
@@ -167,6 +199,32 @@ def sintetizar(texto: str, piper_dir: str, voz: str, largo: float = 1.0):
     # llega pegada al corte.
     relleno = np.zeros(int(SR * 0.2), dtype="<i2")
     return np.concatenate([muestras, relleno]).tobytes()
+
+
+def resolver_voz(args):
+    """Completa voz y parametros: argumento > `[voz]` de `--config-voz` > defecto.
+
+    Sin `--config-voz` ni argumentos nuevos, el resultado es el de siempre: voz
+    ald-medium, `largo` 1.0 y el resto sin pasar a Piper.
+    """
+    desde_config = cargar_voz_config(args.config_voz) if args.config_voz else {}
+    if args.voz is None:
+        args.voz = desde_config.get("modelo") or VOZ_POR_DEFECTO
+    args.voz = os.path.expanduser(args.voz)
+    if args.largo is None:
+        valor = desde_config.get("length_scale")
+        args.largo = float(valor) if valor is not None else 1.0
+    for nombre in ("sentence_silence", "noise_scale", "noise_w"):
+        if getattr(args, nombre) is None and desde_config.get(nombre) is not None:
+            setattr(args, nombre, float(desde_config[nombre]))
+    return args
+
+
+def sintetizar_frase(args, texto: str):
+    """Sintetiza con la voz y los parametros ya resueltos en `args`."""
+    return sintetizar(texto, args.piper_dir, args.voz, args.largo,
+                      sentence_silence=args.sentence_silence,
+                      noise_scale=args.noise_scale, noise_w=args.noise_w)
 
 
 def trocear(pcm: bytes):
@@ -267,7 +325,7 @@ async def seccion_aciertos(args, token, observador):
     latencias_publicado = []
 
     for indice, frase in enumerate(frases, 1):
-        pcm = sintetizar(frase, args.piper_dir, args.voz, args.largo)
+        pcm = sintetizar_frase(args, frase)
         ws, saludo = await abrir_conexion(args.host, args.puerto, token)
         if saludo.get("tipo") != "listo":
             print("  el servicio no respondio 'listo': %s" % saludo)
@@ -334,7 +392,7 @@ async def seccion_fuera(args, token):
     en_gramatica = {normalizar(f) for f in cargar_gramatica()}
     falso_positivo = []
     for indice, frase in enumerate(FRASES_FUERA, 1):
-        pcm = sintetizar(frase, args.piper_dir, args.voz, args.largo)
+        pcm = sintetizar_frase(args, frase)
         ws, _ = await abrir_conexion(args.host, args.puerto, token)
         final = await decir_frase(ws, "fuera-%03d" % indice, pcm,
                                   ritmo=not args.sin_ritmo)
@@ -456,7 +514,7 @@ async def seccion_corte(args, token, observador):
     # Se empieza a decir una frase y se corta la conexion sin mandar `fin`. El
     # servicio NO puede publicar nada: media frase publicada es peor que ninguna,
     # porque el orquestador la tomaria por una orden completa.
-    pcm = sintetizar("prende la luz de la sala", args.piper_dir, args.voz, args.largo)
+    pcm = sintetizar_frase(args, "prende la luz de la sala")
     if observador:
         observador.limpiar()
     ws, _ = await abrir_conexion(args.host, args.puerto, token)
@@ -527,13 +585,23 @@ def main():
     parser.add_argument("--puerto", type=int, default=2700)
     parser.add_argument("--token-archivo", default=TOKEN_POR_DEFECTO)
     parser.add_argument("--piper-dir", default=PIPER_DIR_POR_DEFECTO)
-    parser.add_argument("--voz", default=VOZ_POR_DEFECTO)
+    parser.add_argument("--voz", default=None,
+                        help="ruta del .onnx (def.: es_MX-ald-medium de herramientas/)")
     parser.add_argument("--solo", choices=["todo", "aciertos", "fuera", "errores", "corte"],
                         default="todo")
     parser.add_argument("--limite", type=int, default=0,
                         help="limita cuantas frases de la gramatica se prueban")
-    parser.add_argument("--largo", type=float, default=1.0,
-                        help="length_scale de Piper: >1 habla mas despacio")
+    parser.add_argument("--largo", type=float, default=None,
+                        help="length_scale de Piper: >1 habla mas despacio (def. 1.0)")
+    parser.add_argument("--sentence-silence", type=float, default=None,
+                        help="sentence_silence de Piper (def.: el de Piper)")
+    parser.add_argument("--noise-scale", type=float, default=None,
+                        help="noise_scale de Piper (def.: el de Piper)")
+    parser.add_argument("--noise-w", type=float, default=None,
+                        help="noise_w de Piper (def.: el de Piper)")
+    parser.add_argument("--config-voz", default=None,
+                        help="config.toml del satelite: toma de su [voz] el modelo y "
+                             "los parametros que no se den por argumento")
     parser.add_argument("--sin-ritmo", action="store_true",
                         help="manda el audio sin esperar 100 ms entre tramas")
     parser.add_argument("--sin-mqtt", action="store_true",
@@ -543,6 +611,7 @@ def main():
     parser.add_argument("--mqtt-usuario", default="puente")
     parser.add_argument("--mqtt-password", default="")
     args = parser.parse_args()
+    resolver_voz(args)
     return asyncio.run(principal(args))
 
 

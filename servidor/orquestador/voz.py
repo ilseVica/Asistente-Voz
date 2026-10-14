@@ -27,12 +27,14 @@ import logging
 import time
 
 import config
+import textos
 
 registro = logging.getLogger("voz")
 
 # Lo que se contesta cuando no se entendio nada. El satelite lo dira en voz alta,
-# asi que es una frase para oir, no un codigo de error.
-SIN_ENTENDER = "No entendí, ¿puedes repetir?"
+# asi que es una frase para oir, no un codigo de error. La redaccion vive en
+# `textos.py`.
+SIN_ENTENDER = textos.NO_ENTENDIDO
 
 # El unico texto que el servicio de voz deberia mandar cuando no reconoce nada.
 UNK = "[unk]"
@@ -85,7 +87,7 @@ def procesar(cuerpo: str, publicar) -> bool:
                       frase_id, modo, texto)
         return False
 
-    respuesta = SIN_ENTENDER if no_entendido(texto) else "Escuché: %s" % texto
+    respuesta = SIN_ENTENDER if no_entendido(texto) else textos.eco(texto)
     publicar(
         config.TOPICO_SATELITE_DECIR,
         {"texto": respuesta, "tipo": "respuesta", "ts": int(time.time())},

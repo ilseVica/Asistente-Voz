@@ -38,15 +38,26 @@ latencia_captura = "20ms"
 altura_max_s = 8.0
 
 [rutas]
-# Binario de Piper 2023.11.14-2 y voz es_MX-ald-medium (los que instala
-# instalar.sh). Rutas absolutas.
-piper = "/home/USUARIO/asistente-satelite/piper/piper"
-voz = "/home/USUARIO/asistente-satelite/voces/es_MX-ald-medium.onnx"
+# Binario de Piper 2023.11.14-2 (el que instala instalar.sh). Ruta absoluta.
+piper = "/home/USUARIO/.local/share/asistente-satelite/piper/piper"
 # Registro de marcas por frase (sin audio). Si se omite, va a
 # ~/.local/state/asistente-satelite/latencias.jsonl
 registro = "/home/USUARIO/.local/state/asistente-satelite/latencias.jsonl"
 # Medir el primer turno (P35): si pasa de 2.5 s, poner en true.
 precargar_piper = false
+
+[voz]
+# Voz de Piper y sus parametros de sintesis. `modelo` es la ruta absoluta al
+# .onnx (instalar.sh deja es_MX-claude-high y es_MX-ald-medium en voces/).
+#
+# Los parametros son OPCIONALES: si se quitan, Piper usa su valor por defecto y
+# el satelite suena como siempre. Los de aqui son los elegidos por Ilse para la
+# voz es_MX-claude-high (rondas de escucha 1 a 4).
+modelo = "/home/USUARIO/.local/share/asistente-satelite/voces/es_MX-claude-high.onnx"
+length_scale = 1.0
+sentence_silence = 0.3
+noise_scale = 0.667
+noise_w = 1.0
 
 [tecla]
 # Socket Unix local del aviso de la tecla. Si se omite:

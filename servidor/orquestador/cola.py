@@ -235,7 +235,7 @@ class TrabajadorTelegram:
         `Message` en la mano y es su proceso el que lleva el token. El panel es otro
         proceso, resuelve en la base y se queda sin más. Esta tarea es la otra
         mitad: mira los avisos ya enviados cuya alerta está resuelta y a los que les
-        falta la reescritura, y los deja como los deja el botón («ATENDIDO», sin
+        falta la reescritura, y los deja como los deja el botón («ATENDIDA», sin
         botones), para que la familia no vea un aviso con los botones puestos mientras
         ya hay alguien con el aviso.
 
@@ -262,7 +262,7 @@ class TrabajadorTelegram:
                                  "para %s: %s", fila["alerta_id"], quien,
                                  telegram_cliente.sanear(error))
             else:
-                registro.info("aviso de la alerta %s reescrito como ATENDIDO para "
+                registro.info("aviso de la alerta %s reescrito como ATENDIDA para "
                               "%s (atendida desde el panel)",
                               fila["alerta_id"], quien)
             self.base.marcar_editado(fila["alerta_id"], fila["chat_id"])

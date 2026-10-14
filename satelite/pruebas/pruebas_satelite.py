@@ -235,10 +235,10 @@ class TestNucleo(Base):
             fid = nucleo.turno_pendiente.frase_id
             nucleo.al_recibir_final({"tipo": "final", "frase_id": fid,
                                      "texto": "prende la luz"})
-            nucleo.al_decir({"texto": "Escuché: prende la luz",
+            nucleo.al_decir({"texto": "Usted dijo: prende la luz.",
                              "tipo": "respuesta", "ts": int(reloj_ms() / 1000)})
             await self.esperar(lambda: self.rep.dichos)
-            self.assertEqual(self.rep.dichos, ["Escuché: prende la luz"])
+            self.assertEqual(self.rep.dichos, ["Usted dijo: prende la luz."])
             # el registro tiene la frase con sus tres intervalos
             await self.esperar(lambda: os.path.getsize(self.tmp.name) > 0)
             with open(self.tmp.name, encoding="utf-8") as archivo:
@@ -265,10 +265,10 @@ class TestNucleo(Base):
             nucleo.cerrar_frase()
             fid = nucleo.turno_pendiente.frase_id
             # El eco llega ANTES que el final: la condicion de carrera reportada.
-            nucleo.al_decir({"texto": "Escuché: prende la luz",
+            nucleo.al_decir({"texto": "Usted dijo: prende la luz.",
                              "tipo": "respuesta", "ts": int(reloj_ms() / 1000)})
             await self.esperar(lambda: self.rep.dichos)
-            self.assertEqual(self.rep.dichos, ["Escuché: prende la luz"])
+            self.assertEqual(self.rep.dichos, ["Usted dijo: prende la luz."])
             nucleo.al_recibir_final({"tipo": "final", "frase_id": fid,
                                      "texto": "prende la luz"})
             await self.esperar(lambda: os.path.getsize(self.tmp.name) > 0)
@@ -289,13 +289,13 @@ class TestNucleo(Base):
         try:
             nucleo.abrir_frase()
             nucleo.cerrar_frase()
-            nucleo.al_decir({"texto": "Escuché: prende la luz",
+            nucleo.al_decir({"texto": "Usted dijo: prende la luz.",
                              "tipo": "respuesta", "ts": int(reloj_ms() / 1000)})
-            nucleo.al_decir({"texto": "Escuché: prende la luz",
+            nucleo.al_decir({"texto": "Usted dijo: prende la luz.",
                              "tipo": "respuesta", "ts": int(reloj_ms() / 1000)})
             await self.esperar(lambda: self.rep.dichos)
             await asyncio.sleep(0.1)
-            self.assertEqual(self.rep.dichos, ["Escuché: prende la luz"])
+            self.assertEqual(self.rep.dichos, ["Usted dijo: prende la luz."])
         finally:
             tarea.cancel()
 
@@ -314,7 +314,7 @@ class TestNucleo(Base):
             nucleo.abrir_frase()
             nucleo.cerrar_frase()
             fid = nucleo.turno_pendiente.frase_id
-            nucleo.al_decir({"texto": "Escuché: prende la luz de la sala",
+            nucleo.al_decir({"texto": "Usted dijo: prende la luz de la sala.",
                              "tipo": "respuesta",
                              "ts": int(reloj_ms() / 1000)})
             await self.esperar(lambda: self.rep.dichos)
@@ -441,6 +441,93 @@ class TestPiperPersistente(unittest.IsolatedAsyncioTestCase):
         flujo.feed_eof()
         self.assertEqual(await satelite._leer_wav(flujo), primero)
         self.assertEqual(await satelite._leer_wav(flujo), segundo)
+
+
+class TestOrdenPiper(unittest.TestCase):
+    """`Reproductor._orden` pasa a Piper solo los parametros definidos."""
+
+    def _orden(self, **parametros):
+        cfg = Config()
+        cfg.piper = "/no/existe/piper"
+        cfg.voz = "/no/existe/voz.onnx"
+        for nombre, valor in parametros.items():
+            setattr(cfg, nombre, valor)
+        return satelite.Reproductor(cfg, salida_nula=True)._orden()
+
+    def test_sin_parametros_es_la_orden_de_siempre(self):
+        self.assertEqual(self._orden(), ["/no/existe/piper", "--model",
+                                         "/no/existe/voz.onnx", "-f", "-"])
+
+    def test_solo_los_definidos(self):
+        orden = self._orden(sentence_silence=0.3, noise_w=1.0)
+        self.assertEqual(orden[5:], ["--sentence_silence", "0.3", "--noise_w", "1.0"])
+        self.assertNotIn("--length_scale", orden)
+        self.assertNotIn("--noise_scale", orden)
+
+    def test_los_cuatro(self):
+        orden = self._orden(length_scale=1.0, sentence_silence=0.3,
+                            noise_scale=0.667, noise_w=1.0)
+        self.assertEqual(orden[5:], ["--length_scale", "1.0",
+                                     "--sentence_silence", "0.3",
+                                     "--noise_scale", "0.667", "--noise_w", "1.0"])
+
+    def test_cero_se_pasa_no_se_confunde_con_ausente(self):
+        self.assertEqual(self._orden(noise_scale=0.0)[5:], ["--noise_scale", "0.0"])
+
+
+class TestConfigVoz(unittest.TestCase):
+    def _cargar(self, contenido):
+        with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False,
+                                         encoding="utf-8") as archivo:
+            archivo.write(contenido)
+        try:
+            return satelite.cargar_config(archivo.name)
+        finally:
+            os.unlink(archivo.name)
+
+    def test_seccion_voz_completa(self):
+        cfg = self._cargar('''[voz]
+modelo = "/v/es_MX-claude-high.onnx"
+length_scale = 1.0
+sentence_silence = 0.3
+noise_scale = 0.667
+noise_w = 1
+''')
+        self.assertEqual(cfg.voz, "/v/es_MX-claude-high.onnx")
+        self.assertEqual((cfg.length_scale, cfg.sentence_silence, cfg.noise_scale,
+                          cfg.noise_w), (1.0, 0.3, 0.667, 1.0))
+
+    def test_config_antiguo_sin_voz(self):
+        cfg = self._cargar('''[rutas]
+voz = "/v/es_MX-ald-medium.onnx"
+''')
+        self.assertEqual(cfg.voz, "/v/es_MX-ald-medium.onnx")
+        self.assertEqual((cfg.length_scale, cfg.sentence_silence, cfg.noise_scale,
+                          cfg.noise_w), (None, None, None, None))
+
+    def test_plantilla_del_repo(self):
+        ruta = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "config.example.toml")
+        # Solo la seccion [voz]: el resto de la plantilla apunta a secretos que
+        # aqui no existen.
+        import tomllib
+        with open(ruta, "rb") as archivo:
+            voz = tomllib.load(archivo)["voz"]
+        cfg = self._cargar("[voz]\n" + "".join(
+            "%s = %r\n" % (clave, valor) for clave, valor in voz.items()
+        ).replace("'", '"'))
+        self.assertTrue(cfg.voz.endswith("/voces/es_MX-claude-high.onnx"))
+        self.assertEqual((cfg.length_scale, cfg.sentence_silence, cfg.noise_scale,
+                          cfg.noise_w), (1.0, 0.3, 0.667, 1.0))
+
+
+class TestTextos(unittest.TestCase):
+    def test_frases_habladas(self):
+        self.assertEqual(MENSAJE_REPETIR,
+                         "Disculpe, no le escuché bien. ¿Me lo puede repetir?")
+        self.assertEqual(MENSAJE_SIN_CONEXION,
+                         "Disculpe, en este momento no tengo conexión. Por favor, "
+                         "inténtelo de nuevo en unos minutos.")
 
 
 if __name__ == "__main__":

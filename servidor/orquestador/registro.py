@@ -53,6 +53,8 @@ import sys
 import threading
 import time
 
+import textos
+
 registro = logging.getLogger("registro")
 
 MINUTOS_CODIGO = 10
@@ -165,13 +167,13 @@ def comprobar_codigo(codigo: str) -> str:
         entrada = CODIGOS.get(codigo)
 
         if entrada is None:
-            return "ese codigo no existe"
+            return textos.MOTIVO_NO_EXISTE
         if entrada["usado_en"] is not None:
-            return "ese codigo ya se uso"
+            return textos.MOTIVO_YA_USADO
         if entrada["intentos"] >= MAX_INTENTOS_CODIGO:
-            return "ese codigo se invalido tras %d intentos" % MAX_INTENTOS_CODIGO
+            return textos.MOTIVO_ANULADO.format(n=MAX_INTENTOS_CODIGO)
         if ahora > entrada["expira_en"]:
-            return "ese codigo ya caduco (valia %d minutos)" % MINUTOS_CODIGO
+            return textos.MOTIVO_VENCIDO.format(minutos=MINUTOS_CODIGO)
 
         entrada["intentos"] += 1
         _escribir_archivo()

@@ -290,7 +290,7 @@ resuelve: el panel es otro proceso y no lleva el token. Para que la familia no s
 quede viendo un aviso con los botones puestos cuando ya hay alguien con el aviso,
 la cola hace la otra mitad: cada cinco segundos mira los avisos ya enviados cuya
 alerta está resuelta y todavía no se ha reescrito, y los deja como los deja el
-botón («ATENDIDO», sin botones). El `message_id` con el que salió cada aviso se
+botón («ATENDIDA», sin botones). El `message_id` con el que salió cada aviso se
 guarda en `envios.mensaje_id` en cuanto se manda, y `envios.editado_en` es lo que
 hace que cada aviso se reescriba una sola vez: si lo reescribió el propio botón, la
 cola no lo vuelve a tocar. `alertas.texto_atendido` es la única redacción, así que

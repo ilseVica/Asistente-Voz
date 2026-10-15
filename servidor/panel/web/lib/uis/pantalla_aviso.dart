@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../tema.dart';
+import '../textos.dart';
 
 /// El aviso de privacidad, una vez por navegador y SIN bloquear (decisión 8.1).
 ///
@@ -26,27 +27,17 @@ class PantallaAviso extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Text('Tus datos',
+                  Text(Textos.susDatos,
                       style: Theme.of(contexto).textTheme.headlineMedium),
                   const SizedBox(height: 16),
-                  const _Parrafo(
-                      'Este panel muestra el estado de tu casa: la luz, la '
-                      'temperatura, el gas y las alertas. Los datos salen de los '
-                      'sensores de la casa y no salen de ella.'),
-                  const _Parrafo(
-                      'Quién puede entrar está en Telegram, con el registro de '
-                      'siempre. Cada enlace del panel sirve una sola vez y la '
-                      'sesión caduca.'),
-                  const _Parrafo(
-                      'La casa no guarda ni escucha conversaciones. El panel no '
-                      'tiene micrófono ni cámara y no pide tu ubicación.'),
-                  const _Parrafo(
-                      'Si algo cambia en el futuro, se te avisará en Telegram '
-                      'antes de que cambie.'),
+                  const _Parrafo(Textos.avisoUno),
+                  const _Parrafo(Textos.avisoDos),
+                  const _Parrafo(Textos.avisoTres),
+                  const _Parrafo(Textos.avisoCuatro),
                   const SizedBox(height: 24),
                   FilledButton(
                     onPressed: estado.aceptarAviso,
-                    child: const Text('Entendido, continuar'),
+                    child: const Text(Textos.entendido),
                   ),
                 ],
               ),

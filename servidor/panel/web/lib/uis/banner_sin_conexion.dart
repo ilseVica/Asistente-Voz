@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../modelos.dart';
 import '../tema.dart';
+import '../textos.dart';
 
 /// Los dos «sin conexión», que no son lo mismo (apartado 4.5).
 ///
@@ -29,9 +30,8 @@ class BannerSinConexion extends StatelessWidget {
         color: Color(0xFF9F1D1D),
         fondo: Color(0xFFF6E9E9),
         icono: Icons.wifi_off,
-        titulo: 'Sin conexión con el servidor',
-        texto: 'No se está recibiendo nada del panel. '
-            'Lo que ves es lo último que se sabía.',
+        titulo: Textos.sinConexionServidor,
+        texto: Textos.sinConexionServidorTexto,
       );
     }
 
@@ -46,9 +46,8 @@ class BannerSinConexion extends StatelessWidget {
         color: Color(0xFF8A6D1D),
         fondo: Color(0xFFFBF3DE),
         icono: Icons.cell_tower,
-        titulo: 'Sitio sin conexión',
-        texto: 'El panel sigue conectado, pero la casa no lleva tiempo '
-            'dando señales de vida.',
+        titulo: Textos.casaNoResponde,
+        texto: Textos.casaNoRespondeTexto,
       );
     }
 
@@ -57,15 +56,16 @@ class BannerSinConexion extends StatelessWidget {
 }
 
 /// El gris de «no instalado». No es un cartel: una línea y nada más.
-class LineaNoInstalado extends StatelessWidget {
-  const LineaNoInstalado({super.key, required this.que});
-
-  final String que;
+///
+/// El texto es fijo (la luz) y por eso no recibe un sujeto: así no hay que
+/// concordar el género de quien lo use.
+class LineaLuzNoInstalada extends StatelessWidget {
+  const LineaLuzNoInstalada({super.key});
 
   @override
   Widget build(BuildContext contexto) {
     return Text(
-      '$que: no está instalado en esta casa.',
+      Textos.luzNoInstalada,
       style: Theme.of(contexto).textTheme.bodySmall,
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../tema.dart';
+import '../textos.dart';
 
 /// «Próximamente» para Recordatorios y Mensajes.
 ///
@@ -40,7 +41,7 @@ class PantallaProximamente extends StatelessWidget {
                 decoration: BoxDecoration(
                     color: Tema.suave,
                     borderRadius: BorderRadius.circular(999)),
-                child: const Text('Próximamente',
+                child: const Text(Textos.proximamente,
                     style: TextStyle(
                         color: Tema.primario,
                         fontWeight: FontWeight.w700,
@@ -56,7 +57,7 @@ class PantallaProximamente extends StatelessWidget {
               const SizedBox(height: 28),
               OutlinedButton(
                 onPressed: () => PanelScope.de(contexto).irA(Destino.inicio),
-                child: const Text('Volver al inicio'),
+                child: const Text(Textos.volverAlInicio),
               ),
             ],
           ),
@@ -102,21 +103,21 @@ class _BarraProximamente extends StatelessWidget {
           child: Row(
             children: <Widget>[
               _Item(icono: Icons.home_outlined, activo: Icons.home,
-                  rotulo: 'Inicio', sel: false,
+                  rotulo: Textos.inicio, sel: false,
                   alPulsar: () => estado.irA(Destino.inicio)),
               _Item(icono: Icons.notifications_outlined,
-                  activo: Icons.notifications, rotulo: 'Alertas',
+                  activo: Icons.notifications, rotulo: Textos.alertas,
                   cuenta: estado.estado?.alertasSinResolver ?? 0, sel: false,
                   alPulsar: () => estado.irA(Destino.alertas)),
               _Item(
                   icono: Icons.schedule_outlined,
                   activo: Icons.schedule,
-                  rotulo: 'Recordatorios',
-                  sel: titulo == 'Recordatorios',
+                  rotulo: Textos.recordatorios,
+                  sel: titulo == Textos.recordatorios,
                   alPulsar: () => estado.irA(Destino.recordatorios)),
               _Item(icono: Icons.chat_bubble_outline,
-                  activo: Icons.chat_bubble, rotulo: 'Mensajes',
-                  sel: titulo == 'Mensajes',
+                  activo: Icons.chat_bubble, rotulo: Textos.mensajes,
+                  sel: titulo == Textos.mensajes,
                   alPulsar: () => estado.irA(Destino.mensajes)),
             ],
           ),
@@ -208,10 +209,10 @@ class _LateralProximamente extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text('Asistente de Voz',
+                  Text(Textos.asistenteDeVoz,
                       style: TextStyle(fontSize: 14, color: Tema.secundario)),
                   SizedBox(height: 2),
-                  Text('Sala principal',
+                  Text(Textos.salaPrincipal,
                       style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
@@ -223,7 +224,7 @@ class _LateralProximamente extends StatelessWidget {
             const SizedBox(height: 8),
             ListTile(
               leading: const Icon(Icons.home_outlined, color: Tema.secundario),
-              title: const Text('Inicio',
+              title: const Text(Textos.inicio,
                   style: TextStyle(
                       color: Tema.secundario, fontWeight: FontWeight.w700)),
               onTap: () => estado.irA(Destino.inicio),
@@ -231,26 +232,26 @@ class _LateralProximamente extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.notifications_outlined,
                   color: Tema.secundario),
-              title: const Text('Alertas',
+              title: const Text(Textos.alertas,
                   style: TextStyle(
                       color: Tema.secundario, fontWeight: FontWeight.w700)),
               onTap: () => estado.irA(Destino.alertas),
             ),
             ListTile(
-              selected: titulo == 'Recordatorios',
+              selected: titulo == Textos.recordatorios,
               selectedTileColor: Tema.suave,
               leading: const Icon(Icons.schedule, color: Tema.primario),
-              title: const Text('Recordatorios',
+              title: const Text(Textos.recordatorios,
                   style: TextStyle(
                       color: Tema.primario, fontWeight: FontWeight.w700)),
               onTap: () => estado.irA(Destino.recordatorios),
             ),
             ListTile(
-              selected: titulo == 'Mensajes',
+              selected: titulo == Textos.mensajes,
               selectedTileColor: Tema.suave,
               leading:
                   const Icon(Icons.chat_bubble, color: Tema.primario),
-              title: const Text('Mensajes',
+              title: const Text(Textos.mensajes,
                   style: TextStyle(
                       color: Tema.primario, fontWeight: FontWeight.w700)),
               onTap: () => estado.irA(Destino.mensajes),
@@ -259,7 +260,7 @@ class _LateralProximamente extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
-                '${estado.estado?.familiares ?? 0} familiares registrados',
+                familiares(estado.estado?.familiares ?? 0),
                 style: Theme.of(contexto).textTheme.bodySmall,
               ),
             ),

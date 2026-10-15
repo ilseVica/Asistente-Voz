@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../tema.dart';
+import '../textos.dart';
 
 /// Sin token: explica cómo conseguirlo y acepta un enlace pegado.
 ///
@@ -53,8 +54,9 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
                 readOnly: recienEntrado,
                 style: const TextStyle(fontSize: 16),
                 decoration: InputDecoration(
-                  hintText:
-                      recienEntrado ? 'Tu token de acceso' : 'Pega aquí el enlace del bot',
+                  hintText: recienEntrado
+                      ? Textos.pistaClave
+                      : Textos.pistaEnlace,
                 ),
                 onSubmitted: recienEntrado
                     ? (_) => estado.entrarAlPanel()
@@ -63,8 +65,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
               if (recienEntrado) ...<Widget>[
                 const SizedBox(height: 10),
                 Text(
-                  'Ya estás dentro. Cópialo si quieres entrar desde otro '
-                  'navegador sin pedir /panel: pégalo y entra.',
+                  Textos.recienEntrado,
                   style: tipografia.bodySmall,
                 ),
               ],
@@ -75,7 +76,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
                     : recienEntrado
                         ? estado.entrarAlPanel
                         : () => _entrar(estado, _control.text),
-                child: Text(recienEntrado ? 'Entrar al panel' : 'Entrar al panel'),
+                child: const Text(Textos.entrarAlPanel),
               ),
             ],
           );
@@ -90,28 +91,21 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Text('Panel de la sala',
+                  Text(Textos.panelDeLaSala,
                       style: tipografia.headlineMedium),
                   const SizedBox(height: 6),
-                  Text('Asistente de Voz',
+                  Text(Textos.asistenteDeVoz,
                       style: tipografia.bodySmall),
                   const SizedBox(height: 28),
-                  const _Paso(
-                      numero: '1',
-                      texto: 'Escribe /panel al bot de la casa en Telegram.'),
-                  const _Paso(
-                      numero: '2',
-                      texto: 'Te mandará un enlace que sirve una sola vez.'),
-                  const _Paso(
-                      numero: '3',
-                      texto: 'Ábrelo en este mismo navegador y entra.'),
+                  const _Paso(numero: '1', texto: Textos.pasoUno),
+                  const _Paso(numero: '2', texto: Textos.pasoDos),
+                  const _Paso(numero: '3', texto: Textos.pasoTres),
                   const SizedBox(height: 24),
-                  Text('¿Ya lo tienes?',
+                  Text(Textos.yaLoTiene,
                       style: tipografia.titleMedium),
                   const SizedBox(height: 4),
                   Text(
-                    'Pega el enlace completo si el navegador que se abrió no es '
-                    'el que sueles usar.',
+                    Textos.ayudaEnlace,
                     style: tipografia.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -122,8 +116,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
                   ],
                   const SizedBox(height: 28),
                   Text(
-                    'La casa no guarda conversaciones y el panel no tiene '
-                    'micrófono.',
+                    Textos.piePrivacidad,
                     style: tipografia.bodySmall,
                     textAlign: TextAlign.center,
                   ),
@@ -140,8 +133,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
     FocusManager.instance.primaryFocus?.unfocus();
     final String limpio = valor.trim();
     if (limpio.isEmpty) {
-      estado.avisar(
-          'Pega el enlace que te mandó el bot, o escribe /panel en Telegram.');
+      estado.avisar(Textos.faltaEnlace);
       return;
     }
     await estado.entrar(limpio);

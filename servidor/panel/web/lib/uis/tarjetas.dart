@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../modelos.dart';
 import '../tema.dart';
+import '../textos.dart';
 
 /// El encabezado: quién es y si la casa está viva.
 class Cabecera extends StatelessWidget {
@@ -24,17 +25,17 @@ class Cabecera extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text('Asistente de Voz', style: tipografia.bodySmall),
-              Text('Sala principal', style: tipografia.headlineMedium),
+              Text(Textos.asistenteDeVoz, style: tipografia.bodySmall),
+              Text(Textos.salaPrincipal, style: tipografia.headlineMedium),
             ],
           ),
         ),
         _Pastilla(
           texto: !estado.conectadoAlServidor
-              ? 'Sin conexión'
+              ? Textos.sinConexion
               : viva
-                  ? 'Conectada'
-                  : 'Sin señales',
+                  ? Textos.conectada
+                  : Textos.casaNoResponde,
           color: !estado.conectadoAlServidor
               ? Tema.peligro
               : viva
@@ -107,14 +108,15 @@ class TarjetaLuz extends StatelessWidget {
             recibidoEn: null);
     final bool? encendida = luz.encendida;
     final String titulo = encendida == null
-        ? 'Sin datos'
+        ? Textos.sinDatos
         : encendida
-            ? 'Encendida'
-            : 'Apagada';
+            ? Textos.encendida
+            : Textos.apagada;
 
     final String detalle = luz.estado == sinDatos
-        ? 'Todavía no se ha oído nada de la luz'
-        : '${_origen(luz.origen)} · ${hace(luz.recibidoEn, ahora: estado.ahoraServidor())}';
+        ? Textos.todaviaNoHayLuz
+        : '${origenDeLuz(luz.origen)} · '
+            '${hace(luz.recibidoEn, ahora: estado.ahoraServidor())}';
 
     return Card(
       child: Padding(
@@ -127,7 +129,7 @@ class TarjetaLuz extends StatelessWidget {
                 const Icon(Icons.lightbulb_outline,
                     color: Tema.secundario, size: 20),
                 const SizedBox(width: 8),
-                Text('Luz de la sala',
+                Text(Textos.luzDeLaSala,
                     style: Theme.of(contexto)
                         .textTheme
                         .bodyMedium
@@ -156,32 +158,15 @@ class TarjetaLuz extends StatelessWidget {
                       child: CircularProgressIndicator(
                           strokeWidth: 2.5, color: Tema.tarjeta))
                   : Text(encendida == null
-                      ? 'Sin datos de la luz'
+                      ? Textos.sinDatosDeLaLuz
                       : encendida
-                          ? 'Apagar la luz'
-                          : 'Encender la luz'),
+                          ? Textos.apagarLaLuz
+                          : Textos.encenderLaLuz),
             ),
           ],
         ),
       ),
     );
-  }
-
-  String _origen(String? origen) {
-    switch (origen) {
-      case 'voz':
-        return 'Por voz';
-      case 'panel':
-        return 'Desde el panel';
-      case 'boton':
-        return 'Por el botón';
-      case 'nodo':
-        return 'En la casa';
-      case 'rele':
-        return 'En la casa';
-      default:
-        return origen == null ? 'Origen desconocido' : 'Por $origen';
-    }
   }
 }
 
@@ -201,30 +186,30 @@ class TarjetaAmbiente extends StatelessWidget {
 
     final List<_Dato> datos = <_Dato>[
       _Dato(
-        rotulo: 'Temperatura',
+        rotulo: Textos.temperatura,
         valor: s.temperaturaC == null
-            ? 'Sin datos'
+            ? Textos.sinDatos
             : '${_num(s.temperaturaC)} °C',
         tamano: 26,
       ),
       _Dato(
-        rotulo: 'Humedad',
-        valor: s.humedadPct == null ? 'Sin datos' : '${_num(s.humedadPct)} %',
+        rotulo: Textos.humedad,
+        valor: s.humedadPct == null ? Textos.sinDatos : '${_num(s.humedadPct)} %',
         tamano: 26,
       ),
       _Dato(
-        rotulo: 'Gas',
-        valor: s.gasAdc == null ? 'Sin datos' : 'Normal',
+        rotulo: Textos.gas,
+        valor: s.gasAdc == null ? Textos.sinDatos : Textos.noSeDetectaGas,
         tamano: 26,
         color: s.gasAdc == null ? Tema.secundario : Tema.primario,
       ),
       _Dato(
-        rotulo: 'Movimiento',
+        rotulo: Textos.movimiento,
         valor: s.movimiento == null
-            ? 'Sin datos'
+            ? Textos.sinDatos
             : s.movimiento!
-                ? 'Ahora mismo'
-                : 'Nadie',
+                ? Textos.ahoraMismo
+                : Textos.noSeDetectaNadie,
         tamano: 18,
         subtitulo: s.recibidoEn == null ? null : antiguedad,
       ),
@@ -236,7 +221,7 @@ class TarjetaAmbiente extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text('Ambiente',
+            Text(Textos.ambiente,
                 style: Theme.of(contexto)
                     .textTheme
                     .bodyMedium
@@ -256,7 +241,7 @@ class TarjetaAmbiente extends StatelessWidget {
               );
             }),
             const SizedBox(height: 12),
-            Text('Última lectura: $antiguedad',
+            Text('${Textos.ultimaLectura}$antiguedad',
                 style: Theme.of(contexto).textTheme.bodySmall),
           ],
         ),
@@ -325,9 +310,9 @@ class TarjetaEnlaces extends StatelessWidget {
     final int ahora = estado.ahoraServidor();
 
     final List<_Enlace> enlaces = <_Enlace>[
-      _Enlace('Nodo', e.nodo),
-      _Enlace('Sitio', e.sitio),
-      _Enlace('Satélite', e.satelite),
+      _Enlace(Textos.sensoresYLuz, e.nodo),
+      _Enlace(Textos.conexionConLaCasa, e.sitio),
+      _Enlace(Textos.asistenteDeVoz, e.satelite),
     ];
 
     return Card(
@@ -369,8 +354,8 @@ class _Enlace {
   /// `ahoraRef` se pasa de fuera y no se guarda: es el reloj del servidor, que se
   /// actualiza cada 30 s, y una copia dentro de esta clase se quedaría vieja.
   String texto(int ahoraRef) {
-    if (componente.estado == noInstalado) return 'No está en esta casa';
-    if (componente.estado == sinDatos) return 'Sin datos';
+    if (componente.estado == noInstalado) return Textos.noSeUsaAqui;
+    if (componente.estado == sinDatos) return Textos.sinDatos;
     if (componente.estado == desconectado) {
       return 'Sin conexión · ${hace(componente.recibidoEn, ahora: ahoraRef)}';
     }
@@ -417,8 +402,7 @@ class PiePanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'La casa no guarda conversaciones. El panel no tiene micrófono '
-            'ni cámara.',
+            Textos.piePrivacidad,
             style: tipografia.bodySmall,
           ),
           const SizedBox(height: 4),
@@ -430,7 +414,7 @@ class PiePanel extends StatelessWidget {
                     padding: EdgeInsets.zero,
                     minimumSize: const Size(0, 32),
                     foregroundColor: Tema.primario),
-                child: Text('Ver el aviso de privacidad',
+                child: Text(Textos.verAviso,
                     style: tipografia.bodySmall?.copyWith(
                         color: Tema.primario,
                         decoration: TextDecoration.underline)),
@@ -441,7 +425,7 @@ class PiePanel extends StatelessWidget {
                 style: TextButton.styleFrom(
                     padding: EdgeInsets.zero,
                     minimumSize: const Size(0, 32)),
-                child: Text('Cerrar sesión',
+                child: Text(Textos.cerrarSesion,
                     style: tipografia.bodySmall
                         ?.copyWith(color: Tema.secundario)),
               ),
@@ -456,17 +440,15 @@ class PiePanel extends StatelessWidget {
     final bool? seguro = await showDialog<bool>(
       context: contexto,
       builder: (BuildContext contexto) => AlertDialog(
-        title: const Text('¿Cerrar sesión?'),
-        content: const Text(
-            'En este navegador se borrará la sesión. Para volver a entrar '
-            'hará falta un enlace nuevo con /panel.'),
+        title: const Text(Textos.cerrarSesionTitulo),
+        content: const Text(Textos.cerrarSesionTexto),
         actions: <Widget>[
           TextButton(
               onPressed: () => Navigator.of(contexto).pop(false),
-              child: const Text('Cancelar')),
+              child: const Text(Textos.cancelar)),
           FilledButton(
               onPressed: () => Navigator.of(contexto).pop(true),
-              child: const Text('Cerrar sesión')),
+              child: const Text(Textos.cerrarSesion)),
         ],
       ),
     );

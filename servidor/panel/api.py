@@ -220,10 +220,12 @@ def sesion_requerida(request: Request) -> dict:
     if fila is None:
         if not limite_token.permitido(ip):
             registro.warning("401 bloqueado por limite desde %s", ip)
-            raise HTTPException(429, "demasiados intentos; espera unos minutos")
+            raise HTTPException(429, "Se han hecho demasiados intentos. Espere "
+                                     "unos minutos y vuelva a intentarlo.")
         limite_token.anotar_fallo(ip)
         registro.warning("401 en %s desde %s", request.url.path, ip)
-        raise HTTPException(401, "sesion no valida")
+        raise HTTPException(401, "Su sesión no es válida. Vuelva a entrar con "
+                                 "un enlace nuevo.")
     limite_token.anotar_exito(ip)
     return fila
 
@@ -283,13 +285,15 @@ async def acceso(cuerpo: Canje, request: Request):
 
     if not limite_acceso.permitido(ip):
         registro.warning("acceso bloqueado por limite desde %s", ip)
-        raise HTTPException(429, "demasiados intentos; espera unos minutos")
+        raise HTTPException(429, "Se han hecho demasiados intentos. Espere "
+                                 "unos minutos y vuelva a intentarlo.")
 
     exito, fila = panel_acceso.canjear(base, cuerpo.codigo.strip())
     if not exito:
         limite_acceso.anotar_fallo(ip)
         registro.warning("canje fallido desde %s", ip)
-        raise HTTPException(401, "este enlace ya no sirve; pide uno nuevo con /panel")
+        raise HTTPException(401, "Este enlace ya no sirve. Escriba /panel al "
+                                 "bot de la casa para pedir uno nuevo.")
 
     limite_acceso.anotar_exito(ip)
     token, caduca_en = panel_acceso.crear_token(base, fila["chat_id"])
@@ -402,7 +406,7 @@ async def atender(id_alerta: str, sesion: dict = Depends(sesion_requerida)):
     import alertas as alertas_modulo
 
     if not alertas_modulo.id_valido(id_alerta):
-        raise HTTPException(404, "no hay ninguna alerta con ese identificador")
+        raise HTTPException(404, "No se encontró esa alerta.")
 
     fila, fresca = alertas_modulo.resolver(
         base, mqtt.publicar if mqtt else None, id_alerta,
@@ -410,7 +414,7 @@ async def atender(id_alerta: str, sesion: dict = Depends(sesion_requerida)):
         origen="el panel",
     )
     if fila is None:
-        raise HTTPException(404, "no hay ninguna alerta con ese identificador")
+        raise HTTPException(404, "No se encontró esa alerta.")
 
     respuesta = _alerta_json(_con_estado(fila))
     respuesta["fresca"] = fresca
@@ -450,8 +454,8 @@ async def luz(cuerpo: OrdenLuz, sesion: dict = Depends(sesion_requerida)):
     """
     del sesion
     if mqtt is None or not mqtt.conectado:
-        raise HTTPException(503, "el panel no está conectado al broker; no se puede "
-                                 "mandar la orden")
+        raise HTTPException(503, "El panel no puede comunicarse con la casa en "
+                                 "este momento. Inténtelo de nuevo en unos minutos.")
     ts = int(time.time())
     try:
         # El `ts` se pasa, y no se deja que lo ponga `publicar_luz`, para que el que
@@ -460,7 +464,7 @@ async def luz(cuerpo: OrdenLuz, sesion: dict = Depends(sesion_requerida)):
     except Exception as error:  # noqa: BLE001
         registro.error("no se pudo publicar la orden de luz: %s",
                        _sin_secretos(error))
-        raise HTTPException(502, "no se pudo publicar la orden")
+        raise HTTPException(502, "No se pudo enviar la orden. Inténtelo de nuevo.")
     return {
         "aceptado": True,
         "publicado": {"estado": cuerpo.estado, "origen": "panel", "ts": ts},
@@ -680,7 +684,7 @@ PAGINA_CANJE = """<!DOCTYPE html>
 <main>
   <h1 id="titulo">Entrando al panel</h1>
   <div class="barra"><i id="progreso"></i></div>
-  <p id="texto">Un momento.</p>
+  <p id="texto">Un momento, por favor.</p>
 </main>
 <script>
 var CODIGO = /*CODIGO*/null;
@@ -758,7 +762,7 @@ function canjear() {
   }).then(function (r) {
     progreso.style.width = '80%';
     if (!r.ok) {
-      fallo('Este enlace ya se usó. Escribe /panel al bot de la casa y pide un enlace nuevo.');
+      fallo('Este enlace ya se usó. Escriba /panel al bot de la casa y pida un enlace nuevo.');
       return null;
     }
     return r.json();
@@ -771,7 +775,7 @@ function canjear() {
     guardarSesion(d.token, d.nombre);
     abrirPanel();
   }).catch(function () {
-    fallo('No se pudo contactar con el servidor. Comprueba la conexión e inténtalo otra vez.');
+    fallo('No se pudo contactar con el servidor. Compruebe la conexión e inténtelo de nuevo.');
   });
 }
 
@@ -792,7 +796,7 @@ function comprobarSesion(intentos) {
     if (intentos > 0) {
       setTimeout(function () { comprobarSesion(intentos - 1); }, 1500);
     } else {
-      fallo('No se pudo comprobar la sesión. Comprueba la conexión y vuelve a '
+      fallo('No se pudo comprobar la sesión. Compruebe la conexión y vuelva a '
             + 'abrir el enlace; el código no se ha gastado.',
             'No se pudo entrar');
     }
@@ -847,7 +851,7 @@ async def pagina_acceso(codigo: str):
     """
     codigo = codigo.strip("/")
     if not codigo or "/" in codigo or len(codigo) > 128:
-        raise HTTPException(404, "enlace de acceso no valido")
+        raise HTTPException(404, "El enlace de acceso no es válido.")
     return HTMLResponse(PAGINA_CANJE.replace("/*CODIGO*/null", _js_seguro(codigo)),
                         headers={"Referrer-Policy": "no-referrer",
                                  "X-Robots-Tag": "noindex, nofollow"})

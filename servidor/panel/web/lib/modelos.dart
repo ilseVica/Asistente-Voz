@@ -6,6 +6,8 @@
 /// necesita cabe en lo que se ve.
 library;
 
+import 'textos.dart';
+
 /// Los estados que devuelve `estado.py`.
 const String conectado = 'conectado';
 const String desconectado = 'desconectado';
@@ -197,12 +199,10 @@ String hace(int? epochSegundos, {int? ahora}) {
   if (segundos < 0) return 'ahora mismo';
   if (segundos < 60) return 'hace un momento';
   if (segundos < 3600) {
-    final int min = segundos ~/ 60;
-    return 'hace $min min';
+    return 'hace ${minutos(segundos ~/ 60)}';
   }
   if (segundos < 86400) {
-    final int horas = segundos ~/ 3600;
-    return 'hace $horas h';
+    return 'hace ${horas(segundos ~/ 3600)}';
   }
   final DateTime fecha =
       DateTime.fromMillisecondsSinceEpoch(epochSegundos * 1000);

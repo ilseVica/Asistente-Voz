@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../modelos.dart';
 import '../tema.dart';
+import '../textos.dart';
 import 'banner_sin_conexion.dart';
 import 'pantalla_panel.dart' show tituloAlerta, PastillaEstado;
 import 'tarjetas.dart';
@@ -36,7 +37,7 @@ class PantallaAlertas extends StatelessWidget {
           Row(
             children: <Widget>[
               Expanded(
-                child: Text('Alertas',
+                child: Text(Textos.alertas,
                     style: Theme.of(contexto).textTheme.headlineMedium),
               ),
               if (estado.cargandoAlerta)
@@ -48,8 +49,7 @@ class PantallaAlertas extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Lo más reciente arriba. Si alguien la atendió desde Telegram, '
-            'aquí se refleja.',
+            Textos.alertasSubtitulo,
             style: Theme.of(contexto).textTheme.bodySmall,
           ),
           const SizedBox(height: 20),
@@ -58,7 +58,7 @@ class PantallaAlertas extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Todavía no ha habido ninguna alerta en esta casa.',
+                  Textos.sinAlertas,
                   style: Theme.of(contexto).textTheme.bodyMedium,
                 ),
               ),
@@ -148,13 +148,13 @@ class _TarjetaAlerta extends StatelessWidget {
               const SizedBox(height: 14),
               OutlinedButton(
                 onPressed: () => estado.atenderAlerta(alerta.id),
-                child: const Text('Ya lo atendí'),
+                child: const Text(Textos.yaLoAtendi),
               ),
             ],
             if (alerta.resueltaEn != null) ...<Widget>[
               const SizedBox(height: 10),
               Text(
-                'Atendida ${fechaAlerta(alerta.resueltaEn!)}',
+                '${Textos.atendida} ${fechaAlerta(alerta.resueltaEn!)}',
                 style: Theme.of(contexto)
                     .textTheme
                     .bodySmall
@@ -174,13 +174,9 @@ class _TarjetaAlerta extends StatelessWidget {
     if (a.tipo == 'inactividad' && a.carga['minutos'] != null) {
       return 'Sin movimiento durante ${a.carga['minutos']} minutos';
     }
-    if (a.carga['origen'] != null) {
-      final String origen = a.carga['origen'].toString();
-      if (origen == 'voz') return 'Pedido por voz';
-      if (origen == 'panel') return 'Pedido desde el panel';
-      return 'Origen: $origen';
-    }
-    return null;
+    final Object? origen = a.carga['origen'];
+    if (origen == null) return null;
+    return detalleOrigen(origen.toString());
   }
 }
 
@@ -202,10 +198,10 @@ class _LateralAlertas extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text('Asistente de Voz',
+                  Text(Textos.asistenteDeVoz,
                       style: TextStyle(fontSize: 14, color: Tema.secundario)),
                   SizedBox(height: 2),
-                  Text('Sala principal',
+                  Text(Textos.salaPrincipal,
                       style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
@@ -217,7 +213,7 @@ class _LateralAlertas extends StatelessWidget {
             const SizedBox(height: 8),
             ListTile(
               leading: const Icon(Icons.home_outlined, color: Tema.secundario),
-              title: const Text('Inicio',
+              title: const Text(Textos.inicio,
                   style: TextStyle(
                       color: Tema.secundario, fontWeight: FontWeight.w700)),
               onTap: () => estado.irA(Destino.inicio),
@@ -227,7 +223,7 @@ class _LateralAlertas extends StatelessWidget {
               selectedTileColor: Tema.suave,
               leading: const Icon(Icons.notifications,
                   color: Tema.primario),
-              title: const Text('Alertas',
+              title: const Text(Textos.alertas,
                   style: TextStyle(
                       color: Tema.primario, fontWeight: FontWeight.w700)),
               onTap: () => estado.irA(Destino.alertas),
@@ -236,7 +232,7 @@ class _LateralAlertas extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
-                '${estado.estado?.familiares ?? 0} familiares registrados',
+                familiares(estado.estado?.familiares ?? 0),
                 style: Theme.of(contexto).textTheme.bodySmall,
               ),
             ),
@@ -267,17 +263,17 @@ class _BarraAlertas extends StatelessWidget {
           child: Row(
             children: <Widget>[
               _Boton(icono: Icons.home_outlined, activo: Icons.home,
-                  rotulo: 'Inicio', cuenta: 0, sel: false,
+                  rotulo: Textos.inicio, cuenta: 0, sel: false,
                   alPulsar: () => estado.irA(Destino.inicio)),
               _Boton(icono: Icons.notifications_outlined,
-                  activo: Icons.notifications, rotulo: 'Alertas',
+                  activo: Icons.notifications, rotulo: Textos.alertas,
                   cuenta: pendientes, sel: true,
                   alPulsar: () => estado.irA(Destino.alertas)),
               _Boton(icono: Icons.schedule_outlined, activo: Icons.schedule,
-                  rotulo: 'Recordatorios', cuenta: 0, sel: false,
+                  rotulo: Textos.recordatorios, cuenta: 0, sel: false,
                   alPulsar: () => estado.irA(Destino.recordatorios)),
               _Boton(icono: Icons.chat_bubble_outline,
-                  activo: Icons.chat_bubble, rotulo: 'Mensajes',
+                  activo: Icons.chat_bubble, rotulo: Textos.mensajes,
                   cuenta: 0, sel: false,
                   alPulsar: () => estado.irA(Destino.mensajes)),
             ],

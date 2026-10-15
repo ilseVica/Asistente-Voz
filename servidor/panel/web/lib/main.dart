@@ -6,6 +6,7 @@ import 'api.dart';
 import 'modelos.dart';
 import 'sesion.dart';
 import 'tema.dart';
+import 'textos.dart';
 import 'uis/pantalla_acceso.dart';
 import 'uis/pantalla_alertas.dart';
 import 'uis/pantalla_aviso.dart';
@@ -118,8 +119,7 @@ class EstadoPanel extends ChangeNotifier {
       }
     } catch (_) {
       preparando = false;
-      errorArranque =
-          'No se pudo contactar con el servidor. Comprueba la conexión e inténtalo otra vez.';
+      errorArranque = Textos.errorDeRed;
       notifyListeners();
     }
   }
@@ -279,8 +279,8 @@ class EstadoPanel extends ChangeNotifier {
       // No se pone la luz aquí. La orden es 202 y el estado real llega por el
       // WebSocket: pintar «encendida» porque se mandó la orden sería mentir.
       aviso = encender
-          ? 'Orden de encender enviada. El estado se actualiza solo.'
-          : 'Orden de apagar enviada. El estado se actualiza solo.';
+          ? Textos.luzEnviadaEncender
+          : Textos.luzEnviadaApagar;
     } on ErrorApi catch (error) {
       if (error.sinSesion) {
         cargandoLuz = false;
@@ -289,7 +289,7 @@ class EstadoPanel extends ChangeNotifier {
       }
       aviso = error.mensaje;
     } catch (_) {
-      aviso = 'No se pudo enviar la orden.';
+      aviso = Textos.noSePudoEnviarOrden;
     }
     cargandoLuz = false;
     notifyListeners();
@@ -310,7 +310,7 @@ class EstadoPanel extends ChangeNotifier {
         alertas = <Alerta>[resuelta, ...alertas];
       }
       if (!resuelta.estado.startsWith('resuelta')) {
-        aviso = 'Alguien ya la había atendido.';
+        aviso = Textos.otraPersonaAtendio;
       }
     } on ErrorApi catch (error) {
       if (error.sinSesion) {
@@ -320,7 +320,7 @@ class EstadoPanel extends ChangeNotifier {
       }
       aviso = error.mensaje;
     } catch (_) {
-      aviso = 'No se pudo atender la alerta.';
+      aviso = Textos.noSePudoAtender;
     }
     cargandoAlerta = false;
     notifyListeners();
@@ -335,8 +335,7 @@ class EstadoPanel extends ChangeNotifier {
   Future<void> entrar(String enlaceOcodigo) async {
     final String entrada = enlaceOcodigo.trim();
     if (entrada.isEmpty) {
-      aviso =
-          'Pega el enlace que te mandó el bot, o escribe /panel en Telegram.';
+      aviso = Textos.faltaEnlace;
       notifyListeners();
       return;
     }
@@ -363,8 +362,7 @@ class EstadoPanel extends ChangeNotifier {
       notifyListeners();
     } catch (_) {
       preparando = false;
-      aviso =
-          'No se pudo contactar con el servidor. Comprueba la conexión e inténtalo otra vez.';
+      aviso = Textos.errorDeRed;
       notifyListeners();
     }
   }
@@ -385,9 +383,7 @@ class EstadoPanel extends ChangeNotifier {
     } on ErrorApi catch (error) {
       if (!error.sinSesion) rethrow;
       if (codigo == null) {
-        throw const ErrorApi(
-            'Eso no parece un enlace ni un token. Pega el enlace del bot '
-            'entero, o el token de otro navegador.');
+        throw const ErrorApi(Textos.enlaceNoReconocido);
       }
       return await api.canjear(codigo);
     }
@@ -485,7 +481,7 @@ class _AsistentePanelState extends State<AsistentePanel> {
         listenable: _estado,
         builder: (BuildContext contexto, Widget? _) {
           return MaterialApp(
-            title: 'Panel de la sala',
+            title: Textos.panelDeLaSala,
             debugShowCheckedModeBanner: false,
             theme: Tema.construir(),
             home: _raiz(contexto),
@@ -522,14 +518,12 @@ class _AsistentePanelState extends State<AsistentePanel> {
         return const PantallaAlertas();
       case Destino.recordatorios:
         return const PantallaProximamente(
-            titulo: 'Recordatorios',
-            texto: 'Todavía no hay recordatorios en esta casa. '
-                'Cuando existan, aparecerán aquí con la hora de cada uno.');
+            titulo: Textos.recordatorios,
+            texto: Textos.recordatoriosVacio);
       case Destino.mensajes:
         return const PantallaProximamente(
-            titulo: 'Mensajes',
-            texto: 'Todavía no hay mensajes en esta casa. '
-                'Cuando existan, aparecerán aquí.');
+            titulo: Textos.mensajes,
+            texto: Textos.mensajesVacio);
     }
   }
 }
@@ -560,7 +554,7 @@ class PantallaErrorArranque extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Text('No se pudo abrir el panel',
+              Text(Textos.noSePudoAbrir,
                   style: Theme.of(contexto).textTheme.headlineMedium,
                   textAlign: TextAlign.center),
               const SizedBox(height: 12),
@@ -570,7 +564,7 @@ class PantallaErrorArranque extends StatelessWidget {
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: estado.cargarEstado,
-                child: const Text('Volver a intentar'),
+                child: const Text(Textos.volverAIntentar),
               ),
             ],
           ),

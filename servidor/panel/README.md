@@ -56,6 +56,14 @@ Los dos flags que no son de empaquetado:
   "Anadir a la pantalla de inicio" funciona igual, y en Android la via de instalacion
   es la APK.
 
+  Aviso (Flutter 3.47.6): el flag esta marcado como obsoleto y el build imprime
+  «The --pwa-strategy option is deprecated and will be removed in a future Flutter
+  release» (issue flutter/flutter#156910). Se mantiene porque hoy sigue siendo la
+  unica forma de no generar el service worker: sin el flag, el build usa por defecto
+  `offline-first` y el service worker vuelve. No hay reemplazo equivalente todavia;
+  si una version futura lo quita, habra que revisar este punto. El aviso, por ahora,
+  no cambia la salida.
+
 Volver a compilar despues de cambiar el frontend es exactamente la misma orden. No hace
 falta reiniciar el broker ni el orquestador.
 

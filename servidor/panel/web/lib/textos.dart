@@ -1,0 +1,169 @@
+class Textos {
+  Textos._();
+
+  static const String asistenteDeVoz = 'Asistente de voz';
+  static const String salaPrincipal = 'Sala principal';
+
+  static const String inicio = 'Inicio';
+  static const String alertas = 'Alertas';
+  static const String recordatorios = 'Recordatorios';
+  static const String mensajes = 'Mensajes';
+
+  static const String panelDeLaSala = 'Panel de la sala';
+
+  static const String pasoUno =
+      'Escriba /panel al bot de la casa en Telegram.';
+  static const String pasoDos =
+      'Le enviará un enlace que sirve una sola vez.';
+  static const String pasoTres =
+      'Ábralo en este mismo navegador y entre.';
+  static const String yaLoTiene = '¿Ya lo tiene?';
+  static const String ayudaEnlace = 'Pegue el enlace completo si el navegador '
+      'que se abrió no es el que suele usar.';
+  static const String pistaEnlace = 'Pegue aquí el enlace del bot';
+  static const String pistaClave = 'Su clave de acceso';
+  static const String recienEntrado = 'Ya está dentro. Cópiela si quiere entrar '
+      'desde otro navegador sin pedir /panel: péguela y entre. No la comparta '
+      'con nadie.';
+  static const String entrarAlPanel = 'Entrar al panel';
+  static const String faltaEnlace =
+      'Pegue el enlace que le envió el bot, o escriba /panel en Telegram.';
+  static const String enlaceNoReconocido = 'Eso no parece un enlace ni una '
+      'clave de acceso. Pegue el enlace del bot completo, o la clave de acceso '
+      'de otro navegador.';
+  static const String errorDeRed = 'No se pudo contactar con el servidor. '
+      'Compruebe la conexión e inténtelo de nuevo.';
+
+  static const String susDatos = 'Sus datos';
+  static const String avisoUno = 'Este panel muestra el estado de la casa: la '
+      'luz, la temperatura, el gas y las alertas. La información se guarda en '
+      'el servidor de la casa. Solo sale de ella para mostrarse en este panel y '
+      'para enviar las alertas por Telegram.';
+  static const String avisoDos = 'Solo pueden entrar los familiares '
+      'registrados en el bot de Telegram. Cada enlace sirve una sola vez y la '
+      'sesión vence a los 30 días.';
+  static const String avisoTres = 'El asistente no guarda grabaciones de lo '
+      'que se dice en la casa. El panel no tiene micrófono ni cámara y no pide '
+      'su ubicación.';
+  static const String avisoCuatro = 'Si algo de esto cambia, se le avisará por '
+      'Telegram antes del cambio.';
+  static const String entendido = 'Entendido, continuar';
+  static const String piePrivacidad = 'El asistente no guarda grabaciones de '
+      'voz. El panel no tiene micrófono ni cámara.';
+
+  static const String sinConexion = 'Sin conexión';
+  static const String conectada = 'Conectada';
+  static const String casaNoResponde = 'La casa no responde';
+
+  static const String sinConexionServidor = 'Sin conexión con el servidor';
+  static const String sinConexionServidorTexto = 'No se está recibiendo '
+      'información. Se muestra la última información recibida.';
+  static const String casaNoRespondeTexto = 'El panel sigue conectado, pero la '
+      'casa no ha dado señales desde hace un rato.';
+
+  static const String luzDeLaSala = 'Luz de la sala';
+  static const String encendida = 'Encendida';
+  static const String apagada = 'Apagada';
+  static const String sinDatos = 'Sin datos';
+  static const String todaviaNoHayLuz = 'Todavía no hay información de la luz.';
+  static const String sinDatosDeLaLuz = 'Sin datos de la luz';
+  static const String apagarLaLuz = 'Apagar la luz';
+  static const String encenderLaLuz = 'Encender la luz';
+  static const String luzNoInstalada = 'La luz no está instalada en esta casa.';
+
+  static const String ambiente = 'Ambiente';
+  static const String temperatura = 'Temperatura';
+  static const String humedad = 'Humedad';
+  static const String gas = 'Gas';
+  static const String movimiento = 'Movimiento';
+  static const String noSeDetectaGas = 'No se detecta gas';
+  static const String ahoraMismo = 'Ahora mismo';
+  static const String noSeDetectaNadie = 'No se detecta a nadie';
+  static const String ultimaLectura = 'Última lectura: ';
+
+  static const String sensoresYLuz = 'Sensores y luz';
+  static const String conexionConLaCasa = 'Conexión con la casa';
+  static const String noSeUsaAqui = 'No se usa en esta instalación';
+
+  static const String verAviso = 'Ver el aviso de privacidad';
+  static const String cerrarSesion = 'Cerrar sesión';
+  static const String cerrarSesionTitulo = '¿Cerrar sesión?';
+  static const String cerrarSesionTexto = 'En este navegador se borrará la '
+      'sesión. Para volver a entrar hará falta un enlace nuevo con /panel.';
+  static const String cancelar = 'Cancelar';
+
+  static const String alertasRecientes = 'Alertas recientes';
+  static const String verTodas = 'Ver todas';
+  static const String sinAlertas =
+      'Todavía no ha habido ninguna alerta en esta casa.';
+  static const String alertasSubtitulo = 'Lo más reciente arriba. Si alguien '
+      'la atendió desde Telegram, aquí se refleja.';
+  static const String yaLoAtendi = 'Ya lo atendí';
+  static const String atendida = 'Atendida';
+  static const String descartada = 'Descartada';
+  static const String enviada = 'Enviada';
+  static const String pendiente = 'Pendiente';
+  static const String alertaDeGas = 'Alerta de gas';
+  static const String peticionDeAyuda = 'Petición de ayuda';
+  static const String sinMovimientoEnLaCasa = 'Sin movimiento en la casa';
+  static const String haDichoTenerMiedo = 'Ha dicho que tiene miedo';
+  static const String otraPersonaAtendio =
+      'Otra persona ya había atendido esta alerta.';
+
+  static const String noSePudoAbrir = 'No se pudo abrir el panel';
+  static const String volverAIntentar = 'Volver a intentar';
+  static const String noSePudoEnviarOrden = 'No se pudo enviar la orden.';
+  static const String noSePudoAtender = 'No se pudo atender la alerta.';
+  static const String noSePudoCompletar = 'No se pudo completar la solicitud.';
+
+  static const String recordatoriosVacio = 'Todavía no hay recordatorios en '
+      'esta casa. Cuando existan, aparecerán aquí con la hora de cada uno.';
+  static const String mensajesVacio = 'Todavía no hay mensajes en esta casa. '
+      'Cuando existan, aparecerán aquí.';
+  static const String proximamente = 'Próximamente';
+  static const String volverAlInicio = 'Volver al inicio';
+
+  static const String luzEnviadaEncender = 'Se envió la orden de encender la '
+      'luz. El estado se actualizará en unos segundos.';
+  static const String luzEnviadaApagar = 'Se envió la orden de apagar la luz. '
+      'El estado se actualizará en unos segundos.';
+}
+
+String familiares(int n) =>
+    n == 1 ? '1 familiar registrado' : '$n familiares registrados';
+
+String minutos(int n) => n == 1 ? '1 minuto' : '$n minutos';
+
+String horas(int n) => n == 1 ? '1 hora' : '$n horas';
+
+/// El detalle del origen de una alerta de ayuda, como lo dice el bot.
+/// Devuelve null para lo que no se sabe decir, y entonces no se pinta la línea.
+String? detalleOrigen(String? origen) {
+  switch (origen) {
+    case 'boton':
+      return 'Se pidió por medio del botón de ayuda';
+    case 'voz':
+      return 'Se pidió por medio del asistente de voz';
+    case 'alexa':
+      return 'Se pidió por medio de Alexa';
+    case 'panel':
+      return 'Se pidió desde el panel';
+    default:
+      return null;
+  }
+}
+
+String origenDeLuz(String? origen) {
+  switch (origen) {
+    case 'voz':
+      return 'Por voz';
+    case 'panel':
+      return 'Desde el panel';
+    case 'boton':
+      return 'Con el botón';
+    case 'alexa':
+      return 'Con Alexa';
+    default:
+      return 'Origen desconocido';
+  }
+}

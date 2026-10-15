@@ -126,9 +126,16 @@ void main() {
 
     test('las unidades que se ven en pantalla', () {
       expect(hace(ahora - 10, ahora: ahora), 'hace un momento');
-      expect(hace(ahora - 4 * 60, ahora: ahora), 'hace 4 min');
-      expect(hace(ahora - 3 * 3600, ahora: ahora), 'hace 3 h');
+      expect(hace(ahora - 4 * 60, ahora: ahora), 'hace 4 minutos');
+      expect(hace(ahora - 3 * 3600, ahora: ahora), 'hace 3 horas');
       expect(hace(ahora - 2 * 86400, ahora: ahora), 'hace 2 días');
+    });
+
+    test('singular con una unidad, plural con más', () {
+      expect(hace(ahora - 60, ahora: ahora), 'hace 1 minuto');
+      expect(hace(ahora - 2 * 60, ahora: ahora), 'hace 2 minutos');
+      expect(hace(ahora - 3600, ahora: ahora), 'hace 1 hora');
+      expect(hace(ahora - 2 * 3600, ahora: ahora), 'hace 2 horas');
     });
 
     test('un tiempo que aún no llega es «ahora mismo» y no un número raro', () {

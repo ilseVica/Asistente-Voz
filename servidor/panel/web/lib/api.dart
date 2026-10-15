@@ -7,6 +7,7 @@ import 'package:web_socket_channel/status.dart' as estado_ws;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'modelos.dart';
+import 'textos.dart';
 
 /// Errores que la interfaz sabe distinguir.
 ///
@@ -62,7 +63,7 @@ class ClienteApi {
 
   Future<dynamic> _json(http.Response respuesta) async {
     if (respuesta.statusCode >= 400) {
-      String mensaje = 'no se pudo completar la petición';
+      String mensaje = Textos.noSePudoCompletar;
       try {
         final dynamic cuerpo = jsonDecode(utf8.decode(respuesta.bodyBytes));
         if (cuerpo is Map && cuerpo['detail'] is String) {

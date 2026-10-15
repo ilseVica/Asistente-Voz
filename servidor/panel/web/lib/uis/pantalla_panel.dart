@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../modelos.dart';
 import '../tema.dart';
+import '../textos.dart';
 import 'banner_sin_conexion.dart';
 import 'tarjetas.dart';
 
@@ -38,7 +39,7 @@ class PantallaPanel extends StatelessWidget {
           const Cabecera(),
           const SizedBox(height: 20),
           if (estado.estado?.luz.estado == noInstalado)
-            const LineaNoInstalado(que: 'La luz')
+            const LineaLuzNoInstalada()
           else
             const TarjetaLuz(),
           const SizedBox(height: 16),
@@ -103,14 +104,14 @@ class _AlertasRecientes extends StatelessWidget {
             Row(
               children: <Widget>[
                 Expanded(
-                  child: Text('Alertas recientes',
+                  child: Text(Textos.alertasRecientes,
                       style: Theme.of(contexto).textTheme.titleLarge),
                 ),
                 TextButton(
                   onPressed: () => estado.irA(Destino.alertas),
                   style: TextButton.styleFrom(
                       foregroundColor: Tema.primario, padding: EdgeInsets.zero),
-                  child: const Text('Ver todas'),
+                  child: const Text(Textos.verTodas),
                 ),
               ],
             ),
@@ -119,7 +120,7 @@ class _AlertasRecientes extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
-                  'Todavía no ha habido ninguna alerta en esta casa.',
+                  Textos.sinAlertas,
                   style: Theme.of(contexto).textTheme.bodySmall,
                 ),
               )
@@ -171,13 +172,13 @@ class _FilaAlerta extends StatelessWidget {
 String tituloAlerta(String tipo) {
   switch (tipo) {
     case 'gas':
-      return 'Gas detectado';
+      return Textos.alertaDeGas;
     case 'ayuda':
-      return 'Ayuda solicitada';
+      return Textos.peticionDeAyuda;
     case 'inactividad':
-      return 'Sin movimiento en casa';
+      return Textos.sinMovimientoEnLaCasa;
     case 'miedo':
-      return 'Ha dicho que tiene miedo';
+      return Textos.haDichoTenerMiedo;
     default:
       return tipo;
   }
@@ -195,17 +196,16 @@ class PastillaEstado extends StatelessWidget {
     switch (estado) {
       case 'resuelta':
         color = Tema.primario;
-        texto = 'Atendida';
+        texto = Textos.atendida;
       case 'descartada':
         color = Tema.secundario;
-        texto = 'Descartada';
+        texto = Textos.descartada;
       case 'enviada':
         color = Tema.primario;
-        texto = 'Enviada';
-      case 'pendiente':
+        texto = Textos.enviada;
       default:
         color = const Color(0xFF8A6D1D);
-        texto = 'Pendiente';
+        texto = Textos.pendiente;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -274,7 +274,7 @@ class _BarraInferior extends StatelessWidget {
               _DestinoBarra(
                 icono: Icons.home_outlined,
                 activo: Icons.home,
-                rotulo: 'Inicio',
+                rotulo: Textos.inicio,
                 seleccionado: estado.destino == Destino.inicio,
                 cuenta: 0,
                 alPulsar: () => estado.irA(Destino.inicio),
@@ -282,7 +282,7 @@ class _BarraInferior extends StatelessWidget {
               _DestinoBarra(
                 icono: Icons.notifications_outlined,
                 activo: Icons.notifications,
-                rotulo: 'Alertas',
+                rotulo: Textos.alertas,
                 seleccionado: estado.destino == Destino.alertas,
                 cuenta: pendientes,
                 alPulsar: () => estado.irA(Destino.alertas),
@@ -290,7 +290,7 @@ class _BarraInferior extends StatelessWidget {
               _DestinoBarra(
                 icono: Icons.schedule_outlined,
                 activo: Icons.schedule,
-                rotulo: 'Recordatorios',
+                rotulo: Textos.recordatorios,
                 seleccionado: estado.destino == Destino.recordatorios,
                 cuenta: 0,
                 alPulsar: () => estado.irA(Destino.recordatorios),
@@ -298,7 +298,7 @@ class _BarraInferior extends StatelessWidget {
               _DestinoBarra(
                 icono: Icons.chat_bubble_outline,
                 activo: Icons.chat_bubble,
-                rotulo: 'Mensajes',
+                rotulo: Textos.mensajes,
                 seleccionado: estado.destino == Destino.mensajes,
                 cuenta: 0,
                 alPulsar: () => estado.irA(Destino.mensajes),
@@ -383,17 +383,15 @@ class _BarraLateral extends StatelessWidget {
     final bool? seguro = await showDialog<bool>(
       context: contexto,
       builder: (BuildContext contexto) => AlertDialog(
-        title: const Text('¿Cerrar sesión?'),
-        content: const Text(
-            'En este navegador se borrará la sesión. Para volver a entrar '
-            'hará falta un enlace nuevo con /panel.'),
+        title: const Text(Textos.cerrarSesionTitulo),
+        content: const Text(Textos.cerrarSesionTexto),
         actions: <Widget>[
           TextButton(
               onPressed: () => Navigator.of(contexto).pop(false),
-              child: const Text('Cancelar')),
+              child: const Text(Textos.cancelar)),
           FilledButton(
               onPressed: () => Navigator.of(contexto).pop(true),
-              child: const Text('Cerrar sesión')),
+              child: const Text(Textos.cerrarSesion)),
         ],
       ),
     );
@@ -417,11 +415,11 @@ class _BarraLateral extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text('Asistente de Voz',
+                  Text(Textos.asistenteDeVoz,
                       style: TextStyle(
                           fontSize: 14, color: Tema.secundario)),
                   SizedBox(height: 2),
-                  Text('Sala principal',
+                  Text(Textos.salaPrincipal,
                       style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
@@ -434,7 +432,7 @@ class _BarraLateral extends StatelessWidget {
             _DestinoLateral(
               icono: Icons.home_outlined,
               activo: Icons.home,
-              rotulo: 'Inicio',
+              rotulo: Textos.inicio,
               seleccionado: estado.destino == Destino.inicio,
               cuenta: 0,
               alPulsar: () => estado.irA(Destino.inicio),
@@ -442,7 +440,7 @@ class _BarraLateral extends StatelessWidget {
             _DestinoLateral(
               icono: Icons.notifications_outlined,
               activo: Icons.notifications,
-              rotulo: 'Alertas',
+              rotulo: Textos.alertas,
               seleccionado: estado.destino == Destino.alertas,
               cuenta: pendientes,
               alPulsar: () => estado.irA(Destino.alertas),
@@ -450,7 +448,7 @@ class _BarraLateral extends StatelessWidget {
             _DestinoLateral(
               icono: Icons.schedule_outlined,
               activo: Icons.schedule,
-              rotulo: 'Recordatorios',
+              rotulo: Textos.recordatorios,
               seleccionado: estado.destino == Destino.recordatorios,
               cuenta: 0,
               alPulsar: () => estado.irA(Destino.recordatorios),
@@ -458,7 +456,7 @@ class _BarraLateral extends StatelessWidget {
             _DestinoLateral(
               icono: Icons.chat_bubble_outline,
               activo: Icons.chat_bubble,
-              rotulo: 'Mensajes',
+              rotulo: Textos.mensajes,
               seleccionado: estado.destino == Destino.mensajes,
               cuenta: 0,
               alPulsar: () => estado.irA(Destino.mensajes),
@@ -467,7 +465,7 @@ class _BarraLateral extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
-                '${estado.estado?.familiares ?? 0} familiares registrados',
+                familiares(estado.estado?.familiares ?? 0),
                 style: Theme.of(contexto).textTheme.bodySmall,
               ),
             ),
@@ -479,7 +477,7 @@ class _BarraLateral extends StatelessWidget {
                 style: TextButton.styleFrom(
                     alignment: Alignment.centerLeft,
                     foregroundColor: Tema.secundario),
-                child: const Text('Cerrar sesión'),
+                child: const Text(Textos.cerrarSesion),
               ),
             ),
             const SizedBox(height: 8),

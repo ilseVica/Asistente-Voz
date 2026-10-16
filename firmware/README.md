@@ -98,7 +98,9 @@ para hablar con el broker por su cliente MQTT interno.
 
 Primero se cargan las contraseñas. El `set -a` es necesario: sin él, el shell
 reparte las líneas como variables pero **no** las pasa al entorno de los procesos
-hijos, y ni `mosquitto_pub` ni `docker` las verían.
+hijos, y ni `mosquitto_pub` ni `docker` las verían. Los valores con espacios (como
+`VOZ_DIRECCIONES`) van entre comillas dobles en el `.env`: sin ellas, el punto
+cortaría el valor.
 
 ```bash
 cd /home/ilse/Servidores/Asistente-Voz/servidor
@@ -157,7 +159,7 @@ docker compose exec mosquitto mosquitto_pub -h 127.0.0.1 -p 1883 \
 
 ```bash
 docker compose exec mosquitto mosquitto_sub -h 127.0.0.1 -p 1883 \
-  -u orquestador -P "$MQTT_ORQUESTADOR_PASSWORD" -q 0 \
+  -u orquestador -P "$MQTT_ORQUESTADOR_PASSWORD" -q 0 -W 30 \
   -t casa/sala/luz/estado -t casa/sala/nodo/estado -v
 ```
 

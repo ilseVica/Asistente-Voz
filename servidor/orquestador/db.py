@@ -87,7 +87,13 @@ RUTA_ESQUEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # chat ficticio como la «Prueba Publica» de P20 haria que el fan out le creara un
 # envio por cada alerta y el trabajador lo reintentaria para siempre contra algo
 # que no existe.
-VERSION_ESQUEMA = 4
+#
+# La version 5 (recordatorios) son dos tablas nuevas y dos indices, igual que la 2
+# (panel web): las crea `esquema.sql` con `CREATE TABLE IF NOT EXISTS` / `CREATE
+# INDEX IF NOT EXISTS`, que ya se ejecuto entero antes de llegar a `_migrar`, asi
+# que en una base vieja se crean igual y no hay datos que mover. No tiene funcion
+# propia por el mismo motivo que la 1->2, que esta explicado mas abajo.
+VERSION_ESQUEMA = 5
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -239,11 +245,17 @@ class BaseDatos:
         # esta en la 3 el fichero de esquema no la puede crear y hace falta el
         # `ALTER TABLE` idempotente. En una base nueva el `CREATE TABLE` del fichero
         # ya trajo la columna, y en una vieja el `PRAGMA table_info` decide, con lo
-        # que la funcion se puede llamar las veces que haga falta sin duplicar. El
-        # `DEFAULT 1` es lo que deja a los familiares existentes activos sin migrar
-        # datos.
+        # que la funcion se puede llamar las veces que haga falta sin duplicar nada.
         if version < 4:
             self._migrar_familiares_activo()
+
+        # De la 4 a la 5 (recordatorios) no hay nada que hacer aqui, y es a
+        # proposito: `recordatorios` y `recordatorio_entregas` las crea
+        # `esquema.sql` con su `CREATE TABLE IF NOT EXISTS`, que ya se ejecuto
+        # entero ANTES de llegar aqui, tanto en una base nueva como en una que ya
+        # estaba en la 4. Igual que la 1->2 (panel web): si le pusieramos una
+        # funcion, acabaria haciendo en codigo un `CREATE TABLE` que el archivo de
+        # esquema ya garantiza. Lo que si tiene que quedar escrito es la version.
 
         # El indice de las alertas que esperan a un familiar se crea AQUI y no en
         # `esquema.sql`, y el motivo es el orden: `esquema.sql` se ejecuta entero
@@ -1297,6 +1309,184 @@ class BaseDatos:
                 base + " ORDER BY a.creado_en DESC LIMIT ?", (limite,),
             ))
 
+    # --- Recordatorios -----------------------------------------------------
+
+    def crear_recordatorio(self, id_rec: str, texto: str, hora_min: int,
+                           repeticion: str, fecha, dias, creado_por: str,
+                           proximo_en: int, ahora: int = None) -> None:
+        """Guarda un recordatorio nuevo. `proximo_en` lo calcula quien llama.
+
+        La hora se guarda como entero (minutos desde medianoche) y el cálculo de
+        la próxima vez vive en `recordatorios.siguiente_vez`; aquí solo se escribe,
+        igual que con el resto de las tablas: SQL puro, sin lógica de negocio.
+        """
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "INSERT INTO recordatorios (id, texto, hora_min, repeticion, "
+                "fecha, dias, activo, cancelado_en, hecho_en, creado_por, "
+                "creado_en, proximo_en, purgable_en) "
+                "VALUES (?, ?, ?, ?, ?, ?, 1, NULL, NULL, ?, ?, ?, ?)",
+                (id_rec, texto, int(hora_min), repeticion, fecha, dias,
+                 str(creado_por), ahora, int(proximo_en),
+                 ahora + config.DIAS_PURGA_RECORDATORIOS * 86400),
+            )
+            self.conexion.commit()
+
+    def obtener_recordatorio(self, id_rec: str):
+        with _candado:
+            return self.conexion.execute(
+                "SELECT * FROM recordatorios WHERE id = ?", (id_rec,)
+            ).fetchone()
+
+    def listar_recordatorios(self, incluir_inactivos: bool = False) -> list:
+        """Los recordatorios, con el estado de su última entrega.
+
+        El panel necesita, por cada fila, la próxima vez y UNA línea de la última
+        entrega; las dos subconsultas de `recordatorio_entregas` lo traen en la
+        misma lectura, para no hacer una consulta por recordatorio. El orden pone
+        primero los activos y, dentro de ellos, el que toca antes.
+        """
+        consulta = (
+            "SELECT r.*, "
+            "(SELECT e.estado FROM recordatorio_entregas e "
+            " WHERE e.recordatorio_id = r.id "
+            " ORDER BY e.toca_en DESC LIMIT 1) AS ultimo_estado, "
+            "(SELECT e.toca_en FROM recordatorio_entregas e "
+            " WHERE e.recordatorio_id = r.id "
+            " ORDER BY e.toca_en DESC LIMIT 1) AS ultimo_toca_en, "
+            "(SELECT e.entregado_en FROM recordatorio_entregas e "
+            " WHERE e.recordatorio_id = r.id "
+            " ORDER BY e.toca_en DESC LIMIT 1) AS ultimo_entregado_en "
+            "FROM recordatorios r"
+        )
+        with _candado:
+            if incluir_inactivos:
+                return list(self.conexion.execute(
+                    consulta + " ORDER BY r.activo DESC, r.proximo_en"))
+            return list(self.conexion.execute(
+                consulta + " WHERE r.activo = 1 ORDER BY r.proximo_en"))
+
+    def recordatorios_vencidos(self, ahora: int = None) -> list:
+        """Los activos cuyo `proximo_en` ya venció. Es la consulta del ciclo."""
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT * FROM recordatorios "
+                "WHERE activo = 1 AND proximo_en <= ? ORDER BY proximo_en",
+                (int(ahora),),
+            ))
+
+    def cancelar_recordatorio(self, id_rec: str, ahora: int = None) -> bool:
+        """Cancela el recordatorio entero. Devuelve si cambió algo.
+
+        Idempotente: cancelar uno ya cancelado devuelve `False` en vez de tocar la
+        fila, que es lo que deja al panel contestar «ya estaba cancelado» sin
+        tener que mirarlo antes. `purgable_en` se corre a ahora + 90 días: los 90
+        días de purga cuentan desde que dejó de estar activo, no desde que se creó.
+        """
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            cursor = self.conexion.execute(
+                "UPDATE recordatorios SET activo = 0, cancelado_en = ?, "
+                "purgable_en = ? WHERE id = ? AND activo = 1",
+                (ahora, ahora + config.DIAS_PURGA_RECORDATORIOS * 86400, id_rec),
+            )
+            self.conexion.commit()
+            return cursor.rowcount == 1
+
+    def cerrar_recordatorio(self, id_rec: str, ahora: int = None) -> None:
+        """Desactiva un recordatorio que ya no vuelve a tocar (un `una_vez`).
+
+        No es lo mismo que cancelar: `hecho_en` lo distingue de una cancelación a
+        ojos del operador. No borra la fila: queda como historial hasta la purga.
+        """
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "UPDATE recordatorios SET activo = 0, hecho_en = ?, "
+                "purgable_en = ? WHERE id = ?",
+                (ahora, ahora + config.DIAS_PURGA_RECORDATORIOS * 86400, id_rec),
+            )
+            self.conexion.commit()
+
+    def avanzar_recordatorio(self, id_rec: str, proximo_en: int) -> None:
+        with _candado:
+            self.conexion.execute(
+                "UPDATE recordatorios SET proximo_en = ? WHERE id = ?",
+                (int(proximo_en), id_rec),
+            )
+            self.conexion.commit()
+
+    def registrar_entrega(self, id_rec: str, toca_en: int, estado: str,
+                          entregado_en: int = None, destino: str = None) -> bool:
+        """Anota una entrega. Devuelve si la insertó (no si ya existía).
+
+        El `INSERT OR IGNORE` sobre `(recordatorio_id, toca_en)` es lo que hace
+        imposible decir dos veces el mismo vencimiento: si la fila ya está, no
+        entra y devuelve `False`. Quien llama lo usa para no volver a publicar.
+        """
+        with _candado:
+            cursor = self.conexion.execute(
+                "INSERT OR IGNORE INTO recordatorio_entregas "
+                "(recordatorio_id, toca_en, estado, entregado_en, destino) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (id_rec, int(toca_en), estado, entregado_en, destino),
+            )
+            self.conexion.commit()
+            return cursor.rowcount == 1
+
+    def obtener_entrega(self, id_rec: str, toca_en: int):
+        with _candado:
+            return self.conexion.execute(
+                "SELECT * FROM recordatorio_entregas "
+                "WHERE recordatorio_id = ? AND toca_en = ?",
+                (id_rec, int(toca_en)),
+            ).fetchone()
+
+    def marcar_entrega_entregado(self, id_rec: str, toca_en: int, ahora: int,
+                                 destino: str = None) -> None:
+        """Un pendiente que sí se dijo al conectarse un satélite."""
+        with _candado:
+            self.conexion.execute(
+                "UPDATE recordatorio_entregas SET estado = 'entregado', "
+                "entregado_en = ?, destino = ? "
+                "WHERE recordatorio_id = ? AND toca_en = ?",
+                (int(ahora), destino, id_rec, int(toca_en)),
+            )
+            self.conexion.commit()
+
+    def marcar_entrega_no_entregado(self, id_rec: str, toca_en: int) -> None:
+        with _candado:
+            self.conexion.execute(
+                "UPDATE recordatorio_entregas SET estado = 'no_entregado' "
+                "WHERE recordatorio_id = ? AND toca_en = ?",
+                (id_rec, int(toca_en)),
+            )
+            self.conexion.commit()
+
+    def entregas_pendientes_recientes(self, desde: int) -> list:
+        """Pendientes cuyo vencimiento es `desde` o posterior (dentro de ventana)."""
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT * FROM recordatorio_entregas "
+                "WHERE estado = 'pendiente' AND toca_en >= ? ORDER BY toca_en",
+                (int(desde),),
+            ))
+
+    def entregas_pendientes_anteriores(self, limite: int) -> list:
+        """Pendientes cuyo vencimiento es anterior a `limite` (ya no se dirán)."""
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT * FROM recordatorio_entregas "
+                "WHERE estado = 'pendiente' AND toca_en < ? ORDER BY toca_en",
+                (int(limite),),
+            ))
+
     # --- Purgas ------------------------------------------------------------
 
     def purgar(self, ahora: int = None) -> tuple:
@@ -1330,6 +1520,11 @@ class BaseDatos:
             espera el plazo entero, porque un token caducado es la prueba de que
             esa sesion existio, y el operador lo necesita para saber si una baja
             funciono.
+
+        Los recordatorios inactivos (cancelados o ya dichos) se purgan a los 90
+        dias, con sus entregas. El plazo es mas largo que el de las alertas porque
+        un recordatorio es «que tenia que hacer la persona que vive en la casa», y
+        la familia quiere reconstruir mas tiempo que el historial de gas.
         """
         if ahora is None:
             ahora = int(time.time())
@@ -1363,8 +1558,26 @@ class BaseDatos:
                  ahora - config.DIAS_PURGA_PANEL_TOKENS * 86400),
             )
             borrados_tokens = cursor_tokens.rowcount
+            # Los recordatorios, en el mismo orden que alertas/envios: primero las
+            # entregas que cuelgan del recordatorio, y después el recordatorio. Solo
+            # se van los INACTIVOS (cancelados o ya dichos) cuyo `purgable_en` pasó;
+            # un recordatorio diario activo no se toca por viejo que sea.
+            cursor_rec_entregas = self.conexion.execute(
+                "DELETE FROM recordatorio_entregas WHERE recordatorio_id IN "
+                "(SELECT id FROM recordatorios WHERE activo = 0 AND purgable_en < ?)",
+                (ahora,),
+            )
+            borrados_rec_entregas = cursor_rec_entregas.rowcount
+            cursor_recordatorios = self.conexion.execute(
+                "DELETE FROM recordatorios WHERE activo = 0 AND purgable_en < ?",
+                (ahora,),
+            )
+            borrados_recordatorios = cursor_recordatorios.rowcount
             self.conexion.commit()
         if borrados_enlaces or borrados_tokens:
             registro.info("purgados del panel: %d enlace(s) y %d sesion(es)",
                           borrados_enlaces, borrados_tokens)
+        if borrados_recordatorios:
+            registro.info("purgados %d recordatorio(s) inactivo(s) y %d entrega(s)",
+                          borrados_recordatorios, borrados_rec_entregas)
         return borrados_ids, borrados_alertas

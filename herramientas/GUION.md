@@ -16,6 +16,10 @@ set -a; . ./.env; set +a
 docker compose up -d
 ```
 
+Los valores del `.env` con espacios (como `VOZ_DIRECCIONES`) van entre comillas
+dobles: `set -a; . ./.env` ejecuta el archivo como bash y, sin comillas, cortaría
+el valor.
+
 Y el simulador, si no está ya:
 
 ```bash
@@ -41,7 +45,7 @@ demostración (opcional, pero es lo que hace que se entienda):
 ```bash
 cd /home/ilse/Servidores/Asistente-Voz/servidor
 docker compose exec mosquitto mosquitto_sub -h 127.0.0.1 -p 1883 \
-  -u puente -P "$MQTT_PUENTE_PASSWORD" -q 0 -v -t 'casa/sala/#'
+  -u puente -P "$MQTT_PUENTE_PASSWORD" -q 0 -W 600 -v -t 'casa/sala/#'
 ```
 
 ## Paso 0 · Un solo comando, si hay prisa
@@ -231,5 +235,5 @@ Y dos cosas que sí se pueden ver, pero no en la demostración de 5 minutos:
 - La ACL en negación. `mosquitto_pub` no protesta cuando el broker le quita el
   permiso: el mensaje simplemente no llega. Para verlo, escucha a la vez:
   `docker compose exec mosquitto mosquitto_sub -h 127.0.0.1 -p 1883 -u nodo
-  -P "$MQTT_NODO_PASSWORD" -t casa/sala/luz/estado` no recibe nada, porque el usuario
+  -P "$MQTT_NODO_PASSWORD" -t casa/sala/luz/estado -W 3` no recibe nada, porque el usuario
   `nodo` solo publica, no lee, ese tópico.

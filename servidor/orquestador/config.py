@@ -398,6 +398,24 @@ SEGUNDOS_PURGA = 3600
 DIAS_PURGA_IDS = 7
 DIAS_PURGA_ALERTAS = 30
 
+# Cuánto se conserva un recordatorio cancelado o ya dicho. Es más largo que el de
+# las alertas a propósito: un recordatorio es «qué tenía que hacer la persona que
+# vive en la casa», y la familia quiere poder reconstruir qué se le avisó durante
+# más tiempo que el historial de gas. La purga solo borra los INACTIVOS (activo=0)
+# cuyo `purgable_en` ya venció; un recordatorio diario activo no se toca.
+DIAS_PURGA_RECORDATORIOS = 90
+
+# Cada cuánto revisa el orquestador si algún recordatorio venció. La precisión que
+# hace falta es de minutos, no de segundos, así que 30 s sobra y no cuesta nada.
+# Es el mismo patrón que `SEGUNDOS_PURGA`: un hilo aparte con su `time.sleep`.
+SEGUNDOS_CICLO_RECORDATORIOS = 30
+
+# La ventana en la que un recordatorio vencido sin satélite conectado todavía se
+# dice al conectarse uno, con `destino` a ese satélite. Pasada la ventana se marca
+# `no_entregado` y no se dice: un recordatorio de «tomar la medicina» que llega dos
+# horas tarde es peor que no llegar, porque descoloca sin avisar a tiempo.
+VENTANA_RECORDATORIO_PENDIENTE_S = 30 * 60
+
 # --- Registro --------------------------------------------------------------
 
 NIVEL_LOG = os.environ.get("NIVEL_LOG", "INFO").upper()

@@ -28,7 +28,9 @@ set -a; . ../servidor/.env; set +a
 ```
 
 El `set -a` no es opcional: sin él el shell lee las líneas como variables pero no
-las pasa al entorno de los procesos hijos, y `paho` no vería la contraseña.
+las pasa al entorno de los procesos hijos, y `paho` no vería la contraseña. Y los
+valores con espacios (como `VOZ_DIRECCIONES`) van entre comillas dobles en el
+`.env`: sin ellas, el punto cortaría el valor.
 
 Para darle otra dirección o puerto sin tocar el código:
 
@@ -144,7 +146,7 @@ publica nada, porque es el mismo episodio.
 
 ```bash
 docker compose exec mosquitto mosquitto_sub -h 127.0.0.1 -p 1883 \
-  -u orquestador -P "$MQTT_ORQUESTADOR_PASSWORD" -q 0 -v \
+  -u orquestador -P "$MQTT_ORQUESTADOR_PASSWORD" -q 0 -W 120 -v \
   -t 'casa/sala/#'
 ```
 

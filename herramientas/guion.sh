@@ -26,8 +26,19 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$RAIZ/servidor"
 
+# Carga el .env sin ejecutarlo: lee KEY=VALOR literal (los espacios no rompen
+# nada) y quita las comillas dobles o simples que rodeen al valor.
 if [ -f .env ]; then
-  set -a; . ./.env; set +a
+  while IFS= read -r linea; do
+    case "$linea" in ''|\#*) continue ;; esac
+    clave=${linea%%=*}
+    valor=${linea#*=}
+    case "$valor" in
+      \"*\") valor=${valor#\"}; valor=${valor%\"} ;;
+      \'*\') valor=${valor#\'}; valor=${valor%\'} ;;
+    esac
+    export "$clave=$valor"
+  done < .env
 fi
 
 PUENTE="${MQTT_PUENTE_PASSWORD:?falta MQTT_PUENTE_PASSWORD en servidor/.env}"

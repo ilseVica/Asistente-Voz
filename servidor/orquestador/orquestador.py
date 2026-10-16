@@ -29,6 +29,7 @@ import config
 import db
 import cola
 import mqtt_cliente
+import recordatorios
 import registro
 import sanear as sanear_modulo
 import telegram_cliente
@@ -111,22 +112,51 @@ def tarea_purga(base) -> None:
         time.sleep(config.SEGUNDOS_PURGA)
 
 
-def enrutar(topico, cuerpo, base, publicar, retenido=False) -> None:
+def tarea_recordatorios(base, publicar, satelites, parando) -> None:
+    """El ciclo de los recordatorios, cada `SEGUNDOS_CICLO_RECORDATORIOS`.
+
+    Va en un hilo aparte por el mismo motivo que la purga: es una consulta a
+    SQLite más, cuando toca, una publicación de MQTT, y hacerlo en el bucle
+    principal pararía la recepción de alertas durante la consulta. La `publicar`
+    que se pasa es la del cliente MQTT, que espera el PUBACK: este hilo no es el
+    de red de paho, así que sí puede esperarlo.
+
+    Usa `parando.wait()` en vez de `sleep()` para que el SIGTERM lo despierte al
+    instante y no tarde hasta 30 s en salir.
+    """
+    while not parando.is_set():
+        try:
+            procesados = recordatorios.procesar_vencidos(base, publicar, satelites)
+            if procesados:
+                registro_log.info("recordatorios vencidos procesados: %d",
+                                  procesados)
+        except Exception as error:  # noqa: BLE001
+            registro_log.error("fallo en el ciclo de recordatorios: %s", error)
+        parando.wait(config.SEGUNDOS_CICLO_RECORDATORIOS)
+
+
+def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None) -> None:
     """Reparte un mensaje de MQTT a quien lo procesa.
 
     Es una funcion y no un `if` suelto para que se pueda probar sola, y para que el
     punto donde se decide «que topico va con que procesador» sea uno solo y este a
     la vista. Hay tres caminos: el texto de voz, el estado de los satelites (para
-    repetir el gas sin atender al que se conecta) y todo lo demas (las alertas).
+    repetir el gas sin atender y entregar los recordatorios pendientes al que se
+    conecta) y todo lo demas (las alertas).
 
     El texto de voz NO pasa por `alertas.procesar`: si pasara, y como esa funcion
     decide el tipo por el topico, un `casa/sala/voz/texto` caeria en su rama de
     «topico no atendido» y no se haria nada con el.
+
+    `satelites` es el registro en memoria que hace que el orquestador sepa quien
+    esta conectado (lo necesitan los recordatorios). Es opcional para que las
+    pruebas viejas de `enrutar` sigan funcionando sin construirlo.
     """
     if topico == config.TOPICO_VOZ_TEXTO:
         voz.procesar(cuerpo, publicar)
     elif alertas.client_id_de_estado(topico) is not None:
-        alertas.al_estado_satelite(topico, cuerpo, retenido, base, publicar)
+        alertas.al_estado_satelite(topico, cuerpo, retenido, base, publicar,
+                                   satelites=satelites)
     else:
         alertas.procesar(topico, cuerpo, base, publicar)
 
@@ -213,9 +243,16 @@ def main() -> int:
     def publicar_eco(topico, carga, qos=1, retain=False):
         cliente.publicar(topico, carga, qos=qos, retain=retain, esperar=False)
 
+    # El registro de satelites conectados. Lo escriben los mensajes de estado (en
+    # el hilo de red de paho) y lo lee el ciclo de recordatorios (en su hilo), por
+    # eso lleva su propio cerrojo dentro. Se siembra solo: el estado de un satelite
+    # conectado llega retenido al suscribirse.
+    satelites = recordatorios.Satelites()
+
     cliente = mqtt_cliente.ClienteMQTT(
         lambda topico, cuerpo, retenido=False: enrutar(topico, cuerpo, base,
-                                                       publicar_eco, retenido)
+                                                       publicar_eco, retenido,
+                                                       satelites)
     )
 
     trabajador = cola.TrabajadorTelegram(base, remitente)
@@ -249,6 +286,17 @@ def main() -> int:
         hilo_purga = threading.Thread(target=tarea_purga, args=(base,),
                                       name="purga", daemon=True)
         hilo_purga.start()
+
+        # El ciclo de recordatorios. Se arranca DESPUES de `cliente.conectar()`,
+        # porque el primer pase puede querer publicar y publicar sin estar
+        # conectado devuelve MQTT_ERR_NO_CONN en silencio. Se pasa
+        # `cliente.publicar` (no `publicar_eco`): este hilo no es el de red de
+        # paho, asi que puede esperar el PUBACK.
+        hilo_recordatorios = threading.Thread(
+            target=tarea_recordatorios, args=(base, cliente.publicar, satelites,
+                                              parando),
+            name="recordatorios", daemon=True)
+        hilo_recordatorios.start()
 
         conteo = base.contar_por_estado()
         registro_log.info("alertas ya en la base: %s",

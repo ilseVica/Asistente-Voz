@@ -20,13 +20,24 @@ const char *origen_actual = LUZ_ORIGEN_PANEL;
 // para que el broker no quede con el valor viejo.
 bool publicacion_pendiente = false;
 
+// Unico punto donde se traduce encendido/apagado al nivel del pin del rele. Si el
+// modulo cambiara de polaridad, basta con cambiar RELE_ACTIVO_BAJO en config.h y no
+// hay que tocar ninguna otra linea. Con un modulo activo en bajo, el nivel de
+// APAGADO es ALTO y el de encendido BAJO.
+void rele_escribir(bool encendido) {
+#if RELE_HABILITADO
+  const bool nivel = RELE_ACTIVO_BAJO ? !encendido : encendido;
+  digitalWrite(GPIO_PIN_RELE, nivel ? HIGH : LOW);
+#else
+  (void)encendido;
+#endif
+}
+
 // El rele y el LED leen del MISMO estado (2.5). Por eso quien escribe el estado
 // llama a esta funcion y no a cada pin por su cuenta.
 void escribir_salidas() {
   led_escribir(encendida);
-#if RELE_HABILITADO
-  digitalWrite(GPIO_PIN_RELE, encendida ? HIGH : LOW);
-#endif
+  rele_escribir(encendida);
 }
 
 // Pulsacion larga del boton BOOT para reiniciar (4 s). El umbral alto es para no
@@ -112,10 +123,15 @@ void luz_iniciar() {
   pinMode(GPIO_PIN_BOTON_BOOT, INPUT_PULLUP);
   boton_boot.disponible = true;
 
-  // GPIO 26 y 27 quedan cableados aunque el hardware no exista todavia (6.7).
+  // GPIO 26 y 27 quedan cableados. El rele ya es real; el buzzer todavia no (6.7).
 #if RELE_HABILITADO
+  // El nivel de APAGADO se escribe ANTES de pinMode(OUTPUT). Al reves (pinMode y
+  // despues el nivel) el pin sale un instante en bajo, y con un modulo activo en
+  // bajo (RELE_ACTIVO_BAJO 1) ese instante es un clic y el LED del rele encendido
+  // al arrancar. Pre-cargando el latch y habilitando la salida despues, el pin ya
+  // sale con el nivel de apagado y no hay parpadeo.
+  digitalWrite(GPIO_PIN_RELE, RELE_ACTIVO_BAJO ? HIGH : LOW);
   pinMode(GPIO_PIN_RELE, OUTPUT);
-  digitalWrite(GPIO_PIN_RELE, LOW);
 #endif
   pinMode(GPIO_PIN_BUZZER, OUTPUT);
   digitalWrite(GPIO_PIN_BUZZER, LOW);

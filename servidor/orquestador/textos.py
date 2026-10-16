@@ -64,6 +64,24 @@ def alerta_hablada(tipo: str, lugar: str):
     return None
 
 
+def recordatorio_hablado(texto: str) -> str:
+    """La frase con la que el satélite dice un recordatorio.
+
+    Es "{texto}" dos veces, con la misma normalización en las dos: espacios
+    dobles/múltiples a uno, y sin duplicar el punto final si el texto ya termina
+    en punto. Se recorta antes de meter el texto, y no después, porque el punto
+    que agrega la plantilla va pegado al texto.
+
+    El texto ya pasó por la validación de caracteres de la API (letras, dígitos,
+    signos de uso común, sin emojis), así que aquí no hay que quitarlos: solo
+    normalizar espacios y el punto.
+    """
+    limpio = " ".join((texto or "").split())
+    if limpio.endswith("."):
+        limpio = limpio[:-1]
+    return "Le recuerdo: {texto}. Repito: {texto}.".format(texto=limpio)
+
+
 # =============================================================================
 # Utilidades de redacción
 # =============================================================================

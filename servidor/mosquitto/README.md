@@ -245,6 +245,9 @@ cd /home/ilse/Servidores/Asistente-Voz/servidor
 set -a; . ./.env; set +a
 ```
 
+Los valores con espacios (como `VOZ_DIRECCIONES`) van entre comillas dobles en el
+`.env`: sin ellas, el punto corta el valor.
+
 ### Lo importante: un publish denegado no se ve desde el publicador
 
 Con MQTT 3.1.1, cuando el ACL rechaza un `PUBLISH`, Mosquitto **igual manda
@@ -396,7 +399,7 @@ done
 
 ```bash
 docker compose exec -T mosquitto mosquitto_sub -h 127.0.0.1 -u orquestador \
-  -P "$MQTT_ORQUESTADOR_PASSWORD" -t '$SYS/broker/connection/+/state' -v
+  -P "$MQTT_ORQUESTADOR_PASSWORD" -t '$SYS/broker/connection/+/state' -C 1 -W 3 -v
 ```
 
 Tiene que llegar `1` al suscribirse (el mensaje va retenido). Para la prueba de

@@ -128,6 +128,83 @@ class Alerta {
       );
 }
 
+/// Un recordatorio de `GET /api/recordatorios`, apartado 3.
+///
+/// `dias` sólo tiene sentido en los semanales y `fecha` sólo en los de una sola
+/// vez; el servidor manda lo que corresponda y `[]`/`null` en el resto.
+class Recordatorio {
+  const Recordatorio({
+    required this.id,
+    required this.texto,
+    required this.hora,
+    required this.repeticion,
+    required this.fecha,
+    required this.dias,
+    required this.proximoEn,
+    required this.activo,
+    required this.creadoEn,
+    required this.creadoPor,
+    required this.canceladoEn,
+    required this.hechoEn,
+    required this.ultimaEntrega,
+  });
+
+  final String id;
+  final String texto;
+
+  /// La hora en 'HH:MM', tal como la manda la API.
+  final String hora;
+  final String repeticion;
+  final String? fecha;
+  final List<int> dias;
+  final int proximoEn;
+  final bool activo;
+  final int creadoEn;
+  final String creadoPor;
+  final int? canceladoEn;
+  final int? hechoEn;
+  final EntregaRecordatorio? ultimaEntrega;
+
+  bool get deUnaSolaVez => repeticion == 'una_vez';
+
+  factory Recordatorio.desde(Map<String, dynamic> json) => Recordatorio(
+        id: json['id'] as String,
+        texto: json['texto'] as String,
+        hora: json['hora'] as String? ?? '00:00',
+        repeticion: json['repeticion'] as String? ?? 'una_vez',
+        fecha: json['fecha'] as String?,
+        dias: ((json['dias'] as List?) ?? const <dynamic>[])
+            .map((dynamic d) => (d as num).toInt())
+            .toList(),
+        proximoEn: json['proximo_en'] as int? ?? 0,
+        activo: json['activo'] as bool? ?? false,
+        creadoEn: json['creado_en'] as int? ?? 0,
+        creadoPor: json['creado_por'] as String? ?? '',
+        canceladoEn: json['cancelado_en'] as int?,
+        hechoEn: json['hecho_en'] as int?,
+        ultimaEntrega: json['ultima_entrega'] == null
+            ? null
+            : EntregaRecordatorio.desde(
+                (json['ultima_entrega'] as Map).cast<String, dynamic>()),
+      );
+}
+
+/// La última vez que un recordatorio se dijo (o no se pudo decir).
+class EntregaRecordatorio {
+  const EntregaRecordatorio({required this.estado, required this.cuando});
+
+  final String estado;
+  final int? cuando;
+
+  bool get seDijo => estado == 'entregado';
+
+  factory EntregaRecordatorio.desde(Map<String, dynamic> json) =>
+      EntregaRecordatorio(
+        estado: json['estado'] as String? ?? '',
+        cuando: json['cuando'] as int?,
+      );
+}
+
 /// La instantánea completa de `GET /api/estado`, apartado 4.2.
 class Estado {
   const Estado({
@@ -227,4 +304,38 @@ String fechaAlerta(int epochSegundos, {DateTime? hoy}) {
   if (dias == 0) return 'hoy, $hora';
   if (dias == 1) return 'ayer, $hora';
   return '${fecha.day}/${fecha.month}/${fecha.year} · $hora';
+}
+
+/// Cuándo toca un recordatorio, mirando hacia adelante.
+///
+/// A diferencia de `fechaAlerta`, aquí «mañana» y el día de la semana sí importan:
+/// la pantalla de recordatorios enseña lo que va a pasar, no lo que pasó.
+String fechaProxima(int epochSegundos, {DateTime? hoy}) {
+  final DateTime fecha =
+      DateTime.fromMillisecondsSinceEpoch(epochSegundos * 1000);
+  final DateTime ref = hoy ?? DateTime.now();
+  final int dias = DateTime(fecha.year, fecha.month, fecha.day)
+      .difference(DateTime(ref.year, ref.month, ref.day))
+      .inDays;
+  final String hora = horaDelDia(fecha);
+  if (dias == 0) return 'hoy, $hora';
+  if (dias == 1) return 'mañana, $hora';
+  if (dias > 1 && dias < 7) {
+    return 'el ${Textos.diasSemana[fecha.weekday - 1].toLowerCase()}, $hora';
+  }
+  return '${fecha.day}/${fecha.month}/${fecha.year} · $hora';
+}
+
+/// Cuándo se dijo (o tocaba decir) un recordatorio, mirando hacia atrás.
+String cuandoSeDijo(int epochSegundos, {DateTime? hoy}) {
+  final DateTime fecha =
+      DateTime.fromMillisecondsSinceEpoch(epochSegundos * 1000);
+  final DateTime ref = hoy ?? DateTime.now();
+  final int dias = DateTime(ref.year, ref.month, ref.day)
+      .difference(DateTime(fecha.year, fecha.month, fecha.day))
+      .inDays;
+  final String hora = horaDelDia(fecha);
+  if (dias == 0) return 'hoy a las $hora';
+  if (dias == 1) return 'ayer a las $hora';
+  return 'el ${fecha.day}/${fecha.month}/${fecha.year} a las $hora';
 }

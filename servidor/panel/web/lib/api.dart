@@ -159,6 +159,48 @@ class ClienteApi {
         .timeout(const Duration(seconds: 15));
     await _json(respuesta);
   }
+
+  Future<List<Recordatorio>> recordatorios() async {
+    final http.Response respuesta = await _cliente
+        .get(_ruta('/api/recordatorios'), headers: _cabeceras)
+        .timeout(const Duration(seconds: 15));
+    final Map<String, dynamic> datos =
+        (await _json(respuesta) as Map).cast<String, dynamic>();
+    return (datos['recordatorios'] as List)
+        .map((f) => Recordatorio.desde((f as Map).cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// Crea un recordatorio. `fecha` sólo en los de una sola vez y `dias` sólo en
+  /// los semanales: el servidor rechaza con 422 si se cuelan en los demás.
+  Future<Recordatorio> crearRecordatorio({
+    required String texto,
+    required String hora,
+    required String repeticion,
+    String? fecha,
+    List<int>? dias,
+  }) async {
+    final http.Response respuesta = await _cliente
+        .post(_ruta('/api/recordatorios'),
+            headers: _cabeceras,
+            body: jsonEncode(<String, dynamic>{
+              'texto': texto,
+              'hora': hora,
+              'repeticion': repeticion,
+              'fecha': ?fecha,
+              'dias': ?dias,
+            }))
+        .timeout(const Duration(seconds: 15));
+    return Recordatorio.desde(
+        (await _json(respuesta) as Map).cast<String, dynamic>());
+  }
+
+  Future<void> cancelarRecordatorio(String id) async {
+    final http.Response respuesta = await _cliente
+        .post(_ruta('/api/recordatorios/$id/cancelar'), headers: _cabeceras)
+        .timeout(const Duration(seconds: 15));
+    await _json(respuesta);
+  }
 }
 
 /// Los segundos de espera entre reintentos (apartado 4.3 de la propuesta):

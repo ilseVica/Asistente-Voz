@@ -44,17 +44,21 @@ import json
 import logging
 import os
 import re
+import secrets
 import socket
 import time
+from datetime import datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import alertas as alertas_modulo
 import config
 import db
 import panel_acceso
+import recordatorios
 import seguridad
 import estado as estado_modulo
 from estado import ClienteEstado, EstadoSala
@@ -116,6 +120,25 @@ class OrdenLuz(BaseModel):
     model_config = {"extra": "forbid"}
 
     estado: str = Field(pattern="^(on|off)$")
+
+
+class NuevoRecordatorio(BaseModel):
+    """El cuerpo de `POST /api/recordatorios`.
+
+    `extra="forbid"` como los demás: un campo de más es un 422 y no algo que se
+    ignora en silencio. Los campos condicionales —`fecha` si es «una sola vez»,
+    `dias` si es «ciertos días»— se validan en la ruta y no en el tipo, porque
+    dependen de `repeticion`: cruzar campos en Pydantic pide un validador y el
+    mensaje saldría genérico. A mano se puede dar un 422 de usted y concreto.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    texto: str = Field(min_length=1, max_length=120)
+    hora: str = Field(pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
+    repeticion: str = Field(pattern="^(una_vez|diario|semanal)$")
+    fecha: str | None = None
+    dias: list[int] | None = None
 
 
 # --- El ciclo de vida ---------------------------------------------------------
@@ -403,8 +426,6 @@ async def atender(id_alerta: str, sesion: dict = Depends(sesion_requerida)):
     importa es que `alertas.resolver` avise al satélite SOLO si estaba sin resolver,
     para que resolver dos veces no haga hablar a la casa dos veces.
     """
-    import alertas as alertas_modulo
-
     if not alertas_modulo.id_valido(id_alerta):
         raise HTTPException(404, "No se encontró esa alerta.")
 
@@ -439,6 +460,183 @@ def _con_estado(fila) -> dict:
                 "resuelto_en": fila["resuelto_en"],
                 "descartada_en": fila["descartada_en"], "enviados": 0, "sin_mandar": 0}
     return dict(completas[0])
+
+
+# --- Los recordatorios -------------------------------------------------------
+
+
+# Lo que puede llevar el texto de un recordatorio: letras (de cualquier alfabeto,
+# con acentos), dígitos, espacios y los signos de uso común. `[^\W_]` es «carácter
+# de palabra salvo guion bajo» y la alternativa añade los signos permitidos, así
+# que los emojis y los símbolos raros quedan fuera; el guion bajo también, a
+# propósito.
+_TEXTO_RECORDATORIO = re.compile(r"^(?:[^\W_]|[ .,;:¡!¿?()'\"\-])+$", re.UNICODE)
+
+# Los días ISO: 1 = lunes ... 7 = domingo, como `datetime.isoweekday`.
+DIAS_ISO = frozenset(range(1, 8))
+
+
+def _hora_a_minutos(hora: str) -> int:
+    """'HH:MM' a minutos desde medianoche.
+
+    El patrón de `NuevoRecordatorio` ya garantiza el formato, así que aquí no hay
+    nada que validar: solo la conversión.
+    """
+    horas, minutos = hora.split(":")
+    return int(horas) * 60 + int(minutos)
+
+
+def _minutos_a_hora(hora_min: int) -> str:
+    """Minutos desde medianoche a 'HH:MM', la forma que ve la pantalla."""
+    return "%02d:%02d" % (hora_min // 60, hora_min % 60)
+
+
+def _fecha_valida(fecha: str) -> bool:
+    """Si `fecha` es un 'YYYY-MM-DD' con una fecha real (no un 31 de febrero)."""
+    try:
+        datetime.strptime(fecha, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
+
+
+def _clave(fila, nombre):
+    """Una columna de `listar_recordatorios`, o `None` si la fila no la trae.
+
+    `obtener_recordatorio` es un `SELECT *` y no trae las columnas derivadas de la
+    última entrega que sí trae `listar_recordatorios`; así una sola función de
+    respuesta sirve para las dos consultas.
+    """
+    return fila[nombre] if nombre in fila.keys() else None
+
+
+def _recordatorio_json(fila) -> dict:
+    """Un recordatorio en la forma de la API (apartado 3).
+
+    `ultima_entrega` es como mucho UNA línea: «se dijo» con el momento en que se
+    dijo, o «no se pudo decir» con el momento en que tocaba. No se manda el
+    historial entero, que la pantalla no lo muestra.
+    """
+    estado = _clave(fila, "ultimo_estado")
+    if not estado:
+        ultima = None
+    elif estado == "entregado":
+        ultima = {"estado": estado, "cuando": _clave(fila, "ultimo_entregado_en")}
+    else:
+        ultima = {"estado": estado, "cuando": _clave(fila, "ultimo_toca_en")}
+    return {
+        "id": fila["id"],
+        "texto": fila["texto"],
+        "hora": _minutos_a_hora(fila["hora_min"]),
+        "repeticion": fila["repeticion"],
+        "fecha": fila["fecha"],
+        "dias": [int(p) for p in fila["dias"].split(",")] if fila["dias"] else [],
+        "proximo_en": fila["proximo_en"],
+        "activo": bool(fila["activo"]),
+        "creado_en": fila["creado_en"],
+        "creado_por": _nombre_de_creador(fila["creado_por"]),
+        "cancelado_en": fila["cancelado_en"],
+        "hecho_en": fila["hecho_en"],
+        "ultima_entrega": ultima,
+    }
+
+
+def _nombre_de_creador(chat_id) -> str:
+    """El nombre del familiar que creó el recordatorio, enmascarado si no lo hay.
+
+    Mismo criterio que `_nombre_de`: un `chat_id` completo no sale a la interfaz,
+    y si el familiar todavía no tiene nombre se manda el enmascarado.
+    """
+    return base.nombre_de(chat_id) or db.enmascarar_chat(chat_id)
+
+
+@app.get("/api/recordatorios")
+async def listar_recordatorios(sesion: dict = Depends(sesion_requerida)):
+    """Los recordatorios activos, el que antes toca primero (apartado 3).
+
+    Solo los activos: lo cancelado o ya dicho no va a volver a sonar, y la pantalla
+    enseña «qué va a pasar», no un historial. Las filas siguen en la base hasta la
+    purga de los 90 días, pero eso es cosa del orquestador, no de aquí.
+    """
+    del sesion
+    filas = base.listar_recordatorios()
+    return {"recordatorios": [_recordatorio_json(f) for f in filas],
+            "servidor_hora": int(time.time())}
+
+
+@app.post("/api/recordatorios", status_code=201)
+async def crear_recordatorio(cuerpo: NuevoRecordatorio,
+                             sesion: dict = Depends(sesion_requerida)):
+    """Crea un recordatorio. 201 con lo creado (apartado 3).
+
+    Las reglas se comprueban aquí y no en el tipo: dependen de `repeticion` y así
+    el 422 puede decir en palabras de usted qué falta. Un `una_vez` con la fecha y
+    la hora ya pasadas es un 422, no un recordatorio que nunca sonaría.
+    """
+    texto = cuerpo.texto.strip()
+    if not texto:
+        raise HTTPException(422, "El texto del recordatorio no puede estar vacío.")
+    if not _TEXTO_RECORDATORIO.match(texto):
+        raise HTTPException(
+            422, "El texto solo puede llevar letras, números, espacios y los "
+                 "signos . , ; : ¡ ! ¿ ? ( ) ' \" -")
+
+    hora_min = _hora_a_minutos(cuerpo.hora)
+    fecha = None
+    dias = None
+    if cuerpo.repeticion == "una_vez":
+        if not cuerpo.fecha:
+            raise HTTPException(422, "Elija el día del recordatorio.")
+        if not _fecha_valida(cuerpo.fecha):
+            raise HTTPException(422, "El día elegido no es válido.")
+        if cuerpo.dias:
+            raise HTTPException(422, "Un recordatorio de una sola vez no lleva días.")
+        fecha = cuerpo.fecha
+    elif cuerpo.repeticion == "diario":
+        if cuerpo.fecha or cuerpo.dias:
+            raise HTTPException(422, "Un recordatorio de todos los días no lleva "
+                                     "día ni días de la semana.")
+    else:  # semanal
+        if cuerpo.fecha:
+            raise HTTPException(422, "Un recordatorio de ciertos días no lleva fecha.")
+        if not cuerpo.dias:
+            raise HTTPException(422, "Elija al menos un día de la semana.")
+        if any(dia not in DIAS_ISO for dia in cuerpo.dias):
+            raise HTTPException(422, "Los días van del 1 (lunes) al 7 (domingo).")
+        dias = ",".join(str(dia) for dia in sorted(set(cuerpo.dias)))
+
+    ahora = int(time.time())
+    plantilla = {"hora_min": hora_min, "repeticion": cuerpo.repeticion,
+                 "fecha": fecha, "dias": dias}
+    proximo = recordatorios.siguiente_vez(plantilla, ahora)
+    if proximo is None:
+        raise HTTPException(422, "Esa fecha y hora ya pasaron.")
+
+    id_rec = "rec-" + secrets.token_hex(8)
+    base.crear_recordatorio(id_rec, texto, hora_min, cuerpo.repeticion, fecha,
+                            dias, sesion["chat_id"], proximo, ahora=ahora)
+    registro.info("recordatorio %s creado por %s", id_rec,
+                  db.enmascarar_chat(sesion["chat_id"]))
+    return _recordatorio_json(base.obtener_recordatorio(id_rec))
+
+
+@app.post("/api/recordatorios/{id_rec}/cancelar")
+async def cancelar_recordatorio(id_rec: str, sesion: dict = Depends(sesion_requerida)):
+    """Cancela un recordatorio. Idempotente (apartado 3).
+
+    Igual que `/api/alertas/{id}/atender`: si ya estaba cancelado devuelve 200 con
+    `"fresca": false` y no un 409, porque a quien pulsa le da igual. Un
+    identificador que no existe es un 404.
+    """
+    if not alertas_modulo.id_valido(id_rec):
+        raise HTTPException(404, "No se encontró ese recordatorio.")
+    if base.obtener_recordatorio(id_rec) is None:
+        raise HTTPException(404, "No se encontró ese recordatorio.")
+    fresca = base.cancelar_recordatorio(id_rec)
+    if fresca:
+        registro.info("recordatorio %s cancelado por %s", id_rec,
+                      db.enmascarar_chat(sesion["chat_id"]))
+    return {"ok": True, "fresca": fresca}
 
 
 # --- La luz ------------------------------------------------------------------

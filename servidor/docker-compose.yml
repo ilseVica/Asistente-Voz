@@ -153,6 +153,11 @@ services:
       # cocina...»). Formato en orquestador/config.py. Sin valor, «cocina».
       UBICACION_GAS: ${UBICACION_GAS:-cocina}
       ORQUESTADOR_DB: /datos/orquestador.sqlite3
+      # La zona de la casa. El contenedor va en UTC por defecto; con esta variable
+      # `time.localtime()` y `datetime.now()` pasan a hora de Mazatlan. Los
+      # recordatorios la usan para saber cuando toca, y de paso los textos de
+      # Telegram que mostraban la hora (atendida, /alertas) dejan de salir en UTC.
+      TZ: America/Mazatlan
       NIVEL_LOG: ${NIVEL_LOG:-INFO}
 
     volumes:
@@ -329,6 +334,9 @@ services:
       # ajuste que no hace nada es peor que uno que no existe.
       PANEL_PUERTO: ${PANEL_PUERTO:-8080}
       MODO_SITIO: ${MODO_SITIO:-instalacion}
+      # La misma zona que el orquestador, por coherencia: las horas que se
+      # muestran o se calculan (la proxima vez de un recordatorio) son de Mazatlan.
+      TZ: America/Mazatlan
       NIVEL_LOG: ${NIVEL_LOG:-INFO}
 
     volumes:

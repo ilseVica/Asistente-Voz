@@ -12,6 +12,7 @@ import 'uis/pantalla_alertas.dart';
 import 'uis/pantalla_aviso.dart';
 import 'uis/pantalla_panel.dart';
 import 'uis/pantalla_proximamente.dart';
+import 'uis/pantalla_recordatorios.dart';
 
 void main() {
   runApp(const AsistentePanel());
@@ -44,12 +45,14 @@ class EstadoPanel extends ChangeNotifier {
 
   Estado? estado;
   List<Alerta> alertas = const <Alerta>[];
+  List<Recordatorio> recordatorios = const <Recordatorio>[];
   String nombre = '';
 
   bool conectadoAlServidor = false;
   bool conectadoAlSitio = false;
   bool cargandoLuz = false;
   bool cargandoAlerta = false;
+  bool cargandoRecordatorio = false;
   String? aviso; // Un mensaje que sólo se ve una vez (un error, sobre todo).
 
   /// Justo después de entrar: el token en claro, para que se pueda copiar.
@@ -131,6 +134,7 @@ class EstadoPanel extends ChangeNotifier {
     sesionNueva = null;
     estado = null;
     alertas = const <Alerta>[];
+    recordatorios = const <Recordatorio>[];
     _vivo?.desconectar();
     _vivo = null;
     _reloj?.cancel();
@@ -158,6 +162,7 @@ class EstadoPanel extends ChangeNotifier {
 
     cargarEstado();
     cargarAlertas();
+    cargarRecordatorios();
   }
 
   Uri _urlVivo() {
@@ -323,6 +328,129 @@ class EstadoPanel extends ChangeNotifier {
       aviso = Textos.noSePudoAtender;
     }
     cargandoAlerta = false;
+    notifyListeners();
+  }
+
+  Future<void> cargarRecordatorios() async {
+    try {
+      recordatorios = await api.recordatorios();
+      conectadoAlServidor = true;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        await cerrarSesion();
+        return;
+      }
+      conectadoAlServidor = false;
+    } catch (_) {
+      conectadoAlServidor = false;
+    }
+    notifyListeners();
+  }
+
+  String? _horaValida(String? hora) {
+    if (hora == null) return null;
+    final List<String> partes = hora.split(':');
+    if (partes.length != 2) return null;
+    final int? h = int.tryParse(partes[0]);
+    final int? m = int.tryParse(partes[1]);
+    if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) {
+      return null;
+    }
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+  }
+
+  /// Crea un recordatorio. Devuelve `true` si el servidor lo aceptó.
+  ///
+  /// La validación de aquí sólo evita una ida y vuelta por lo obvio (texto vacío,
+  /// sin hora, sin día); las reglas de verdad —caracteres, fecha en el pasado,
+  /// días coherentes con la repetición— las comprueba el servidor, y su mensaje
+  /// es el que se enseña.
+  Future<bool> crearRecordatorio({
+    required String texto,
+    required String? hora,
+    required String repeticion,
+    String? fecha,
+    List<int>? dias,
+  }) async {
+    final String limpio = texto.trim();
+    if (limpio.isEmpty) {
+      aviso = Textos.faltaTextoRecordatorio;
+      notifyListeners();
+      return false;
+    }
+    final String? horaNormal = _horaValida(hora);
+    if (horaNormal == null) {
+      aviso = Textos.faltaHoraRecordatorio;
+      notifyListeners();
+      return false;
+    }
+    if (repeticion == 'una_vez' && (fecha == null || fecha.isEmpty)) {
+      aviso = Textos.faltaDiaRecordatorio;
+      notifyListeners();
+      return false;
+    }
+    if (repeticion == 'semanal' && (dias == null || dias.isEmpty)) {
+      aviso = Textos.faltaDiasRecordatorio;
+      notifyListeners();
+      return false;
+    }
+
+    cargandoRecordatorio = true;
+    aviso = null;
+    notifyListeners();
+    try {
+      final Recordatorio nuevo = await api.crearRecordatorio(
+        texto: limpio,
+        hora: horaNormal,
+        repeticion: repeticion,
+        fecha: repeticion == 'una_vez' ? fecha : null,
+        dias: repeticion == 'semanal' ? dias : null,
+      );
+      final List<Recordatorio> copia = <Recordatorio>[nuevo, ...recordatorios]
+        ..sort((Recordatorio a, Recordatorio b) =>
+            a.proximoEn.compareTo(b.proximoEn));
+      recordatorios = copia;
+      aviso = Textos.recordatorioCreado;
+      return true;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        cargandoRecordatorio = false;
+        await cerrarSesion();
+        return false;
+      }
+      aviso = error.mensaje;
+      return false;
+    } catch (_) {
+      aviso = Textos.noSePudoCrearRecordatorio;
+      return false;
+    } finally {
+      cargandoRecordatorio = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> cancelarRecordatorio(String id) async {
+    if (cargandoRecordatorio) return;
+    cargandoRecordatorio = true;
+    aviso = null;
+    notifyListeners();
+    try {
+      await api.cancelarRecordatorio(id);
+      recordatorios = recordatorios
+          .where((Recordatorio r) => r.id != id)
+          .toList();
+      aviso = Textos.recordatorioCancelado;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        cargandoRecordatorio = false;
+        await cerrarSesion();
+        return;
+      }
+      aviso = error.mensaje;
+    } catch (_) {
+      aviso = Textos.noSePudoCancelarRecordatorio;
+    }
+    cargandoRecordatorio = false;
     notifyListeners();
   }
 
@@ -517,9 +645,7 @@ class _AsistentePanelState extends State<AsistentePanel> {
       case Destino.alertas:
         return const PantallaAlertas();
       case Destino.recordatorios:
-        return const PantallaProximamente(
-            titulo: Textos.recordatorios,
-            texto: Textos.recordatoriosVacio);
+        return const PantallaRecordatorios();
       case Destino.mensajes:
         return const PantallaProximamente(
             titulo: Textos.mensajes,

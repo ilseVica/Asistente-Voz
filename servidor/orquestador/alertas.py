@@ -33,6 +33,7 @@ import re
 import time
 
 import config
+import recordatorios
 import sanear as sanear_modulo
 import textos
 
@@ -396,16 +397,25 @@ def anunciar(tipo: str, publicar, destino: str = None, ahora: int = None) -> boo
 
 
 def al_estado_satelite(topico: str, cuerpo: str, retenido: bool, base, publicar,
-                       ahora: int = None) -> int:
-    """Un satelite cambio de estado. Devuelve cuantas alertas se le repitieron.
+                       ahora: int = None, satelites=None) -> int:
+    """Un satelite cambio de estado. Devuelve cuantos mensajes se repitieron.
 
-    Solo reacciona al paso a `conectado: true` de un mensaje NO retenido. Los
-    retenidos llegan cada vez que el orquestador se suscribe (al arrancar o al
-    reconectar con el broker), y no significan que el satelite acabe de entrar: si
-    contaran, cada reinicio del orquestador repetiria el gas en todas las casas.
+    Dos cosas pasan aqui, y la segunda es la que trae `satelites`:
 
-    Lo que se repite, y solo a ese satelite (`destino`), es cada alerta de gas sin
-    atender de las ultimas 2 horas. Si no hay ninguna, no se dice nada.
+    1. Se le repite el gas sin atender a ESE satelite cuando PASA a conectado, y
+       solo con un mensaje NO retenido: un retenido llega cada vez que el
+       orquestador se suscribe, y repetir el gas en cada arranque seria un falso
+       positivo.
+
+    2. Si se pasa el registro `satelites`, se actualiza con CADA mensaje de
+       estado, retenido o no, y al quedar conectado se le dicen los recordatorios
+       que quedaron PENDIENTES dentro de la ventana. Un retenido con
+       `conectado:true` al arrancar siembra el registro: el satelite ya estaba
+       conectado, y puede que un recordatorio venciera con el orquestador caido,
+       asi que los pendientes tambien se le entregan con un retenido.
+
+    Sin registro (`satelites=None`) el comportamiento es el de antes, que es lo
+    que quieren las pruebas viejas de la repeticion de gas.
     """
     client_id = client_id_de_estado(topico)
     if client_id is None:
@@ -415,27 +425,38 @@ def al_estado_satelite(topico: str, cuerpo: str, retenido: bool, base, publicar,
     except ValueError:
         registro.warning("estado del satelite %s que no es JSON; se ignora", client_id)
         return 0
-    if not isinstance(carga, dict) or carga.get("conectado") is not True:
+    conectado = isinstance(carga, dict) and carga.get("conectado") is True
+    if satelites is not None:
+        satelites.actualizar(client_id, conectado)
+    if not conectado:
         registro.info("satelite %s: %s", client_id, "desconectado"
                       if isinstance(carga, dict) and carga.get("conectado") is False
                       else "estado sin conectado:true")
         return 0
-    if retenido:
-        registro.info("satelite %s conectado (retenido): no se repite nada", client_id)
-        return 0
     if ahora is None:
         ahora = int(time.time())
+
+    # Los recordatorios pendientes se dicen igual con un retenido que con un
+    # mensaje nuevo: los dos significan «este satelite esta conectado ahora», que
+    # es lo que hace que un recordatorio vencido todavia se pueda decir.
+    dichos = 0
+    if satelites is not None:
+        dichos = recordatorios.entregar_pendientes(base, publicar, client_id, ahora)
+
+    if retenido:
+        registro.info("satelite %s conectado (retenido): no se repite gas", client_id)
+        return dichos
     pendientes = base.gas_sin_atender_desde(ahora - SEGUNDOS_REPETIR_GAS)
     if not pendientes:
         registro.info("satelite %s conectado; no hay gas sin atender", client_id)
-        return 0
+        return dichos
     repetidas = 0
     for fila in pendientes:
         if anunciar("gas", publicar, destino=client_id, ahora=ahora):
             repetidas += 1
     registro.warning("satelite %s conectado: alertas de gas sin atender que se le "
                      "repiten: %d", client_id, repetidas)
-    return repetidas
+    return repetidas + dichos
 
 
 def procesar(topico: str, cuerpo: str, base, publicar=None) -> bool:

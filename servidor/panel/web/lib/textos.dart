@@ -118,6 +118,65 @@ class Textos {
 
   static const String recordatoriosVacio = 'Todavía no hay recordatorios en '
       'esta casa. Cuando existan, aparecerán aquí con la hora de cada uno.';
+  static const String recordatoriosSubtitulo = 'Lo que el asistente dice en '
+      'voz alta a su hora.';
+  static const String nuevoRecordatorio = 'Nuevo recordatorio';
+  static const String queTieneQueDecir = 'Qué tiene que decir';
+  static const String pistaTextoRecordatorio =
+      'Por ejemplo: tomar la medicina';
+  static const String aQueHora = 'A qué hora';
+  static const String cuando = 'Cuándo';
+  static const String unaSolaVez = 'Una sola vez';
+  static const String todosLosDias = 'Todos los días';
+  static const String ciertosDias = 'Ciertos días';
+  static const String queDia = 'Qué día';
+  static const String elegirHora = 'Elegir la hora';
+  static const String elegirDia = 'Elegir el día';
+  static const String lunesAViernes = 'Lunes a viernes';
+  static const String crearRecordatorio = 'Crear recordatorio';
+  static const String cancelarRecordatorio = 'Cancelar este recordatorio';
+  static const String proximaVez = 'La próxima vez: ';
+  static const String noSePudoDecir = 'La última vez no se pudo decir: el '
+      'asistente no estaba conectado.';
+  static const String recordatorioCreado = 'Recordatorio creado.';
+  static const String recordatorioCancelado = 'Recordatorio cancelado.';
+  static const String noSePudoCrearRecordatorio =
+      'No se pudo crear el recordatorio.';
+  static const String noSePudoCancelarRecordatorio =
+      'No se pudo cancelar el recordatorio.';
+  static const String faltaTextoRecordatorio =
+      'Escriba lo que tiene que decir el recordatorio.';
+  static const String faltaHoraRecordatorio = 'Elija la hora.';
+  static const String faltaDiaRecordatorio = 'Elija el día.';
+  static const String faltaDiasRecordatorio =
+      'Elija al menos un día de la semana.';
+
+  /// Los días ISO en su nombre: el índice 0 es lunes y el 6, domingo.
+  static const List<String> diasSemana = <String>[
+    'Lunes',
+    'Martes',
+    'Miércoles',
+    'Jueves',
+    'Viernes',
+    'Sábado',
+    'Domingo',
+  ];
+
+  /// Los meses en su nombre: el índice 0 es enero y el 11, diciembre.
+  static const List<String> meses = <String>[
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
+  ];
   static const String mensajesVacio = 'Todavía no hay mensajes en esta casa. '
       'Cuando existan, aparecerán aquí.';
   static const String proximamente = 'Próximamente';
@@ -167,3 +226,36 @@ String origenDeLuz(String? origen) {
       return 'Origen desconocido';
   }
 }
+
+/// El nombre de una repetición, como se elige en el formulario.
+String repeticionDe(String repeticion) {
+  switch (repeticion) {
+    case 'una_vez':
+      return Textos.unaSolaVez;
+    case 'diario':
+      return Textos.todosLosDias;
+    case 'semanal':
+      return Textos.ciertosDias;
+    default:
+      return repeticion;
+  }
+}
+
+/// Los días de un semanal en una línea: «Lunes, miércoles y viernes».
+///
+/// Se ordenan y se filtran aquí aunque el servidor ya los mande ordenados: la
+/// función es también la que usa el formulario antes de guardar, y un día fuera
+/// de rango no debe pintar un índice inválido.
+String diasDe(List<int> dias) {
+  final List<int> ordenados =
+      dias.where((int d) => d >= 1 && d <= 7).toSet().toList()..sort();
+  final List<String> nombres =
+      ordenados.map((int d) => Textos.diasSemana[d - 1].toLowerCase()).toList();
+  if (nombres.isEmpty) return '';
+  if (nombres.length == 1) return nombres.first;
+  return '${nombres.sublist(0, nombres.length - 1).join(', ')} y ${nombres.last}';
+}
+
+/// La frase de la última entrega cuando sí se dijo. `cuando` ya viene formateado
+/// por `cuandoSeDijo`, porque la frase vive aquí y el formato de fechas allí.
+String ultimaVezSeDijo(String cuando) => 'La última vez se dijo $cuando.';

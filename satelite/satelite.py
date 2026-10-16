@@ -847,10 +847,10 @@ class PuenteMQTT:
             return
         registro.info("MQTT conectado como %s (client_id=%s, estado en %s)",
                       self.cfg.mqtt_usuario, self.cfg.client_id, self.topico_estado)
+        cliente.subscribe(self.cfg.topico_decir, qos=1)
         cliente.publish(self.topico_estado,
                         json.dumps({"conectado": True}, separators=(",", ":")),
                         qos=0, retain=True)
-        cliente.subscribe(self.cfg.topico_decir, qos=1)
         self.loop.call_soon_threadsafe(self.listo.set)
 
     def _al_mensaje(self, cliente, userdata, mensaje):

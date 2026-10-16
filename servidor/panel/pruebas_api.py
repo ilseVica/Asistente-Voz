@@ -33,6 +33,7 @@
 import asyncio
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -197,6 +198,8 @@ prueba("con una sesión válida es 200", r.status_code == 200, r.status_code)
 # ayer sin acordarse de añadirla al bucle.
 for metodo, ruta in (("get", "/api/yo"), ("get", "/api/estado"),
                      ("get", "/api/alertas"), ("post", "/api/salir"),
+                     ("get", "/api/recordatorios"), ("post", "/api/recordatorios"),
+                     ("post", "/api/recordatorios/rec-x/cancelar"),
                      ("post", "/api/luz"), ("post", "/api/acceso-inexistente")):
     respuesta = getattr(cliente, metodo)(ruta)
     if ruta == "/api/acceso-inexistente":
@@ -512,6 +515,117 @@ prueba("un id con basura da 404 y la tabla sigue ahí",
        r.status_code == 404
        and len(cliente.get("/api/alertas", headers=cab(token_marta)).json()["alertas"])
        >= 1, r.status_code)
+
+
+# =============================================================================
+# 6b. Los recordatorios
+# =============================================================================
+
+titulo("6b. Los recordatorios")
+
+r = cliente.get("/api/recordatorios", headers=cab(token_marta))
+prueba("sin recordatorios, la lista va vacía y con la hora del servidor",
+       r.status_code == 200 and r.json()["recordatorios"] == []
+       and "servidor_hora" in r.json(), r.text[:120])
+
+# Un `diario`. La hora se elige en el pasado del día para que la próxima vez sea
+# mañana y el `proximo_en` quede claro; da igual la zona, lo que importa es que sea
+# POSTERIOR a ahora.
+r = cliente.post("/api/recordatorios", headers=cab(token_marta),
+                 json={"texto": "Tomar la pastilla", "hora": "08:00",
+                       "repeticion": "diario"})
+prueba("crear uno de todos los días es 201", r.status_code == 201, r.text[:200])
+creado = r.json()
+rec_diario = creado["id"]
+prueba("el id lo pone el servidor y es un `rec-...`",
+       isinstance(creado.get("id"), str)
+       and re.match(r"^rec-[a-f0-9]{16}$", creado["id"]) is not None,
+       creado.get("id"))
+prueba("devuelve la hora tal cual, la repetición y la próxima vez en el futuro",
+       r.json()["hora"] == "08:00" and r.json()["repeticion"] == "diario"
+       and r.json()["proximo_en"] > int(time.time()), r.json())
+prueba("y sale activo, sin última entrega todavía",
+       r.json()["activo"] is True and r.json()["ultima_entrega"] is None, r.json())
+
+r = cliente.get("/api/recordatorios", headers=cab(token_marta))
+prueba("el listado ya trae el recordatorio creado",
+       [x["id"] for x in r.json()["recordatorios"]] == [rec_diario], r.json())
+
+# `creado_por` es el nombre del familiar, nunca el `chat_id`.
+prueba("el recordatorio dice quién lo creó por su nombre y no por su chat_id",
+       r.json()["recordatorios"][0]["creado_por"] == "Marta"
+       and "111" not in json.dumps(r.json()), r.json()["recordatorios"][0])
+
+# Semanal: se guardan los días ordenados y sin repetir.
+r = cliente.post("/api/recordatorios", headers=cab(token_marta),
+                 json={"texto": "Sacar la basura", "hora": "20:15",
+                       "repeticion": "semanal", "dias": [5, 1, 5]})
+prueba("un semanal con días repetidos los guarda ordenados y sin repetir",
+       r.status_code == 201 and r.json()["dias"] == [1, 5], r.json())
+rec_semanal = r.json()["id"]
+
+# Una sola vez, en el futuro.
+fecha_futura = time.strftime("%Y-%m-%d", time.localtime(time.time() + 14 * 86400))
+r = cliente.post("/api/recordatorios", headers=cab(token_marta),
+                 json={"texto": "Cita del médico", "hora": "10:45",
+                       "repeticion": "una_vez", "fecha": fecha_futura})
+prueba("una sola vez en el futuro es 201 y guarda la fecha",
+       r.status_code == 201 and r.json()["fecha"] == fecha_futura, r.json())
+
+# Ahora los descartes. Todos son 422 y con mensaje; la lista no cambia.
+antes = len(cliente.get("/api/recordatorios", headers=cab(token_marta)).json()["recordatorios"])
+
+fecha_pasada = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
+descartes = [
+    ({"texto": "", "hora": "08:00", "repeticion": "diario"}, "texto vacío"),
+    ({"texto": "Con emoji 😀", "hora": "08:00", "repeticion": "diario"}, "emoji"),
+    ({"texto": "Con $ signo", "hora": "08:00", "repeticion": "diario"}, "$"),
+    ({"texto": "Con < etiqueta", "hora": "08:00", "repeticion": "diario"}, "<"),
+    ({"texto": "Hora 25", "hora": "25:00", "repeticion": "diario"}, "hora 25:00"),
+    ({"texto": "Hora 08:60", "hora": "08:60", "repeticion": "diario"}, "hora 08:60"),
+    ({"texto": "Sin repeticion", "hora": "08:00", "repeticion": "cada_rato"},
+     "repetición desconocida"),
+    ({"texto": "Una vez sin fecha", "hora": "08:00", "repeticion": "una_vez"},
+     "una_vez sin fecha"),
+    ({"texto": "Una vez pasada", "hora": "00:01", "repeticion": "una_vez",
+      "fecha": fecha_pasada}, "una_vez en el pasado"),
+    ({"texto": "Fecha imposible", "hora": "00:01", "repeticion": "una_vez",
+      "fecha": "2026-02-31"}, "31 de febrero"),
+    ({"texto": "Diario con días", "hora": "08:00", "repeticion": "diario",
+      "dias": [1]}, "diario con días"),
+    ({"texto": "Semanal sin días", "hora": "08:00", "repeticion": "semanal"},
+     "semanal sin días"),
+    ({"texto": "Semanal con día 8", "hora": "08:00", "repeticion": "semanal",
+      "dias": [8]}, "día 8"),
+    ({"texto": "Un campo de más", "hora": "08:00", "repeticion": "diario",
+      "color": "rojo"}, "campo de más"),
+]
+for cuerpo, caso in descartes:
+    r = cliente.post("/api/recordatorios", headers=cab(token_marta), json=cuerpo)
+    prueba("rechaza %s con 422" % caso, r.status_code == 422,
+           "%s -> %s" % (r.status_code, r.text[:100]))
+
+despues = len(cliente.get("/api/recordatorios", headers=cab(token_marta)).json()["recordatorios"])
+prueba("ningún descarte creó un recordatorio", antes == despues, (antes, despues))
+
+# Cancelar es idempotente.
+r = cliente.post("/api/recordatorios/%s/cancelar" % rec_semanal, headers=cab(token_marta))
+prueba("cancelar un recordatorio es 200 con `fresca: true`",
+       r.status_code == 200 and r.json() == {"ok": True, "fresca": True}, r.json())
+r = cliente.post("/api/recordatorios/%s/cancelar" % rec_semanal, headers=cab(token_marta))
+prueba("cancelarlo otra vez es 200 con `fresca: false` y no 409",
+       r.status_code == 200 and r.json() == {"ok": True, "fresca": False}, r.json())
+r = cliente.get("/api/recordatorios", headers=cab(token_marta))
+prueba("y el cancelado ya no sale en el listado",
+       rec_semanal not in [x["id"] for x in r.json()["recordatorios"]], r.json())
+r = cliente.post("/api/recordatorios/no-existe/cancelar", headers=cab(token_marta))
+prueba("cancelar un id que no existe es 404", r.status_code == 404, r.status_code)
+r = cliente.post("/api/recordatorios/; DROP TABLE recordatorios; /cancelar",
+                 headers=cab(token_marta))
+prueba("un id con basura da 404 y la tabla sigue",
+       r.status_code == 404
+       and len(cliente.get("/api/recordatorios", headers=cab(token_marta)).json()
+               ["recordatorios"]) >= 1, r.status_code)
 
 
 # =============================================================================

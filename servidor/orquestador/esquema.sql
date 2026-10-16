@@ -307,3 +307,116 @@ CREATE INDEX IF NOT EXISTS idx_panel_tokens_chat
 
 CREATE INDEX IF NOT EXISTS idx_panel_tokens_caduca
     ON panel_tokens (caduca_en);
+
+
+-- --- recordatorios (version 5) --------------------------------------------
+--
+-- Los recordatorios de la persona que vive en la casa: «tomar la medicina de la
+-- presión», todos los días a las ocho. Los crea la familia desde el panel (no el
+-- bot, que no tiene conversación de varios pasos) y los dice en voz alta el
+-- satélite cuando llega la hora.
+--
+-- Esta tabla es la definición del recordatorio, no su historial. Lo que pasó con
+-- cada vencimiento —si se dijo, a quién, si no se pudo— vive en
+-- `recordatorio_entregas`. Separadas por el mismo motivo por el que `alertas` y
+-- `envios` lo están: son dos cosas distintas, una se edita al crearlo y la otra
+-- crece con cada vez que toca.
+--
+-- `hora_min` es la hora del día en MINUTOS desde medianoche (0..1439), y no un
+-- texto «HH:MM». La próxima vez que toca se calcula sumando minutos y días, y con
+-- un entero eso es aritmética y no parseo de cadenas. La API y la pantalla siguen
+-- hablando en HH:MM: la conversión es cosa de quien escribe y lee aquí.
+--
+-- `repeticion` es 'una_vez', 'diario' o 'semanal'. En 'una_vez' se usa `fecha`
+-- ('YYYY-MM-DD' local, hora de Mazatlán) y en 'semanal' se usa `dias` ('1,3,5'
+-- con el número ISO del día, 1 = lunes .. 7 = domingo). La columna que no aplica
+-- queda NULL, y eso es más informativo que dejar una cadena vacía: «no hay días»
+-- y «los días son la cadena vacía» se leerían igual.
+--
+-- `activo` es el corte que pide la propuesta: se puede CANCELAR sin borrar. Al
+-- cancelar se pone `activo = 0` y `cancelado_en`, y la fila se queda como
+-- evidencia hasta que la purga la borre. Un 'una_vez' que ya se dijo también
+-- pasa a `activo = 0` con `hecho_en`, que es lo que lo distingue de un cancelado
+-- a ojos del operador.
+--
+-- `proximo_en` es el epoch UTC de la próxima vez que toca, y es el único sitio
+-- donde vive esa verdad: el ciclo del orquestador solo mira esta columna, y un
+-- recordatorio que se dice la recalcula. No hay estado de «ya sonó» en memoria
+-- que pueda desincronizarse con la base ni sobrevivir mal a un reinicio.
+--
+-- `purgable_en` se calcula al insertar (ahora + 90 días) y no al purgar, igual
+-- que en `alertas`: si el plazo cambia, las filas que ya están conservan la fecha
+-- con la que se crearon.
+--
+-- `creado_por` es el `chat_id` del familiar que lo creó. Es dato personal, así
+-- que sale enmascarado al log igual que el resto (ver `db.enmascarar_chat`).
+
+CREATE TABLE IF NOT EXISTS recordatorios (
+    id             TEXT NOT NULL PRIMARY KEY,
+    texto          TEXT NOT NULL,
+    hora_min       INTEGER NOT NULL,
+    repeticion     TEXT NOT NULL,
+    fecha          TEXT,
+    dias           TEXT,
+    activo         INTEGER NOT NULL DEFAULT 1,
+    cancelado_en   INTEGER,
+    hecho_en       INTEGER,
+    creado_por     TEXT NOT NULL,
+    creado_en      INTEGER NOT NULL,
+    proximo_en     INTEGER NOT NULL,
+    purgable_en    INTEGER NOT NULL
+);
+
+-- El que usa el ciclo del orquestador en cada vuelta: los activos cuyo
+-- `proximo_en` ya venció. Sin este índice recorrería todos los recordatorios de
+-- 90 días cada 30 segundos.
+CREATE INDEX IF NOT EXISTS idx_recordatorios_proximo
+    ON recordatorios (activo, proximo_en);
+
+-- Para la pantalla del panel: los recordatorios de un familiar concreto. Hoy la
+-- lista los muestra todos, pero el índice ya deja el corte por creador listo.
+CREATE INDEX IF NOT EXISTS idx_recordatorios_creador
+    ON recordatorios (creado_por);
+
+
+-- --- recordatorio_entregas (version 5) ------------------------------------
+--
+-- Una fila por (recordatorio, vencimiento): qué tocó, cuándo, si se dijo y a
+-- quién. Es el historial y, a la vez, la garantía de no decir dos veces el mismo
+-- vencimiento.
+--
+-- La clave primaria compuesta `(recordatorio_id, toca_en)` es lo que lo consigue:
+-- el `INSERT OR IGNORE` solo entra una vez, igual que la deduplicación de alertas
+-- con `ids_procesados`. Aunque el ciclo se solape consigo mismo o el orquestador
+-- se reinicie entre dos vueltas, el segundo intento de insertar el mismo
+-- vencimiento no entra, y por eso un recordatorio no puede sonar dos veces.
+--
+-- `estado` tiene tres valores:
+--   'entregado'     -> se dijo (por algun satelite) o se dio por dicho.
+--   'no_entregado'  -> venció sin satélite conectado y pasó la ventana de 30
+--                      minutos, así que ya no se dice.
+--   'pendiente'     -> venció sin satélite; se dirá al conectarse uno, si es
+--                      dentro de los 30 minutos.
+--
+-- `destino` es el client id del satélite al que se le dijo, o NULL si lo dijeron
+-- todos (el caso normal: había un satélite conectado a la hora). Es el mismo
+-- campo que usa el contrato de `satelite/decir` para dirigir un mensaje.
+--
+-- NO hay llave foránea a `recordatorios`: la purga borra las entregas de los
+-- recordatorios vencidos y después los recordatorios, en dos `DELETE`
+-- independientes, y una cascada podría dejar una purga a medias.
+
+CREATE TABLE IF NOT EXISTS recordatorio_entregas (
+    recordatorio_id  TEXT NOT NULL,
+    toca_en          INTEGER NOT NULL,
+    estado           TEXT NOT NULL,
+    entregado_en     INTEGER,
+    destino          TEXT,
+    PRIMARY KEY (recordatorio_id, toca_en)
+);
+
+-- Para la ventana de 30 minutos: qué vencimientos quedaron pendientes, y para la
+-- purga por antigüedad. Sin este índice el ciclo recorrería todo el historial en
+-- cada vuelta buscando los 'pendiente'.
+CREATE INDEX IF NOT EXISTS idx_recordatorio_entregas_estado
+    ON recordatorio_entregas (estado, toca_en);

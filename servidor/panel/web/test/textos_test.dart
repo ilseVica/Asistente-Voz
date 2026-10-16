@@ -44,6 +44,44 @@ void main() {
     });
   });
 
+  group('repeticionDe', () {
+    test('los tres nombres del formulario', () {
+      expect(repeticionDe('una_vez'), 'Una sola vez');
+      expect(repeticionDe('diario'), 'Todos los días');
+      expect(repeticionDe('semanal'), 'Ciertos días');
+    });
+
+    test('lo que no es del contrato se enseña tal cual, no en blanco', () {
+      expect(repeticionDe('raro'), 'raro');
+    });
+  });
+
+  group('diasDe', () {
+    test('ordena y no repite', () {
+      expect(diasDe(<int>[5, 1, 5]), 'lunes y viernes');
+    });
+
+    test('tres días con comas y «y»', () {
+      expect(diasDe(<int>[3, 1, 5]), 'lunes, miércoles y viernes');
+    });
+
+    test('un solo día', () {
+      expect(diasDe(<int>[7]), 'domingo');
+    });
+
+    test('vacío o fuera de rango no pinta índices inválidos', () {
+      expect(diasDe(<int>[]), '');
+      expect(diasDe(<int>[0, 9]), '');
+    });
+  });
+
+  group('ultimaVezSeDijo', () {
+    test('envuelve el momento ya formateado', () {
+      expect(ultimaVezSeDijo('hoy a las 08:00'),
+          'La última vez se dijo hoy a las 08:00.');
+    });
+  });
+
   group('minutos y horas', () {
     test('singular con uno, plural con más', () {
       expect(minutos(1), '1 minuto');

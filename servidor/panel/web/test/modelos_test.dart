@@ -117,9 +117,66 @@ void main() {
     });
   });
 
+  group('Recordatorio', () {
+    Map<String, dynamic> json() => <String, dynamic>{
+          'id': 'rec-abc',
+          'texto': 'Tomar la medicina',
+          'hora': '08:00',
+          'repeticion': 'semanal',
+          'fecha': null,
+          'dias': <int>[1, 3],
+          'proximo_en': 1700003600,
+          'activo': true,
+          'creado_en': 1700000000,
+          'creado_por': 'Marta',
+          'cancelado_en': null,
+          'hecho_en': null,
+          'ultima_entrega': <String, dynamic>{
+            'estado': 'entregado',
+            'cuando': 1699999000,
+          },
+        };
+
+    test('lee los campos y la última entrega', () {
+      final Recordatorio r = Recordatorio.desde(json());
+      expect(r.id, 'rec-abc');
+      expect(r.hora, '08:00');
+      expect(r.repeticion, 'semanal');
+      expect(r.dias, <int>[1, 3]);
+      expect(r.activo, isTrue);
+      expect(r.ultimaEntrega!.seDijo, isTrue);
+      expect(r.ultimaEntrega!.cuando, 1699999000);
+    });
+
+    test('sin última entrega es null, y no un objeto vacío', () {
+      final Map<String, dynamic> sin = json()..['ultima_entrega'] = null;
+      expect(Recordatorio.desde(sin).ultimaEntrega, isNull);
+    });
+
+    test('una entrega no entregada no se dijo', () {
+      final Map<String, dynamic> sin = json()
+        ..['ultima_entrega'] = <String, dynamic>{
+          'estado': 'no_entregado',
+          'cuando': 1699999000,
+        };
+      expect(Recordatorio.desde(sin).ultimaEntrega!.seDijo, isFalse);
+    });
+
+    test('aguanta un JSON sin los campos opcionales', () {
+      final Recordatorio r = Recordatorio.desde(<String, dynamic>{
+        'id': 'rec-x',
+        'texto': 'Algo',
+        'hora': '07:30',
+        'repeticion': 'una_vez',
+      });
+      expect(r.dias, isEmpty);
+      expect(r.activo, isFalse);
+      expect(r.ultimaEntrega, isNull);
+    });
+  });
+
   group('hace', () {
     const int ahora = 1700000000;
-
     test('sin datos no es «hace 0 min»', () {
       expect(hace(null, ahora: ahora), 'sin datos');
     });
@@ -156,6 +213,39 @@ void main() {
       expect(fechaAlerta(segundaHora(2026, 10, 5, 23), hoy: ref)
               .startsWith('ayer, '),
           isTrue);
+    });
+  });
+
+  group('fechaProxima', () {
+    final DateTime ref = DateTime(2026, 10, 6, 12, 0); // martes 6
+    int aSegundos(int dia, int hora) =>
+        DateTime(2026, 10, dia, hora).millisecondsSinceEpoch ~/ 1000;
+
+    test('distingue hoy, mañana y el nombre del día', () {
+      expect(fechaProxima(aSegundos(6, 9), hoy: ref).startsWith('hoy, '), isTrue);
+      expect(fechaProxima(aSegundos(7, 9), hoy: ref).startsWith('mañana, '),
+          isTrue);
+      expect(fechaProxima(aSegundos(8, 9), hoy: ref), 'el jueves, 09:00');
+    });
+
+    test('más allá de una semana pone la fecha', () {
+      expect(fechaProxima(aSegundos(20, 9), hoy: ref), '20/10/2026 · 09:00');
+    });
+  });
+
+  group('cuandoSeDijo', () {
+    final DateTime ref = DateTime(2026, 10, 6, 12, 0);
+    int aSegundos(int dia, int hora) =>
+        DateTime(2026, 10, dia, hora).millisecondsSinceEpoch ~/ 1000;
+
+    test('hoy y ayer con la hora', () {
+      expect(cuandoSeDijo(aSegundos(6, 9), hoy: ref), 'hoy a las 09:00');
+      expect(cuandoSeDijo(aSegundos(5, 9), hoy: ref), 'ayer a las 09:00');
+    });
+
+    test('más antiguo pone la fecha entera', () {
+      expect(cuandoSeDijo(aSegundos(1, 9), hoy: ref),
+          'el 1/10/2026 a las 09:00');
     });
   });
 }

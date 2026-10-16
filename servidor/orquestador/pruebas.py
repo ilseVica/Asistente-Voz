@@ -60,6 +60,7 @@ import config  # noqa: E402
 import db as db_modulo  # noqa: E402
 import mqtt_cliente  # noqa: E402
 import panel_acceso as panel_acceso_modulo  # noqa: E402
+import recordatorios as recordatorios_modulo  # noqa: E402
 import registro as registro_modulo  # noqa: E402
 import textos  # noqa: E402
 import voz  # noqa: E402
@@ -2139,6 +2140,201 @@ if os.path.exists(ruta_acl):
            bloques.get("orquestador"))
 else:
     prueba("existe el acl.conf para revisar el usuario voz", False, ruta_acl)
+
+
+# =============================================================================
+# 20d. Los recordatorios: siguiente vez, ciclo y no repetir
+# =============================================================================
+#
+# `siguiente_vez` es pura (recibe `desde_epoch` y la zona), asi que se prueba con
+# un jueves fijo y horas concretas, sin tocar la base ni el reloj. El ciclo se
+# prueba sobre una base temporal, con un `publicar` que apunta lo publicado.
+print("\n20d. Los recordatorios")
+print("-----------------------")
+
+from datetime import datetime, timedelta  # noqa: E402
+
+ZONA = recordatorios_modulo.ZONA
+
+
+def local_epoch(anio, mes, dia, hora, minuto):
+    """El epoch de una hora LOCAL de Mazatlan."""
+    return int(datetime(anio, mes, dia, hora, minuto, tzinfo=ZONA).timestamp())
+
+
+# La referencia: jueves 2026-10-15 a las 12:00 en Mazatlan (isoweekday 4).
+DESDE = local_epoch(2026, 10, 15, 12, 0)
+
+
+def rec(**campos):
+    """Una fila de recordatorio como la que devuelve la base (dict)."""
+    fila = {"hora_min": 0, "repeticion": "diario", "fecha": None, "dias": None}
+    fila.update(campos)
+    return fila
+
+
+prueba("Mazatlan es -7 h en invierno y en verano (sin horario de verano)",
+       datetime(2026, 1, 15, tzinfo=ZONA).utcoffset() == timedelta(hours=-7)
+       and datetime(2026, 7, 15, tzinfo=ZONA).utcoffset() == timedelta(hours=-7),
+       (datetime(2026, 1, 15, tzinfo=ZONA).utcoffset(),
+        datetime(2026, 7, 15, tzinfo=ZONA).utcoffset()))
+
+prueba("diario a una hora que aun no ha pasado: hoy",
+       recordatorios_modulo.siguiente_vez(rec(hora_min=15 * 60), DESDE)
+       == local_epoch(2026, 10, 15, 15, 0))
+prueba("diario a una hora ya pasada: manana",
+       recordatorios_modulo.siguiente_vez(rec(hora_min=8 * 60), DESDE)
+       == local_epoch(2026, 10, 16, 8, 0))
+prueba("diario justo a la hora de referencia: manana (la busqueda es estricta)",
+       recordatorios_modulo.siguiente_vez(rec(hora_min=12 * 60), DESDE)
+       == local_epoch(2026, 10, 16, 12, 0))
+prueba("semanal: el proximo dia marcado (viernes 5)",
+       recordatorios_modulo.siguiente_vez(
+           rec(repeticion="semanal", dias="5", hora_min=9 * 60), DESDE)
+       == local_epoch(2026, 10, 16, 9, 0))
+prueba("semanal: hoy toca y aun no pasa, es hoy",
+       recordatorios_modulo.siguiente_vez(
+           rec(repeticion="semanal", dias="4", hora_min=15 * 60), DESDE)
+       == local_epoch(2026, 10, 15, 15, 0))
+prueba("semanal: hoy toca pero ya paso, es la semana que viene",
+       recordatorios_modulo.siguiente_vez(
+           rec(repeticion="semanal", dias="4", hora_min=8 * 60), DESDE)
+       == local_epoch(2026, 10, 22, 8, 0))
+prueba("semanal sin dias no vuelve a tocar (None)",
+       recordatorios_modulo.siguiente_vez(
+           rec(repeticion="semanal", dias=""), DESDE) is None)
+prueba("una_vez futura da esa fecha y hora",
+       recordatorios_modulo.siguiente_vez(
+           rec(repeticion="una_vez", fecha="2026-10-15", hora_min=15 * 60), DESDE)
+       == local_epoch(2026, 10, 15, 15, 0))
+prueba("una_vez ya pasada no toca (None)",
+       recordatorios_modulo.siguiente_vez(
+           rec(repeticion="una_vez", fecha="2026-10-15", hora_min=8 * 60), DESDE)
+       is None)
+
+# --- El registro de satelites conectados (clase en memoria) ---
+conj = recordatorios_modulo.Satelites()
+prueba("sin nadie, no hay satelite conectado", conj.hay_conectado() is False)
+conj.actualizar("vm", True)
+prueba("con uno conectado, hay; y se sabe cual",
+       conj.hay_conectado() is True and conj.conectados() == ["vm"])
+conj.actualizar("vm", False)
+prueba("al desconectarse deja de haber",
+       conj.hay_conectado() is False and conj.conectados() == [])
+
+# --- El ciclo sobre una base temporal ---
+base_rec, _ = base_nueva("recordatorios-")
+AHORA = local_epoch(2026, 10, 15, 8, 0)
+sat = recordatorios_modulo.Satelites()
+
+# Un diario a las 8:00 que vence ahora, SIN satelite conectado.
+base_rec.crear_recordatorio("rec-diario", "Tomar la medicina", 8 * 60,
+                            "diario", None, None, "1001", AHORA - 60, AHORA)
+apuntes, publicar = publicar_que_recoge()
+n = recordatorios_modulo.procesar_vencidos(base_rec, publicar, sat, AHORA)
+prueba("sin satelite conectado no se publica y el vencimiento queda pendiente",
+       n == 1 and apuntes == [], apuntes)
+entrega = base_rec.obtener_entrega("rec-diario", AHORA - 60)
+prueba("la entrega queda 'pendiente' con su vencimiento",
+       entrega is not None and entrega["estado"] == "pendiente", entrega)
+fila = base_rec.obtener_recordatorio("rec-diario")
+prueba("y avanza a la proxima vez (hoy 8:00 ya paso: manana)",
+       fila["proximo_en"] == local_epoch(2026, 10, 16, 8, 0), dict(fila))
+
+# Diez minutos despues se conecta un satelite: se le dice el pendiente reciente.
+DIEZ = AHORA + 10 * 60
+sat.actualizar("vm", True)
+apuntes, publicar = publicar_que_recoge()
+dichas = recordatorios_modulo.entregar_pendientes(base_rec, publicar, "vm", DIEZ)
+prueba("al conectarse un satelite se le dice el pendiente reciente",
+       dichas == 1 and len(apuntes) == 1, (dichas, apuntes))
+if apuntes:
+    _, carga, qos, _ = apuntes[0]
+    prueba("con destino a ESE satelite y tipo recordatorio",
+           carga.get("destino") == "vm" and carga.get("tipo") == "recordatorio",
+           carga)
+    prueba("y con la frase hablada aprobada, el texto dos veces",
+           carga.get("texto")
+           == "Le recuerdo: Tomar la medicina. Repito: Tomar la medicina.",
+           carga.get("texto"))
+    prueba("la entrega pasa a entregado con su destino",
+           base_rec.obtener_entrega("rec-diario", AHORA - 60)["destino"] == "vm")
+
+# Un vencimiento que YA tiene entrega no se repite aunque siga vencido.
+base_rec.crear_recordatorio("rec-ya", "Regar las plantas", 8 * 60, "diario",
+                            None, None, "1001", AHORA - 5, AHORA)
+base_rec.registrar_entrega("rec-ya", AHORA - 5, "entregado", AHORA - 5)
+apuntes, publicar = publicar_que_recoge()
+n = recordatorios_modulo.procesar_vencidos(base_rec, publicar, sat, AHORA)
+prueba("un vencimiento que ya tiene entrega NO se vuelve a decir",
+       n == 0 and apuntes == [], apuntes)
+
+# Con satelite conectado, un vencimiento nuevo se publica SIN destino.
+base_rec.crear_recordatorio("rec-dos", "Sacar la basura", 9 * 60, "diario",
+                            None, None, "1001", AHORA - 1, AHORA)
+apuntes, publicar = publicar_que_recoge()
+n = recordatorios_modulo.procesar_vencidos(base_rec, publicar, sat, AHORA)
+prueba("con satelite conectado se publica, sin destino (lo dicen todos)",
+       n == 1 and len(apuntes) == 1 and "destino" not in apuntes[0][1],
+       apuntes)
+entrega = base_rec.obtener_entrega("rec-dos", AHORA - 1)
+prueba("y se marca entregado sin destino",
+       entrega["estado"] == "entregado" and entrega["destino"] is None, entrega)
+
+# Un pendiente que pasa la ventana de 30 min se marca no_entregado.
+base_rec.registrar_entrega("rec-viejo", AHORA - 3600, "pendiente")
+n = recordatorios_modulo.expirar_pendientes(base_rec, AHORA)
+prueba("un pendiente de hace mas de 30 min se marca no_entregado",
+       n == 1 and base_rec.obtener_entrega("rec-viejo", AHORA - 3600)["estado"]
+       == "no_entregado", n)
+
+# Un 'una_vez' ya dicho se cierra (hecho_en) y no se borra.
+base_rec.crear_recordatorio("rec-una", "Pagar el agua", 8 * 60, "una_vez",
+                            "2026-10-15", None, "1001", AHORA - 60, AHORA)
+apuntes, publicar = publicar_que_recoge()
+n = recordatorios_modulo.procesar_vencidos(base_rec, publicar, sat, AHORA)
+fila = base_rec.obtener_recordatorio("rec-una")
+prueba("un 'una_vez' ya dicho se cierra: activo=0, hecho_en, sin cancelar",
+       n == 1 and fila["activo"] == 0 and fila["hecho_en"] == AHORA
+       and fila["cancelado_en"] is None, dict(fila))
+
+# Cancelar es idempotente.
+prueba("cancelar devuelve True la primera vez",
+       base_rec.cancelar_recordatorio("rec-dos", AHORA) is True)
+prueba("y False la segunda (idempotente)",
+       base_rec.cancelar_recordatorio("rec-dos", AHORA) is False)
+prueba("cancelar un id que no existe tambien es False",
+       base_rec.cancelar_recordatorio("rec-no-existe", AHORA) is False)
+base_rec.cerrar()
+
+# --- La migracion v4 -> v5 ---
+ruta_v4 = os.path.join(tempfile.mkdtemp(prefix="recordatorios-v4-"),
+                       "v4.sqlite3")
+cruda = sqlite3.connect(ruta_v4)
+cruda.execute("CREATE TABLE familiares (id INTEGER PRIMARY KEY, chat_id TEXT)")
+cruda.execute("INSERT INTO familiares (id, chat_id) VALUES (1, '999')")
+cruda.execute("PRAGMA user_version = 4")
+cruda.commit()
+cruda.close()
+
+base_v4 = db_modulo.BaseDatos(ruta_v4)
+prueba("una base en la version 4 sube a la version 5",
+       base_v4.conexion.execute("PRAGMA user_version").fetchone()[0] == 5,
+       base_v4.conexion.execute("PRAGMA user_version").fetchone()[0])
+tablas_v4 = {f[0] for f in base_v4.conexion.execute(
+    "SELECT name FROM sqlite_master WHERE type='table'")}
+prueba("y gana las dos tablas de recordatorios",
+       {"recordatorios", "recordatorio_entregas"} <= tablas_v4, sorted(tablas_v4))
+indices_v4 = {f[0] for f in base_v4.conexion.execute(
+    "SELECT name FROM sqlite_master WHERE type='index'")}
+prueba("y sus indices (proximo, creador y entregas por estado)",
+       {"idx_recordatorios_proximo", "idx_recordatorios_creador",
+        "idx_recordatorio_entregas_estado"} <= indices_v4, sorted(indices_v4))
+fila_v4 = base_v4.conexion.execute(
+    "SELECT chat_id FROM familiares WHERE id = 1").fetchone()
+prueba("sin perder lo que ya habia en la base",
+       fila_v4 is not None and fila_v4[0] == "999", fila_v4)
+base_v4.cerrar()
 
 
 # =============================================================================

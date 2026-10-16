@@ -23,6 +23,10 @@
 // sobre el pin, porque el GPIO no da corriente suficiente.
 // ---------------------------------------------------------------------------
 #define GPIO_PIN_RELE 26
+// Modulo de rele de 2 canales con SONGLE SRD-05VDC-SL-C (bobina de 5 V), con
+// optoacoplador y puente JD-VCC. Se activa en BAJO: IN a 0 V enciende el rele.
+// IN1 va a GPIO 26; IN2 queda sin conectar (reserva).
+#define RELE_ACTIVO_BAJO 1
 #define GPIO_PIN_BUZZER 27
 
 // ---------------------------------------------------------------------------
@@ -40,10 +44,11 @@
 // PIR: salida digital del sensor que el ESP32 lee como entrada.
 #define GPIO_PIN_SENSOR_PIR 35
 
-// El hardware electrico todavia no existe (6.7), pero los pines quedan cableados
-// y prontos. Cambiar estas dos banderas no toca codigo.
+// El buzzer todavia no existe (6.7), pero el pin queda cableado y pronto.
+// El modulo de rele ya llego, asi que RELE_HABILITADO pasa a true. Cambiar
+// cualquiera de las dos banderas no toca codigo.
 #define BUZZER_HABILITADO true
-#define RELE_HABILITADO false
+#define RELE_HABILITADO true
 
 // El boton externo queda desactivado por defecto hasta que llegue el hardware.
 #define BOTON_EXTERNO_HABILITADO false

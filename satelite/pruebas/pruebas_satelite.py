@@ -12,6 +12,7 @@ WebSocket (mas la falta de conexion).
 """
 
 import asyncio
+import json
 import os
 import sys
 import tempfile
@@ -23,8 +24,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import satelite  # noqa: E402
 from satelite import (  # noqa: E402
-    Config, Frase, Nucleo, RegistroLatencias, ServidorTecla, aceptar_por_antiguedad,
-    reloj_ms, MENSAJE_REPETIR, MENSAJE_SIN_CONEXION, TRAMA_BYTES,
+    Config, Frase, Nucleo, PuenteMQTT, RegistroLatencias, ServidorTecla,
+    aceptar_por_antiguedad, reloj_ms, topico_estado_de, MENSAJE_REPETIR,
+    MENSAJE_SIN_CONEXION, TRAMA_BYTES,
 )
 
 # Todos los codigos de error reales que puede mandar servidor_voz.py, mas el
@@ -641,6 +643,116 @@ class TestDosSatelites(unittest.IsolatedAsyncioTestCase):
         await self._pausa()
         self.assertEqual(self.rep_vm.dichos, [])
 
+    async def test_recordatorio_lo_dicen_los_dos(self):
+        self._a_los_dos({"texto": "Le recuerdo: regar. Repito: regar.",
+                         "tipo": "recordatorio", "ts": _ahora_s()})
+        await self._pausa()
+        self.assertEqual(self.rep_sala.dichos,
+                         ["Le recuerdo: regar. Repito: regar."])
+        self.assertEqual(self.rep_vm.dichos,
+                         ["Le recuerdo: regar. Repito: regar."])
+
+    async def test_recordatorio_con_destino_lo_dice_solo_uno(self):
+        self._a_los_dos({"texto": "Le recuerdo: regar. Repito: regar.",
+                         "tipo": "recordatorio", "destino": "satelite-vm",
+                         "ts": _ahora_s()})
+        await self._pausa()
+        self.assertEqual(self.rep_vm.dichos,
+                         ["Le recuerdo: regar. Repito: regar."])
+        self.assertEqual(self.rep_sala.dichos, [])
+
+
+class _ClienteMQTTFalso:
+    """Registra el orden de subscribe/publish, sin abrir red."""
+
+    def __init__(self):
+        self.orden = []
+        self.publicados = []
+
+    def subscribe(self, topico, qos=0):
+        self.orden.append(("subscribe", topico))
+
+    def publish(self, topico, carga, qos=0, retain=False):
+        self.orden.append(("publish", topico))
+        self.publicados.append((topico, carga, qos, retain))
+
+
+class _LoopFalso:
+    def call_soon_threadsafe(self, fn, *args):
+        fn(*args)
+
+
+class _CodigoFalso:
+    is_failure = False
+
+
+class _CfgFalsa:
+    client_id = "satelite-vm"
+    mqtt_usuario = "satelite"
+    topico_decir = "casa/sala/satelite/decir"
+    topico_estado = None
+
+
+class TestOrdenAlConectar(unittest.TestCase):
+    """Regresion del fallo del 2026-10-15 (entrega tardia perdida).
+
+    Al (re)conectar, el satelite DEBE suscribirse a satelite/decir ANTES de
+    publicar su estado conectado. Si publica el estado primero, el orquestador
+    responde al instante con un recordatorio pendiente y, como el satelite usa
+    clean_session=True (sin cola de mensajes en el broker), ese primer mensaje
+    se pierde. Esta prueba falla si se vuelve a invertir el orden.
+    """
+
+    def _puente_y_cliente(self):
+        cfg = _CfgFalsa()
+        puente = PuenteMQTT.__new__(PuenteMQTT)
+        puente.cfg = cfg
+        puente.nucleo = None
+        puente.topico_estado = topico_estado_de(cfg)
+        puente.loop = _LoopFalso()
+        puente.listo = asyncio.Event()
+        return puente, _ClienteMQTTFalso()
+
+    def test_se_suscribe_a_decir_antes_de_publicar_el_estado(self):
+        puente, cliente = self._puente_y_cliente()
+
+        puente._al_conectar(cliente, None, None, _CodigoFalso())
+
+        # La primera llamada es suscribirse a decir; la segunda, publicar estado.
+        self.assertEqual(cliente.orden[0],
+                         ("subscribe", puente.cfg.topico_decir))
+        self.assertEqual(cliente.orden[1],
+                         ("publish", puente.topico_estado))
+        indice_sub = cliente.orden.index(
+            ("subscribe", puente.cfg.topico_decir))
+        indice_pub = cliente.orden.index(
+            ("publish", puente.topico_estado))
+        self.assertLess(indice_sub, indice_pub,
+                        "el satelite publico su estado antes de suscribirse a "
+                        "satelite/decir: se perdera la entrega tardia")
+
+        # El estado va como {"conectado": true} y retenido.
+        topico, carga, _qos, retain = cliente.publicados[0]
+        self.assertEqual(topico, puente.topico_estado)
+        self.assertEqual(json.loads(carga), {"conectado": True})
+        self.assertTrue(retain)
+
+    def test_el_orden_malo_se_detecta(self):
+        """Confirma que la comprobacion de orden caza la regresion.
+
+        Con el orden invertido (el fallo de hoy: publicar estado y luego
+        suscribirse) la asercion de `test_se_suscribe_a_decir_antes_de_publicar_
+        el_estado` no se cumpliria; aqui se reproduce ese orden a mano.
+        """
+        puente, cliente = self._puente_y_cliente()
+        cliente.publish(puente.topico_estado, '{"conectado":true}',
+                        qos=0, retain=True)
+        cliente.subscribe(puente.cfg.topico_decir, qos=1)
+        with self.assertRaises(AssertionError):
+            self.assertLess(
+                cliente.orden.index(("subscribe", puente.cfg.topico_decir)),
+                cliente.orden.index(("publish", puente.topico_estado)))
+
 
 class TestAlertaPrioridad(Base):
     async def test_alerta_de_hace_30_s_se_dice_y_una_respuesta_no(self):
@@ -708,6 +820,22 @@ class TestAlertaPrioridad(Base):
             nucleo.al_decir({"texto": "gas 2", "tipo": "alerta", "ts": _ahora_s()})
             await self.esperar(lambda: len(rep.dichos) == 2, timeout=3)
             self.assertEqual(rep.cortados, [])
+        finally:
+            tarea.cancel()
+
+    async def test_alerta_interrumpe_un_recordatorio_en_curso(self):
+        rep = FakeRepLento(duracion=0.2)
+        nucleo = self.hacer_nucleo(repes=rep)
+        tarea = asyncio.get_running_loop().create_task(nucleo.bucle_habla())
+        try:
+            nucleo.al_decir({"texto": "Le recuerdo: agua. Repito: agua.",
+                             "tipo": "recordatorio", "ts": _ahora_s()})
+            await self.esperar(lambda: rep.dichos)
+            nucleo.al_decir({"texto": "gas", "tipo": "alerta", "ts": _ahora_s()})
+            await self.esperar(lambda: len(rep.dichos) == 2, timeout=3)
+            self.assertEqual(rep.cortados, ["Le recuerdo: agua. Repito: agua."])
+            self.assertEqual(rep.dichos,
+                             ["Le recuerdo: agua. Repito: agua.", "gas"])
         finally:
             tarea.cancel()
 

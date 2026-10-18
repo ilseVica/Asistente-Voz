@@ -76,6 +76,10 @@ MQTT_KEEPALIVE = int(os.environ.get("MQTT_KEEPALIVE", "60"))
 # revisado, y esta versión manda a Telegram lo que no conoce.
 TOPICO_ALERTA_GAS = "casa/sala/alerta/gas"
 TOPICO_ALERTA_AYUDA = "casa/sala/alerta/ayuda"
+# La alerta de inactividad (Fase 4) la ORIGINA este servicio, no la recibe: el
+# reloj de inactividad vive aqui (`inactividad.py`) y publica en este topico, que
+# el panel escucha. La familia la recibe por Telegram por la cola, como las demas.
+TOPICO_ALERTA_INACTIVIDAD = "casa/sala/alerta/inactividad"
 
 # Donde se publica lo que el asistente dice en voz alta. Lo usa el bot cuando el
 # familiar pulsa "Ya lo atendi", para que el sitio se entere de que alguien ya
@@ -415,6 +419,32 @@ SEGUNDOS_CICLO_RECORDATORIOS = 30
 # `no_entregado` y no se dice: un recordatorio de «tomar la medicina» que llega dos
 # horas tarde es peor que no llegar, porque descoloca sin avisar a tiempo.
 VENTANA_RECORDATORIO_PENDIENTE_S = 30 * 60
+
+# --- Inactividad (Fase 4) ---------------------------------------------------
+#
+# Cuánto tiempo sin movimiento en la sala dispara la alerta a la familia. El
+# número VIVO no está aquí: vive en la tabla `configuracion` de SQLite, porque la
+# familia lo ajusta desde el panel y el orquestador lo tiene que releer sin
+# reiniciarse. Estas tres constantes son solo el valor de fábrica y el rango que
+# la API acepta; `db.tiempo_inactividad()` devuelve el valor guardado o, si no
+# hay ninguno, `TIEMPO_INACTIVIDAD_MIN_DEFECTO`.
+TIEMPO_INACTIVIDAD_MIN_DEFECTO = 120
+TIEMPO_INACTIVIDAD_MIN_MINIMO = 2
+TIEMPO_INACTIVIDAD_MIN_MAXIMO = 720
+
+# Cada cuánto mira el orquestador si la casa lleva demasiado tiempo sin
+# movimiento. La precisión que hace falta es de minutos, así que 10 s sobra; es
+# el mismo patrón que `SEGUNDOS_CICLO_RECORDATORIOS`, un hilo aparte con su
+# `parando.wait`. No se reacciona a cada mensaje de sensores para que un ajuste
+# del panel se aplique en la vuelta siguiente sin reiniciar nada.
+SEGUNDOS_CICLO_INACTIVIDAD = 10
+
+# Un tópico `$SYS` de enlace solo BLOQUEA la alerta si trae un 0 EXPLÍCITO. En
+# modo instalación no hay puente, el tópico no existe, y entonces no llega nada:
+# «sin noticia» se trata como «conectado», no como «caído». Es una decisión de
+# ajuste del 2026-10-16 y la razón es que un `0` retenido de un puente que ya no
+# está dejaría la alerta apagada para siempre sin que nadie lo notara.
+ENLACE_SITIO_VALORES_CAIDO = ("0", "false", "off", "no")
 
 # --- Registro --------------------------------------------------------------
 

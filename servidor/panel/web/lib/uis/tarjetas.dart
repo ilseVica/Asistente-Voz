@@ -297,6 +297,129 @@ class _Dato extends StatelessWidget {
   }
 }
 
+/// El aviso por inactividad: cuándo se movió alguien por última vez y el ajuste.
+///
+/// Es la única tarjeta que guarda un número (los minutos), y lo hace con un campo
+/// de texto y no con un deslizador: la franja va de 2 a 720 y 719 pasos no se
+/// afinan con el dedo. El error se enseña debajo del campo, en la misma pantalla,
+/// y la franja la manda el servidor, así que aquí no hay números escritos a mano.
+class TarjetaInactividad extends StatefulWidget {
+  const TarjetaInactividad({super.key});
+
+  @override
+  State<TarjetaInactividad> createState() => _TarjetaInactividadState();
+}
+
+class _TarjetaInactividadState extends State<TarjetaInactividad> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  int? _editado;
+
+  String? _validar(String? valor, Inactividad inact) {
+    final int? minutos = int.tryParse((valor ?? '').trim());
+    if (minutos == null) return Textos.soloNumerosDeMinutos;
+    if (minutos < inact.minimo || minutos > inact.maximo) {
+      return minutosFueraDeRango(inact.minimo, inact.maximo);
+    }
+    return null;
+  }
+
+  Future<void> _guardar(EstadoPanel estado) async {
+    // `validate()` corre los validadores y, si no hay error, `save()` deja el número
+    // en `_editado`. Nada de esto toca la red hasta que el número es bueno.
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    _formKey.currentState!.save();
+    if (_editado == null) return;
+    await estado.guardarInactividad(_editado!);
+  }
+
+  @override
+  Widget build(BuildContext contexto) {
+    final EstadoPanel estado = PanelScope.de(contexto);
+    final Estado? e = estado.estado;
+    if (e == null) return const SizedBox.shrink();
+    final Inactividad inact = e.inactividad;
+
+    // Sin reloj (el orquestador aún no ha visto nada) o con el nodo caído, no se
+    // sabe cuándo fue el último movimiento: se dice «sin datos del sensor» y no una
+    // hora que podría ser de hace días.
+    final bool sinDatos =
+        inact.ultimoMovimiento == null || e.nodo.estado == desconectado;
+    final String movimiento = sinDatos
+        ? Textos.sinDatosDelSensor
+        : hace(inact.ultimoMovimiento, ahora: estado.ahoraServidor());
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Icon(Icons.hourglass_empty, color: Tema.secundario, size: 20),
+                const SizedBox(width: 8),
+                Text(Textos.avisoInactividad,
+                    style: Theme.of(contexto).textTheme.bodyMedium?.copyWith(
+                        color: Tema.secundario, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(Textos.ultimoMovimiento,
+                style: Theme.of(contexto).textTheme.bodySmall),
+            const SizedBox(height: 4),
+            Text(movimiento,
+                style: Theme.of(contexto).textTheme.headlineMedium),
+            const SizedBox(height: 16),
+            Form(
+              key: _formKey,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(
+                    child: TextFormField(
+                      // La clave lleva el valor del servidor: cuando se guarda (o
+                      // cambia en otro dispositivo), el campo se reinicia con el
+                      // número que confirmó el servidor en vez de quedarse con lo
+                      // que se había teclado.
+                      key: ValueKey<int>(inact.tiempoMin),
+                      initialValue: '${inact.tiempoMin}',
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: Textos.avisarSiNoHayMovimiento,
+                        suffixText: Textos.minutosUnidad,
+                      ),
+                      validator: (String? valor) => _validar(valor, inact),
+                      onSaved: (String? valor) =>
+                          _editado = int.tryParse((valor ?? '').trim()),
+                      onFieldSubmitted: (_) => _guardar(estado),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    height: 56,
+                    child: FilledButton(
+                      onPressed: estado.cargandoInactividad
+                          ? null
+                          : () => _guardar(estado),
+                      child: estado.cargandoInactividad
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2.5, color: Tema.tarjeta))
+                          : const Text(Textos.guardarInactividad),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Los enlaces: nodo, sitio y satélite, cada uno con su última lectura.
 class TarjetaEnlaces extends StatelessWidget {
   const TarjetaEnlaces({super.key});

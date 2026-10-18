@@ -90,4 +90,13 @@ void main() {
       expect(horas(3), '3 horas');
     });
   });
+
+  group('minutosFueraDeRango', () {
+    test('dice la franja que le dan, sin números escritos aquí', () {
+      expect(minutosFueraDeRango(2, 720),
+          'Escriba un número entre 2 y 720 minutos.');
+      expect(minutosFueraDeRango(5, 60),
+          'Escriba un número entre 5 y 60 minutos.');
+    });
+  });
 }

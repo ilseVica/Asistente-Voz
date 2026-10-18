@@ -249,6 +249,12 @@ def texto_para_telegram(carga: dict, tipo: str) -> str:
                              "decir con palabras; el aviso dice «desde la casa»",
                              id_alerta, origen)
         return textos.alerta_ayuda(origen, id_alerta)
+    if tipo == "inactividad":
+        # La origina el propio orquestador (`inactividad.py`), no llega por MQTT,
+        # pero el texto vive en `textos.py` como el de las otras dos para que un
+        # aviso de la familia se lea igual venga de donde venga. `minutos` lo
+        # escribe el servicio y es el mismo número que quedó en la alerta.
+        return textos.alerta_inactividad(carga.get("minutos", "?"), id_alerta)
     return textos.alerta_desconocida(json.dumps(carga, separators=(",", ":")),
                                      id_alerta)
 
@@ -326,7 +332,15 @@ def resolver(base, publicar, id_alerta: str, ahora: int = None,
     fila = base.obtener_alerta(id_alerta)
     tipo = fila["tipo"] if fila is not None else "alerta"
 
-    if fresca:
+    if fresca and tipo == "inactividad":
+        # El asistente NO habla por inactividad, ni al alertar ni al atender: no
+        # hay un botón que nadie pulsó ni un sensor que midió algo raro, así que
+        # decir en voz alta «su familia ya recibió el aviso» solo descoloca a la
+        # persona que está en la casa (y a la que, por definición, el PIR no ha
+        # visto moverse). El aviso a la familia por Telegram no cambia.
+        registro.info("alerta %s (inactividad) resuelta; no se habla por "
+                      "satelite/decir, es una alerta silenciosa", id_alerta)
+    elif fresca:
         if publicar is None:
             registro.info("alerta %s resuelta; no hay cliente MQTT, no se avisa a "
                           "satelite/decir", id_alerta)

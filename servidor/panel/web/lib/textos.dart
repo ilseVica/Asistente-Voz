@@ -81,6 +81,19 @@ class Textos {
   static const String noSeDetectaNadie = 'No se detecta a nadie';
   static const String ultimaLectura = 'Última lectura: ';
 
+  static const String avisoInactividad = 'Aviso por inactividad';
+  static const String ultimoMovimiento = 'Último movimiento';
+  static const String sinDatosDelSensor = 'Sin datos del sensor';
+  static const String avisarSiNoHayMovimiento =
+      'Avisar si no hay movimiento en';
+  static const String minutosUnidad = 'minutos';
+  static const String guardarInactividad = 'Guardar';
+  static const String inactividadGuardada = 'Aviso de inactividad guardado.';
+  static const String noSePudoGuardarInactividad =
+      'No se pudo guardar el aviso de inactividad.';
+  static const String soloNumerosDeMinutos =
+      'Escriba solo el número de minutos.';
+
   static const String sensoresYLuz = 'Sensores y luz';
   static const String conexionConLaCasa = 'Conexión con la casa';
   static const String noSeUsaAqui = 'No se usa en esta instalación';
@@ -194,6 +207,11 @@ String familiares(int n) =>
 String minutos(int n) => n == 1 ? '1 minuto' : '$n minutos';
 
 String horas(int n) => n == 1 ? '1 hora' : '$n horas';
+
+/// El error en línea del ajuste de inactividad. La franja sale del servidor, que
+/// es quien la hace cumplir; aquí sólo se dice con esas cifras.
+String minutosFueraDeRango(int minimo, int maximo) =>
+    'Escriba un número entre $minimo y $maximo minutos.';
 
 /// El detalle del origen de una alerta de ayuda, como lo dice el bot.
 /// Devuelve null para lo que no se sabe decir, y entonces no se pinta la línea.

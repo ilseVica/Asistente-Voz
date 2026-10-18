@@ -36,9 +36,11 @@ namespace {
 constexpr uint32_t MS_TAREA_LOOP = 50UL;
 uint32_t ultimo_ciclo_ms = 0;
 
-// Comando de prueba por serie. Solo existe con PRUEBAS=1: en el firmware normal ni
-// se lee la linea ni hay ninguna forma de disparar gas sin broker (ajuste C).
+// Comandos de prueba por serie. Solo existen con PRUEBAS=1: en el firmware normal
+// ni se leen las lineas ni hay ninguna forma de disparar gas ni presencia sin
+// broker (ajuste C).
 constexpr char COMANDO_GAS[] = "GAS ";
+constexpr char COMANDO_PIR[] = "PIR ";
 
 // Motivo del ultimo reinicio (V4 del reporte de pruebas). El contador de arranques
 // ya lo registra persistencia_iniciar(); esto anade el POR QUE, que es lo que
@@ -75,6 +77,16 @@ void manejar_comandos_de_prueba() {
       }
       log_info("pruebas", "GAS %d por serie: alerta de gas sin broker", valor);
       gas_fijar_lectura_forzada(valor);
+    } else if (linea.startsWith(COMANDO_PIR)) {
+      const int valor = linea.substring(static_cast<int>(strlen(COMANDO_PIR))).toInt();
+      if (valor != 0 && valor != 1) {
+        log_aviso("pruebas", "comando '%s' sin valor valido (use PIR 0 o PIR 1)",
+                  linea.c_str());
+        continue;
+      }
+      log_info("pruebas", "PIR %d por serie: presencia %s forzada",
+               valor, valor == 1 ? "true" : "false");
+      sensores_fijar_pir_prueba(valor);
     } else if (linea.length() > 0) {
       log_info("pruebas", "comando '%s' desconocido", linea.c_str());
     }

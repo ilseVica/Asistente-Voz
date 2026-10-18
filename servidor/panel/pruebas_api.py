@@ -200,6 +200,7 @@ for metodo, ruta in (("get", "/api/yo"), ("get", "/api/estado"),
                      ("get", "/api/alertas"), ("post", "/api/salir"),
                      ("get", "/api/recordatorios"), ("post", "/api/recordatorios"),
                      ("post", "/api/recordatorios/rec-x/cancelar"),
+                     ("post", "/api/inactividad"),
                      ("post", "/api/luz"), ("post", "/api/acceso-inexistente")):
     respuesta = getattr(cliente, metodo)(ruta)
     if ruta == "/api/acceso-inexistente":
@@ -355,8 +356,8 @@ r = cliente.get("/api/estado", headers=cab(token_marta))
 inst = r.json()
 claves = set(inst)
 esperadas = {"servidor_hora", "luz", "sensores", "nodo", "satelite", "satelites",
-             "sitio", "modo", "alertas", "familiares", "conexiones"}
-prueba("/api/estado trae los once campos de la instantánea (Fase 2C: `satelites`)",
+             "sitio", "inactividad", "modo", "alertas", "familiares", "conexiones"}
+prueba("/api/estado trae los doce campos de la instantánea (Fase 4: `inactividad`)",
        claves == esperadas, claves.symmetric_difference(esperadas))
 prueba("cada bloque de la casa lleva `recibido_en`, aunque sea null",
        all("recibido_en" in inst[c] for c in ("luz", "sensores", "nodo", "satelite",
@@ -383,6 +384,67 @@ inst = cliente.get("/api/estado", headers=cab(token_marta)).json()
 prueba("una lectura inyectada sale en la instantánea",
        inst["luz"]["encendida"] is True and inst["luz"]["estado"] == "conectado",
        inst["luz"])
+
+# El bloque de la inactividad. Sale de SQLite (la tabla `configuracion` que comparte
+# con el orquestador), no de MQTT, y por eso lleva el ajuste y su franja.
+inact = inst["inactividad"]
+prueba("el bloque de inactividad trae el ajuste, su franja y el último movimiento",
+       set(inact) == {"ultimo_movimiento", "tiempo_min", "minimo", "maximo"},
+       inact)
+prueba("sin nada guardado, el ajuste es el de fábrica y el reloj está sin datos",
+       inact["tiempo_min"] == config.TIEMPO_INACTIVIDAD_MIN_DEFECTO
+       and inact["ultimo_movimiento"] is None, inact)
+prueba("y la franja es la del servidor, no un número escrito en la interfaz",
+       inact["minimo"] == config.TIEMPO_INACTIVIDAD_MIN_MINIMO
+       and inact["maximo"] == config.TIEMPO_INACTIVIDAD_MIN_MAXIMO, inact)
+base.fijar_ultimo_movimiento(1_700_000_000)
+inst = cliente.get("/api/estado", headers=cab(token_marta)).json()
+prueba("un último movimiento guardado por el orquestador sale en el panel",
+       inst["inactividad"]["ultimo_movimiento"] == 1_700_000_000,
+       inst["inactividad"])
+
+
+# =============================================================================
+# 4b. `/api/inactividad`: el ajuste en caliente
+# =============================================================================
+
+titulo("4b. El ajuste de inactividad")
+
+r = cliente.post("/api/inactividad", json={"tiempo_min": 45}, headers=cab(token_marta))
+prueba("un ajuste válido es 200 y devuelve los minutos guardados",
+       r.status_code == 200 and r.json() == {"tiempo_min": 45}, r.text[:120])
+prueba("y queda escrito en la MISMA base que lee el orquestador",
+       base.tiempo_inactividad() == 45, base.tiempo_inactividad())
+inst = cliente.get("/api/estado", headers=cab(token_marta)).json()
+prueba("y la siguiente instantánea ya lo trae",
+       inst["inactividad"]["tiempo_min"] == 45, inst["inactividad"])
+
+# Fuera de la franja: lo rechaza el tipo (Pydantic) antes de tocar la base.
+for malo in (1, 721, 0, -5):
+    r = cliente.post("/api/inactividad", json={"tiempo_min": malo},
+                     headers=cab(token_marta))
+    prueba("tiempo_min=%d fuera de la franja es 422" % malo, r.status_code == 422,
+           r.status_code)
+for malo in ("cuarenta", None, 2.5, True):
+    r = cliente.post("/api/inactividad", json={"tiempo_min": malo},
+                     headers=cab(token_marta))
+    prueba("tiempo_min=%r que no es un entero limpio es 422" % (malo,),
+           r.status_code == 422, r.status_code)
+r = cliente.post("/api/inactividad", json={"tiempo_min": 30, "otra": 1},
+                 headers=cab(token_marta))
+prueba("un campo de más en el cuerpo del ajuste es 422", r.status_code == 422,
+       r.status_code)
+prueba("y ninguno de los rechazos ha tocado el valor guardado",
+       base.tiempo_inactividad() == 45, base.tiempo_inactividad())
+
+r = cliente.post("/api/inactividad", json={"tiempo_min": 30})
+prueba("el ajuste sin sesión es 401 y no cambia nada",
+       r.status_code == 401 and base.tiempo_inactividad() == 45, r.status_code)
+
+# Se deja en el de fábrica, que es como tiene que quedar tras desplegar.
+cliente.post("/api/inactividad", json={"tiempo_min": 120}, headers=cab(token_marta))
+prueba("vuelto al de fábrica tras las pruebas",
+       base.tiempo_inactividad() == 120, base.tiempo_inactividad())
 
 
 # =============================================================================

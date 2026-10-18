@@ -420,3 +420,37 @@ CREATE TABLE IF NOT EXISTS recordatorio_entregas (
 -- cada vuelta buscando los 'pendiente'.
 CREATE INDEX IF NOT EXISTS idx_recordatorio_entregas_estado
     ON recordatorio_entregas (estado, toca_en);
+
+
+-- --- configuracion (version 6) ---------------------------------------------
+--
+-- Ajustes que cambian en caliente, sin reiniciar nada. Hoy hay dos claves:
+--
+--   tiempo_inactividad_min -- los minutos sin movimiento (en la sala) antes de
+--                             avisar a la familia. Lo escribe el PANEL y lo lee
+--                             el ORQUESTADOR en cada vuelta de su reloj de
+--                             inactividad. El rango y el valor de fábrica están
+--                             en `config.py`; aquí no se duplican.
+--   ultimo_movimiento      -- el epoch UTC del último momento con movimiento (o
+--                             del primer `false` tras un `true`, que es cuando se
+--                             sabe que el movimiento paró). Lo escribe el
+--                             ORQUESTADOR y es lo que hace que un reinicio no
+--                             borre el reloj: sin esta clave, reiniciar el
+--                             servicio sería una forma de tapar una inactividad.
+--
+-- Es una tabla clave-valor y no dos columnas de una fila única por un motivo
+-- concreto: el panel y el orquestador son procesos distintos, cada uno escribe
+-- su clave, y con una sola fila compartida un `UPDATE` de uno podría pisar el
+-- cambio del otro si los dos escribieran a la vez. Con una fila por clave, el
+-- `INSERT OR REPLACE` de una clave no toca la otra.
+--
+-- El valor es TEXT aunque los dos sean números: es una tabla de ajustes, y el
+-- tipo se decide en quien lee (`db.tiempo_inactividad()` devuelve un entero ya
+-- validado). Un `CHECK` de rango aquí ataría la base a unos límites que viven en
+-- `config.py`, y el fallo de tenerlos en dos sitios es que un cambio en el código
+-- no se aplique y el panel empiece a rechazar valores válidos.
+
+CREATE TABLE IF NOT EXISTS configuracion (
+    clave  TEXT NOT NULL PRIMARY KEY,
+    valor  TEXT NOT NULL
+);

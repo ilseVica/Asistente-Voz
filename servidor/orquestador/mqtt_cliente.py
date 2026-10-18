@@ -38,8 +38,17 @@ registro = logging.getLogger("mqtt")
 
 
 class ClienteMQTT:
-    def __init__(self, al_recibir):
+    def __init__(self, al_recibir, al_reconectar=None):
         self.al_recibir = al_recibir
+        # Gancho opcional que se llama cuando el cliente RECUPERA la conexión,
+        # nunca en la primera. Lo usa el reloj de inactividad (`inactividad.Estado`)
+        # para reiniciar su reloj tras un corte: durante el corte no llegaron los
+        # `presencia`, así que avisar justo al reconectar sería una alarma ciega.
+        # En la primera conexión NO se llama: si se llamara, cada reinicio del
+        # orquestador sembraría el reloj con la hora de arranque y una inactividad
+        # larga quedaría tapada por un reinicio.
+        self.al_reconectar = al_reconectar
+        self._primera_conexion = True
         self.conectado = False
         self.contador_ayuda = 0
         # Hilo en el que paho ejecuta sus callbacks (`on_connect`, `on_message`,
@@ -86,6 +95,18 @@ class ClienteMQTT:
                       config.MQTT_HOST, config.MQTT_PUERTO,
                       config.MQTT_USUARIO, config.MQTT_CLIENT_ID)
         self.suscribirse()
+        # El aviso de reconexión va DESPUÉS de suscribirse: si el gancho publicara
+        # algo, ya tiene las suscripciones puestas. La primera vez no se llama (ver
+        # el comentario de `_primera_conexion` en `__init__`).
+        if self._primera_conexion:
+            self._primera_conexion = False
+        elif self.al_reconectar is not None:
+            try:
+                self.al_reconectar()
+            except Exception:  # noqa: BLE001
+                # Un fallo aquí no puede tumbar el hilo de red de paho: el resto
+                # de los mensajes se sigue recibiendo.
+                registro.exception("fallo en el aviso de reconexion; se ignora")
 
     def suscribirse(self) -> None:
         """Se suscribe a los dos tópicos de alerta, y comprueba si pudo.
@@ -102,14 +123,17 @@ class ClienteMQTT:
         paho lo ignora en silencio: es el mismo problema un nivel más arriba, y
         también se ve al log.
         """
-        # Solo los dos topicos de alerta y el texto de voz, y solo de lectura: este
-        # servicio escucha gas, ayuda y lo que reconocio el servicio de voz, y nada
-        # mas. No se suscribe a `alerta/#` ni a `casa/#` a proposito, para que un
-        # topico nuevo no empiece a llegar sin revisarlo.
-        # El estado de los satelites (Fase 2C) es para repetirle el gas sin
-        # atender al que se conecta (`alertas.al_estado_satelite`).
+        # Solo los topicos que este servicio necesita, y solo de lectura: la voz
+        # reconocida, el estado de los satelites (Fase 2C, para repetir el gas sin
+        # atender y entregar los recordatorios pendientes), y las tres señales del
+        # reloj de inactividad (Fase 4): los sensores (la presencia), el estado del
+        # nodo y el estado del enlace del sitio en `$SYS`. No se suscribe a
+        # `alerta/#` ni a `casa/#` a proposito, para que un topico nuevo no empiece
+        # a llegar sin revisarlo.
         for topico in (config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA,
-                       config.TOPICO_VOZ_TEXTO, config.TOPICO_SATELITE_ESTADO):
+                       config.TOPICO_VOZ_TEXTO, config.TOPICO_SATELITE_ESTADO,
+                       config.TOPICO_SENSORES, config.TOPICO_NODO_ESTADO,
+                       config.TOPICO_ENLACE_SITIO):
             resultado, _ = self.cliente.subscribe(topico, qos=config.QOS_ALERTAS)
             if resultado != mqtt.MQTT_ERR_SUCCESS:
                 registro.error("NO se pudo suscribir a %s (error %d). La ACL de "

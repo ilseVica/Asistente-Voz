@@ -93,7 +93,13 @@ RUTA_ESQUEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # INDEX IF NOT EXISTS`, que ya se ejecuto entero antes de llegar a `_migrar`, asi
 # que en una base vieja se crean igual y no hay datos que mover. No tiene funcion
 # propia por el mismo motivo que la 1->2, que esta explicado mas abajo.
-VERSION_ESQUEMA = 5
+#
+# La version 6 (inactividad) es UNA tabla nueva, `configuracion`, otra vez del tipo
+# «la crea `esquema.sql` antes de migrar, no hay datos que mover»: en una base que
+# ya estaba en la 5 se crea vacia, y las dos claves que use el servicio se insertan
+# cuando hagan falta (el valor por defecto NO se escribe al migrar, lo devuelve
+# `db.tiempo_inactividad()` cuando la clave no esta). Tampoco tiene funcion propia.
+VERSION_ESQUEMA = 6
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -256,6 +262,13 @@ class BaseDatos:
         # estaba en la 4. Igual que la 1->2 (panel web): si le pusieramos una
         # funcion, acabaria haciendo en codigo un `CREATE TABLE` que el archivo de
         # esquema ya garantiza. Lo que si tiene que quedar escrito es la version.
+
+        # De la 5 a la 6 (inactividad) tampoco: `configuracion` la crea
+        # `esquema.sql` con su `CREATE TABLE IF NOT EXISTS`, por el mismo motivo
+        # que las dos anteriores. En una base que ya estaba en la 5 nace vacia, y
+        # eso es lo correcto: `db.tiempo_inactividad()` devuelve el valor de
+        # fabrica de `config.py` mientras no haya clave, y `ultimo_movimiento`
+        # tampoco existe, asi que el reloj arranca en la hora de arranque.
 
         # El indice de las alertas que esperan a un familiar se crea AQUI y no en
         # `esquema.sql`, y el motivo es el orden: `esquema.sql` se ejecuta entero
@@ -1486,6 +1499,92 @@ class BaseDatos:
                 "WHERE estado = 'pendiente' AND toca_en < ? ORDER BY toca_en",
                 (int(limite),),
             ))
+
+    # --- Configuración en caliente (Fase 4) --------------------------------
+
+    def _config_leer(self, clave: str):
+        """El valor crudo de una clave, o `None` si no está."""
+        with _candado:
+            fila = self.conexion.execute(
+                "SELECT valor FROM configuracion WHERE clave = ?", (clave,)
+            ).fetchone()
+        return None if fila is None else fila["valor"]
+
+    def _config_escribir(self, clave: str, valor: str) -> None:
+        """Guarda una clave. `INSERT OR REPLACE` para que sea alta o cambio."""
+        with _candado:
+            self.conexion.execute(
+                "INSERT OR REPLACE INTO configuracion (clave, valor) VALUES (?, ?)",
+                (clave, valor),
+            )
+            self.conexion.commit()
+
+    def tiempo_inactividad(self) -> int:
+        """Los minutos sin movimiento antes de avisar, ya validados.
+
+        Es la única puerta de lectura de este ajuste, y por eso valida aquí y no
+        en quien llama: el valor lo escribe el PANEL en la misma base, así que
+        puede ser cualquier cosa (una versión vieja, una edición a mano, un
+        `NULL`). Un valor que no sea un entero dentro del rango se sustituye por
+        el de fábrica y se avisa en el log; lo que NO se hace nunca es aceptar un
+        número que dejaría el reloj disparando alertas sin sentido (un 0, un
+        negativo, un texto).
+        """
+        crudo = self._config_leer("tiempo_inactividad_min")
+        if crudo is None:
+            return config.TIEMPO_INACTIVIDAD_MIN_DEFECTO
+        try:
+            minutos = int(crudo)
+        except (TypeError, ValueError):
+            registro.warning("tiempo_inactividad_min=%r en la base no es un "
+                             "entero; se usa el de fabrica (%d)",
+                             crudo, config.TIEMPO_INACTIVIDAD_MIN_DEFECTO)
+            return config.TIEMPO_INACTIVIDAD_MIN_DEFECTO
+        if not (config.TIEMPO_INACTIVIDAD_MIN_MINIMO
+                <= minutos <= config.TIEMPO_INACTIVIDAD_MIN_MAXIMO):
+            registro.warning("tiempo_inactividad_min=%r fuera del rango %d..%d; "
+                             "se usa el de fabrica (%d)", crudo,
+                             config.TIEMPO_INACTIVIDAD_MIN_MINIMO,
+                             config.TIEMPO_INACTIVIDAD_MIN_MAXIMO,
+                             config.TIEMPO_INACTIVIDAD_MIN_DEFECTO)
+            return config.TIEMPO_INACTIVIDAD_MIN_DEFECTO
+        return minutos
+
+    def guardar_tiempo_inactividad(self, minutos: int) -> int:
+        """Guarda el ajuste. Devuelve el valor que quedó, ya validado.
+
+        La validación es la MISMA que en la lectura (mismo rango, mismas
+        constantes), y aun así se repite: la API del panel valida antes de
+        llamar, pero esta función es la última puerta antes de la base y no se
+        fía de que el llamador haya hecho su trabajo. Un valor fuera de rango no
+        se guarda: lanza `ValueError`, y la API lo traduce a un 400.
+        """
+        minutos = int(minutos)
+        if not (config.TIEMPO_INACTIVIDAD_MIN_MINIMO
+                <= minutos <= config.TIEMPO_INACTIVIDAD_MIN_MAXIMO):
+            raise ValueError(
+                "tiempo_inactividad_min fuera del rango %d..%d: %d"
+                % (config.TIEMPO_INACTIVIDAD_MIN_MINIMO,
+                   config.TIEMPO_INACTIVIDAD_MIN_MAXIMO, minutos)
+            )
+        self._config_escribir("tiempo_inactividad_min", str(minutos))
+        return minutos
+
+    def ultimo_movimiento(self):
+        """El epoch del último movimiento, o `None` si nunca se ha guardado."""
+        crudo = self._config_leer("ultimo_movimiento")
+        if crudo is None:
+            return None
+        try:
+            return int(crudo)
+        except (TypeError, ValueError):
+            registro.warning("ultimo_movimiento=%r en la base no es un entero; "
+                             "se ignora", crudo)
+            return None
+
+    def fijar_ultimo_movimiento(self, cuando: int) -> None:
+        """Guarda el reloj del movimiento. Lo llama `inactividad.py`."""
+        self._config_escribir("ultimo_movimiento", str(int(cuando)))
 
     # --- Purgas ------------------------------------------------------------
 

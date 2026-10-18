@@ -58,6 +58,7 @@ import bot as bot_modulo  # noqa: E402
 import cola as cola_modulo  # noqa: E402
 import config  # noqa: E402
 import db as db_modulo  # noqa: E402
+import inactividad as inactividad_modulo  # noqa: E402
 import mqtt_cliente  # noqa: E402
 import panel_acceso as panel_acceso_modulo  # noqa: E402
 import recordatorios as recordatorios_modulo  # noqa: E402
@@ -2318,8 +2319,14 @@ cruda.commit()
 cruda.close()
 
 base_v4 = db_modulo.BaseDatos(ruta_v4)
-prueba("una base en la version 4 sube a la version 5",
-       base_v4.conexion.execute("PRAGMA user_version").fetchone()[0] == 5,
+# Ahora la version actual es la 6, asi que abrir una base en la 4 la lleva a la 6
+# (pasando por la 5 de los recordatorios). Se compara contra VERSION_ESQUEMA y no
+# contra un 6 literal, para que la prueba siga diciendo la verdad el dia que haya
+# una 7.
+prueba("una base en la version 4 sube a la version actual (%d)"
+       % db_modulo.VERSION_ESQUEMA,
+       base_v4.conexion.execute("PRAGMA user_version").fetchone()[0]
+       == db_modulo.VERSION_ESQUEMA,
        base_v4.conexion.execute("PRAGMA user_version").fetchone()[0])
 tablas_v4 = {f[0] for f in base_v4.conexion.execute(
     "SELECT name FROM sqlite_master WHERE type='table'")}
@@ -2721,6 +2728,298 @@ prueba("el orquestador se suscribe al estado de todos los satelites",
        config.TOPICO_SATELITE_ESTADO == "casa/sala/satelite/+/estado")
 base_2c.cerrar()
 config.UBICACION_GAS = ubicacion_original
+
+
+# =============================================================================
+# 22. Inactividad (Fase 4): el reloj, el ajuste en caliente y el aviso
+# =============================================================================
+#
+# El reloj de la inactividad no reacciona a UN mensaje, sino a la AUSENCIA de
+# mensajes durante un tiempo. Se prueba con un reloj falso (todas las funciones
+# reciben `ahora=`), que es lo unico que hace repetible una prueba basada en el
+# tiempo: con `sleep` la suite tardaria media hora y aun asi seria fragil.
+titulo("22. Inactividad")
+
+# --- La franja de configuracion y el valor por defecto de la base ---
+base_cfg, _ = base_nueva("inactividad-cfg-")
+prueba("sin valor guardado, el tiempo de inactividad es el de fabrica",
+       base_cfg.tiempo_inactividad() == config.TIEMPO_INACTIVIDAD_MIN_DEFECTO,
+       base_cfg.tiempo_inactividad())
+prueba("el rango por defecto es 2..720 min",
+       (config.TIEMPO_INACTIVIDAD_MIN_MINIMO,
+        config.TIEMPO_INACTIVIDAD_MIN_MAXIMO) == (2, 720),
+       (config.TIEMPO_INACTIVIDAD_MIN_MINIMO, config.TIEMPO_INACTIVIDAD_MIN_MAXIMO))
+
+base_cfg.guardar_tiempo_inactividad(5)
+prueba("guardar 5 min deja el valor en la base",
+       base_cfg.tiempo_inactividad() == 5, base_cfg.tiempo_inactividad())
+for malo in (1, 721, 0, -3):
+    try:
+        base_cfg.guardar_tiempo_inactividad(malo)
+        prueba("guardar %r fuera de rango lanza ValueError" % malo, False, malo)
+    except ValueError:
+        prueba("guardar %r fuera de rango lanza ValueError" % malo, True)
+
+# Un valor que se cuela en la base por otra via (una version vieja, una edicion a
+# mano) NO se usa: se cae al de fabrica. Es lo que impide que un 0 dispare la
+# alerta en bucle.
+for malo in ("1", "99999", "abc", "0"):
+    base_cfg._config_escribir("tiempo_inactividad_min", malo)
+    prueba("un valor invalido %r en la base cae al de fabrica" % malo,
+           base_cfg.tiempo_inactividad() == config.TIEMPO_INACTIVIDAD_MIN_DEFECTO,
+           base_cfg.tiempo_inactividad())
+base_cfg.cerrar()
+
+# --- El reloj: siembra, presencia, episodio unico y no repetir ---
+base_i, _ = base_nueva("inactividad-")
+base_i.registrar_familiar("555000000001")
+T0 = 1_700_000_000
+reloj = inactividad_modulo.Estado(base_i, ahora=T0)
+prueba("al arrancar sin valor, el reloj se siembra con la hora de arranque",
+       reloj.ultimo_movimiento == T0, reloj.ultimo_movimiento)
+prueba("y se persiste, para que un reinicio no lo borre",
+       base_i.ultimo_movimiento() == T0, base_i.ultimo_movimiento())
+
+# Sin saber nada del nodo, no se avisa aunque pase mucho tiempo: no hay señal.
+apuntes, publicar = publicar_que_recoge()
+prueba("sin noticia del nodo NO se avisa (no se puede saber si hay movimiento)",
+       reloj.verificar(publicar, ahora=T0 + 10 ** 6) is False, apuntes)
+reloj.registrar_nodo('{"conectado":true}', ahora=T0)
+prueba("con el nodo conectado y el reloj recien sembrado, no toca",
+       reloj.verificar(publicar, ahora=T0) is False, apuntes)
+
+# La presencia true mueve el reloj; el primer false tras un true tambien (es
+# cuando se sabe que el movimiento paro); un false suelto no.
+reloj.registrar_sensores('{"presencia":true}', ahora=T0 + 10)
+prueba("un presencia true mueve el reloj", reloj.ultimo_movimiento == T0 + 10,
+       reloj.ultimo_movimiento)
+reloj.registrar_sensores('{"presencia":false}', ahora=T0 + 70)
+prueba("el primer false tras un true mueve el reloj al momento en que paro",
+       reloj.ultimo_movimiento == T0 + 70, reloj.ultimo_movimiento)
+reloj.registrar_sensores('{"presencia":false}', ahora=T0 + 130)
+prueba("un false sin un true delante NO mueve el reloj (son latidos)",
+       reloj.ultimo_movimiento == T0 + 70, reloj.ultimo_movimiento)
+
+# El borde exacto del periodo.
+LIMITE = T0 + 70 + config.TIEMPO_INACTIVIDAD_MIN_DEFECTO * 60
+apuntes, publicar = publicar_que_recoge()
+prueba("un segundo antes del periodo no se avisa",
+       reloj.verificar(publicar, ahora=LIMITE - 1) is False, apuntes)
+apuntes, publicar = publicar_que_recoge()
+prueba("justo al cumplir el periodo se avisa",
+       reloj.verificar(publicar, ahora=LIMITE) is True, apuntes)
+ID_ESPERADO = "srv-inactividad-%d" % (T0 + 70)
+prueba("la alerta se publica en el topico del contrato, con id y minutos",
+       len(apuntes) == 1 and apuntes[0][0] == config.TOPICO_ALERTA_INACTIVIDAD
+       and apuntes[0][1]["id"] == ID_ESPERADO
+       and apuntes[0][1]["minutos"] == config.TIEMPO_INACTIVIDAD_MIN_DEFECTO
+       and apuntes[0][2] == 1 and apuntes[0][3] is False, apuntes)
+prueba("y queda en la cola de Telegram, para la familia",
+       base_i.obtener_alerta(ID_ESPERADO) is not None)
+
+# El episodio esta abierto: no se repite, aunque el reloj siga corriendo.
+apuntes, publicar = publicar_que_recoge()
+prueba("una vez abierto el episodio, no se vuelve a avisar",
+       reloj.verificar(publicar, ahora=LIMITE + 100000) is False and apuntes == [],
+       apuntes)
+
+# «Ya lo atendí» resuelve la alerta pero NO reinicia el reloj.
+apuntes, publicar = publicar_que_recoge()
+alertas.resolver(base_i, publicar, ID_ESPERADO, ahora=LIMITE + 1)
+prueba("resolver una inactividad NO habla por satelite/decir (es silenciosa)",
+       apuntes == [], apuntes)
+prueba("y NO reinicia ultimo_movimiento (atender no es moverse)",
+       reloj.ultimo_movimiento == T0 + 70, reloj.ultimo_movimiento)
+apuntes, publicar = publicar_que_recoge()
+prueba("tras atender, el episodio sigue abierto: no se repite",
+       reloj.verificar(publicar, ahora=LIMITE + 200) is False and apuntes == [],
+       apuntes)
+
+# Un movimiento nuevo cierra el episodio y arranca otro.
+reloj.registrar_sensores('{"presencia":true}', ahora=T0 + 200000)
+prueba("un presencia true cierra el episodio", reloj.episodio_abierto is False)
+# Ajuste en caliente: el panel escribe y la SIGUIENTE vuelta lo usa. Sin reiniciar.
+base_i.guardar_tiempo_inactividad(5)
+SIG = T0 + 200000
+apuntes, publicar = publicar_que_recoge()
+prueba("con el ajuste nuevo (5 min) aun no toca a los 4:59",
+       reloj.verificar(publicar, ahora=SIG + 4 * 60 + 59) is False, apuntes)
+apuntes, publicar = publicar_que_recoge()
+prueba("y a los 5:00 avisa: el ciclo RELEYO el ajuste sin reiniciar",
+       reloj.verificar(publicar, ahora=SIG + 5 * 60) is True, apuntes)
+prueba("con el numero de minutos nuevo en el aviso",
+       apuntes and apuntes[0][1]["minutos"] == 5, apuntes)
+
+# Reinicio del orquestador con el episodio ya avisado: el id determinista evita
+# el doble aviso aunque `episodio_abierto` (memoria) se haya perdido.
+reloj_reinicio = inactividad_modulo.Estado(base_i, ahora=SIG + 5 * 60 + 30)
+prueba("tras reiniciar, el reloj se lee de la base (no se siembra de nuevo)",
+       reloj_reinicio.ultimo_movimiento == SIG, reloj_reinicio.ultimo_movimiento)
+reloj_reinicio.registrar_nodo('{"conectado":true}', ahora=SIG + 5 * 60 + 30)
+apuntes, publicar = publicar_que_recoge()
+prueba("y NO vuelve a avisar el mismo episodio (el id ya estaba)",
+       reloj_reinicio.verificar(publicar, ahora=SIG + 6 * 60) is False
+       and apuntes == [], apuntes)
+base_i.cerrar()
+
+# --- El nodo desconectado y el enlace caido bloquean el aviso ---
+base_b, _ = base_nueva("inactividad-bloqueo-")
+base_b.registrar_familiar("555000000002")
+reloj_b = inactividad_modulo.Estado(base_b, ahora=T0)
+reloj_b.registrar_nodo('{"conectado":false}', ahora=T0)
+apuntes, publicar = publicar_que_recoge()
+prueba("con el nodo desconectado no se avisa aunque pase el tiempo",
+       reloj_b.verificar(publicar, ahora=T0 + 10 ** 6) is False, apuntes)
+
+# El nodo PASA a conectado: el reloj se reinicia (durante el corte no se vio nada).
+reloj_b.registrar_nodo('{"conectado":true}', ahora=T0 + 10 ** 6)
+prueba("al reconectar el nodo, el reloj se reinicia",
+       reloj_b.ultimo_movimiento == T0 + 10 ** 6, reloj_b.ultimo_movimiento)
+apuntes, publicar = publicar_que_recoge()
+prueba("y justo al reconectar no hay aviso",
+       reloj_b.verificar(publicar, ahora=T0 + 10 ** 6) is False, apuntes)
+
+# El enlace del sitio: solo un 0 EXPLICITO lo cae. Vacio o ausente = conectado.
+reloj_b.registrar_enlace("1")
+prueba("un 1 en el enlace no marca caido", reloj_b.sitio_conectado is True)
+reloj_b.registrar_enlace("0")
+prueba("un 0 explicito marca el enlace caido", reloj_b.sitio_conectado is False)
+apuntes, publicar = publicar_que_recoge()
+prueba("con el enlace caido no se avisa aunque el nodo este conectado",
+       reloj_b.verificar(publicar, ahora=T0 + 10 ** 6 + 10 ** 6) is False, apuntes)
+reloj_b.registrar_enlace("1")
+prueba("al volver el enlace, el reloj se reinicia",
+       reloj_b.sitio_conectado is True
+       and reloj_b.ultimo_movimiento == int(time.time()), reloj_b.ultimo_movimiento)
+
+# Ausencia de noticia del enlace (modo instalacion, sin puente): conectado.
+reloj_n, _ = base_nueva("inactividad-sinpuente-")
+reloj_n = inactividad_modulo.Estado(reloj_n, ahora=T0)
+prueba("sin noticia del enlace, se trata como conectado (sitio_conectado None)",
+       reloj_n.sitio_conectado is None)
+reloj_n.registrar_nodo('{"conectado":true}', ahora=T0)
+reloj_n.registrar_sensores('{"presencia":true}', ahora=T0)
+apuntes, publicar = publicar_que_recoge()
+prueba("y por tanto SI se avisa cuando toca (no se queda mudo para siempre)",
+       reloj_n.verificar(publicar, ahora=T0 + config.TIEMPO_INACTIVIDAD_MIN_DEFECTO * 60)
+       is True, apuntes)
+base_b.cerrar()
+
+# --- La reconexion de MQTT tambien reinicia el reloj ---
+base_r, _ = base_nueva("inactividad-reconexion-")
+reloj_r = inactividad_modulo.Estado(base_r, ahora=T0)
+reloj_r.registrar_nodo('{"conectado":true}', ahora=T0)
+reloj_r.registrar_sensores('{"presencia":true}', ahora=T0 + 100)
+prueba("antes de reconectar, el reloj esta en el movimiento",
+       reloj_r.ultimo_movimiento == T0 + 100)
+reloj_r.registrar_reconexion(ahora=T0 + 100000)
+prueba("al reconectar MQTT, el reloj se reinicia",
+       reloj_r.ultimo_movimiento == T0 + 100000, reloj_r.ultimo_movimiento)
+reloj_r.registrar_reconexion(ahora=T0 + 50000)
+prueba("y nunca lo ATRASA (mensaje fuera de orden)",
+       reloj_r.ultimo_movimiento == T0 + 100000, reloj_r.ultimo_movimiento)
+base_r.cerrar()
+
+# --- El texto del aviso (Telegram) y la frase de atendida ---
+texto_inact = alertas.texto_para_telegram(
+    {"id": "srv-inactividad-1", "minutos": 120}, "inactividad")
+prueba("el texto de Telegram lleva la frase literal con los minutos",
+       "No se ha detectado movimiento en la sala en los últimos 120 minutos."
+       in texto_inact, texto_inact)
+prueba("y la referencia de la alerta (como las demas)",
+       "Referencia de la alerta: srv-inactividad-1" in texto_inact, texto_inact)
+prueba("la frase de atendida de inactividad existe y es distinta",
+       "inactividad" in textos.ATENDIDA_FRASE,
+       textos.ATENDIDA_FRASE.get("inactividad"))
+
+# --- El reparto por topico de las señales del reloj ---
+base_e, _ = base_nueva("inactividad-enrutar-")
+reloj_e = inactividad_modulo.Estado(base_e, ahora=T0)
+apuntes, publicar = publicar_que_recoge()
+orquestador_modulo.enrutar(config.TOPICO_SENSORES, '{"presencia":true}', base_e,
+                           publicar, reloj=reloj_e)
+prueba("enrutar manda los sensores al reloj (no a alertas)",
+       reloj_e.presencia_anterior is True
+       and base_e.listar_recientes() == [], base_e.listar_recientes())
+orquestador_modulo.enrutar(config.TOPICO_NODO_ESTADO, '{"conectado":true}', base_e,
+                           publicar, reloj=reloj_e)
+prueba("enrutar manda el estado del nodo al reloj",
+       reloj_e.nodo_conectado is True)
+orquestador_modulo.enrutar("$SYS/broker/connection/puente-sitio/state", "0",
+                           base_e, publicar, reloj=reloj_e)
+prueba("enrutar reconoce el $SYS del enlace por FORMA y lo manda al reloj",
+       reloj_e.sitio_conectado is False)
+prueba("el reconocedor del enlace acepta el topico real y rechaza otro",
+       inactividad_modulo.es_enlace_sitio(
+           "$SYS/broker/connection/puente-sitio/state") is True
+       and inactividad_modulo.es_enlace_sitio("casa/sala/nodo/estado") is False)
+# Sin reloj (pruebas viejas), las señales se ignoran y NO se crean alertas.
+apuntes, publicar = publicar_que_recoge()
+orquestador_modulo.enrutar(config.TOPICO_SENSORES, '{"presencia":true}', base_e,
+                           publicar)
+prueba("sin reloj, enrutar ignora las señales de inactividad sin romper",
+       base_e.listar_recientes() == [])
+base_e.cerrar()
+
+# --- El gancho de reconexion del cliente MQTT: no en la primera conexion ---
+llamadas = []
+cliente_falso = mqtt_cliente.ClienteMQTT.__new__(mqtt_cliente.ClienteMQTT)
+cliente_falso.al_reconectar = lambda: llamadas.append(1)
+cliente_falso._primera_conexion = True
+cliente_falso.conectado = False
+cliente_falso._hilo_red = None
+cliente_falso.suscribirse = lambda: None
+
+
+class _CodigoOk:
+    is_failure = False
+
+
+cliente_falso._al_conectar(None, None, None, _CodigoOk())
+prueba("la PRIMERA conexion no dispara el gancho de reconexion", llamadas == [],
+       llamadas)
+cliente_falso._al_conectar(None, None, None, _CodigoOk())
+prueba("una reconexion SI lo dispara (reinicia el reloj)", llamadas == [1], llamadas)
+
+# --- El ACL: el orquestador puede con las señales; el panel no toca la alerta ---
+if os.path.exists(ruta_acl):
+    prueba("el orquestador puede publicar casa/sala/alerta/inactividad",
+           "topic write casa/sala/alerta/inactividad"
+           in bloques.get("orquestador", []), bloques.get("orquestador"))
+    for topico in ("casa/sala/sensores", "casa/sala/nodo/estado",
+                   "$SYS/broker/connection/+/state"):
+        prueba("el orquestador puede leer %s" % topico,
+               "topic read %s" % topico in bloques.get("orquestador", []),
+               bloques.get("orquestador"))
+    prueba("el panel NO lee ni escribe casa/sala/alerta/inactividad",
+           "topic read casa/sala/alerta/inactividad" not in bloques.get("panel", [])
+           and "topic write casa/sala/alerta/inactividad"
+           not in bloques.get("panel", []), bloques.get("panel"))
+
+# --- La migracion v5 -> v6 ---
+ruta_v5 = os.path.join(tempfile.mkdtemp(prefix="inactividad-v5-"), "v5.sqlite3")
+cruda5 = sqlite3.connect(ruta_v5)
+cruda5.execute("CREATE TABLE familiares (chat_id TEXT PRIMARY KEY, nombre TEXT, "
+               "registrado_en INTEGER, activo INTEGER DEFAULT 1)")
+cruda5.execute("INSERT INTO familiares (chat_id, registrado_en) VALUES ('999', 1)")
+cruda5.execute("PRAGMA user_version = 5")
+cruda5.commit()
+cruda5.close()
+base_v5 = db_modulo.BaseDatos(ruta_v5)
+prueba("una base en la version 5 sube a la actual (%d)"
+       % db_modulo.VERSION_ESQUEMA,
+       base_v5.conexion.execute("PRAGMA user_version").fetchone()[0]
+       == db_modulo.VERSION_ESQUEMA,
+       base_v5.conexion.execute("PRAGMA user_version").fetchone()[0])
+tablas_v5 = {f[0] for f in base_v5.conexion.execute(
+    "SELECT name FROM sqlite_master WHERE type='table'")}
+prueba("y gana la tabla configuracion", "configuracion" in tablas_v5,
+       sorted(tablas_v5))
+prueba("y sin valor guardado, el tiempo de inactividad es el de fabrica",
+       base_v5.tiempo_inactividad() == config.TIEMPO_INACTIVIDAD_MIN_DEFECTO)
+prueba("sin perder lo que ya habia en la base",
+       base_v5.familiar_registrado("999") is True)
+base_v5.cerrar()
 
 
 print("\n" + "=" * 66)

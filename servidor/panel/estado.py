@@ -245,6 +245,7 @@ class EstadoSala:
             "satelite": self.bloque_satelite(datos, ahora),
             "satelites": self.bloque_satelite(datos, ahora)["satelites"],
             "sitio": self.bloque_sitio(datos, ahora),
+            "inactividad": self.bloque_inactividad(base),
             "modo": self.modo,
             "alertas": _conteo(base.contar_por_estado()),
             "familiares": base.contar_familiares(),
@@ -326,6 +327,27 @@ class EstadoSala:
             "estado": CONECTADO if any(por_satelite.values()) else DESCONECTADO,
             "recibido_en": max(e["recibido_en"] for e in satelites.values()),
             "satelites": por_satelite,
+        }
+
+    def bloque_inactividad(self, base) -> dict:
+        """El reloj de la inactividad: cuándo fue el último movimiento y el ajuste.
+
+        Sale de SQLite y no de MQTT, como las alertas: `ultimo_movimiento` lo
+        escribe el orquestador en la tabla `configuracion`, que es la misma base que
+        comparten los dos procesos. No hay tópico para esto, y tampoco haría falta
+        uno: el reloj ya vive en la base, y un mensaje de más sería una segunda
+        fuente de verdad que puede discrepar.
+
+        `ultimo_movimiento` puede ser `None` (el orquestador todavía no ha visto
+        ningún movimiento), y eso la interfaz lo dice con «sin datos», no con una
+        hora inventada. El `tiempo_min` es el ajuste vigente, ya validado por `db`,
+        y va con su rango para que el formulario del panel no repita los números.
+        """
+        return {
+            "ultimo_movimiento": base.ultimo_movimiento(),
+            "tiempo_min": base.tiempo_inactividad(),
+            "minimo": config.TIEMPO_INACTIVIDAD_MIN_MINIMO,
+            "maximo": config.TIEMPO_INACTIVIDAD_MIN_MAXIMO,
         }
 
     def bloque_sitio(self, datos, ahora) -> dict:

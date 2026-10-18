@@ -579,6 +579,22 @@ prueba("y `alertas` trae los cuatro estados en cero, no solo los que hay",
        inst["alertas"])
 prueba("con `conexiones` a 0 porque aún no hay ningún WebSocket abierto",
        inst["conexiones"] == 0, inst["conexiones"])
+
+# El bloque de la inactividad sale de SQLite (la tabla `configuracion`), no de un
+# tópico: por eso se prueba aquí, guardando en la base y volviendo a pedir la
+# instantánea.
+inact = inst["inactividad"]
+prueba("la instantánea trae el bloque de inactividad con su forma",
+       set(inact) == {"ultimo_movimiento", "tiempo_min", "minimo", "maximo"}, inact)
+prueba("sin nada guardado, el ajuste es el de fábrica y el reloj, sin datos",
+       inact["tiempo_min"] == config.TIEMPO_INACTIVIDAD_MIN_DEFECTO
+       and inact["ultimo_movimiento"] is None, inact)
+base4.fijar_ultimo_movimiento(1_700_000_000)
+base4.guardar_tiempo_inactividad(45)
+inact = sala4.instantanea(base4)["inactividad"]
+prueba("lo guardado por el orquestador y el ajuste del panel salen al instante",
+       inact["ultimo_movimiento"] == 1_700_000_000
+       and inact["tiempo_min"] == 45, inact)
 base4.cerrar()
 
 

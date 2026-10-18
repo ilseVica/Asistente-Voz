@@ -53,6 +53,7 @@ class EstadoPanel extends ChangeNotifier {
   bool cargandoLuz = false;
   bool cargandoAlerta = false;
   bool cargandoRecordatorio = false;
+  bool cargandoInactividad = false;
   String? aviso; // Un mensaje que sólo se ve una vez (un error, sobre todo).
 
   /// Justo después de entrar: el token en claro, para que se pueda copiar.
@@ -141,6 +142,32 @@ class EstadoPanel extends ChangeNotifier {
     _refrescoAlertas?.cancel();
   }
 
+  /// Vuelve a pedir la instantánea sin hacer ruido, para el «último movimiento».
+  ///
+  /// El WebSocket empuja luz, sensores, nodo y sitio, pero NO la inactividad: ese
+  /// reloj lo escribe el orquestador en la base que los dos comparten y no hay
+  /// tópico que lo anuncie. Sin esta vuelta, el «hace X min» se quedaría con el
+  /// valor de cuando se abrió el panel y subiría sin parar aunque alguien se
+  /// moviera. Un fallo aquí no levanta cartel, igual que en las alertas: sólo se
+  /// marca que no hay conexión.
+  Future<void> _refrescarEstado() async {
+    try {
+      final Estado e = await api.estado();
+      estado = e;
+      _momentoLocal = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      conectadoAlServidor = true;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        await cerrarSesion();
+        return;
+      }
+      conectadoAlServidor = false;
+    } catch (_) {
+      conectadoAlServidor = false;
+    }
+    notifyListeners();
+  }
+
   void _empezar() {
     _vivo?.desconectar();
     _vivo = Vivo(url: _urlVivo());
@@ -156,7 +183,13 @@ class EstadoPanel extends ChangeNotifier {
     _vivo!.bloques.listen(_aplicar);
     _vivo!.conectar();
 
-    _reloj = Timer.periodic(const Duration(seconds: 30), (_) => notifyListeners());
+    _reloj = Timer.periodic(const Duration(seconds: 30), (_) {
+      // El aviso inmediato es para el «hace X min», que se calcula con el reloj
+      // del cliente y sube solo; la vuelta al servidor es para traer los datos
+      // que no llegan por el WebSocket (el último movimiento de la inactividad).
+      notifyListeners();
+      _refrescarEstado();
+    });
     _refrescoAlertas =
         Timer.periodic(const Duration(seconds: 5), (_) => cargarAlertas());
 
@@ -226,6 +259,9 @@ class EstadoPanel extends ChangeNotifier {
       nodo: nodo,
       satelite: satelite,
       sitio: sitio,
+      // La inactividad no llega por el WebSocket: la trae la vuelta periódica a
+      // `/api/estado`. Aquí sólo se conserva la que ya había.
+      inactividad: actual.inactividad,
       modo: actual.modo,
       alertas: actual.alertas,
       familiares: actual.familiares,
@@ -452,6 +488,47 @@ class EstadoPanel extends ChangeNotifier {
     }
     cargandoRecordatorio = false;
     notifyListeners();
+  }
+
+  /// Cambia los minutos de inactividad. Devuelve `true` si el servidor lo aceptó.
+  ///
+  /// El servidor devuelve el valor que quedó guardado y con él se repinta el
+  /// bloque, sin esperar a la siguiente instantánea. No se reinicia nada del
+  /// orquestador: el cambio se nota en su siguiente vuelta (10 s), y eso la
+  /// interfaz no lo puede adelantar.
+  Future<bool> guardarInactividad(int minutos) async {
+    if (cargandoInactividad) return false;
+    cargandoInactividad = true;
+    aviso = null;
+    notifyListeners();
+    try {
+      final int guardado = await api.guardarInactividad(minutos);
+      final Estado? actual = estado;
+      if (actual != null) {
+        estado = actual.conInactividad(Inactividad(
+          ultimoMovimiento: actual.inactividad.ultimoMovimiento,
+          tiempoMin: guardado,
+          minimo: actual.inactividad.minimo,
+          maximo: actual.inactividad.maximo,
+        ));
+      }
+      aviso = Textos.inactividadGuardada;
+      return true;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        cargandoInactividad = false;
+        await cerrarSesion();
+        return false;
+      }
+      aviso = error.mensaje;
+      return false;
+    } catch (_) {
+      aviso = Textos.noSePudoGuardarInactividad;
+      return false;
+    } finally {
+      cargandoInactividad = false;
+      notifyListeners();
+    }
   }
 
   Future<void> aceptarAviso() async {

@@ -10,8 +10,33 @@ namespace {
 
 uint32_t semilla = 0;
 int gas_prueba = -1;
+
+// --- Presencia -------------------------------------------------------------
+// Con PIR_HABILITADO la presencia sale del HC-SR501 en GPIO 35. Con la bandera
+// en false sigue la simulacion de siempre: alterna sola cada
+// SIM_PRESENCIA_PERIODO_S, independiente de prueba_gas.
+#if PIR_HABILITADO
+// Calentamiento: los primeros PIR_CALIENTE_MS la salida del sensor no es
+// confiable, y un arranque con la presencia en true produciria una alerta de
+// inactividad falsa apenas el orquestador estuviera listo.
+uint32_t pir_listo_en_ms = 0;
+bool pir_log_listo = false;
+
+// Enclavamiento. La regla es: si el PIR estuvo en alto en CUALQUIER momento
+// desde la ultima publicacion, la presencia publicada es true. Un pulso de
+// movimiento mas corto que el limite de 10 s se pierde si se lee solo al
+// publicar, y un movimiento corto no es un movimiento inexistente: por eso el
+// pin se muestrea en cada vuelta del loop y el enclavamiento se limpia solo
+// despues de un publish exitoso.
+bool pir_alto_enclavado = false;
+bool pir_alto_actual = false;
+
+// Forzado por el comando de prueba PIR <0|1> (solo con PRUEBAS=1). -1 = pin real.
+int pir_forzado = -1;
+#else
 bool presencia_alterna = false;
 uint32_t proximo_cambio_presencia_ms = 0;
+#endif
 
 // Marca para que el log avise del cambio de presencia una sola vez, no cada lectura.
 bool presencia_cambio_pendiente = false;
@@ -31,6 +56,46 @@ constexpr float UMBRAL_TEMP_C = 0.3f;
 constexpr float UMBRAL_HUM_PCT = 2.0f;
 constexpr int UMBRAL_GAS_ADC = 50;
 
+#if PIR_HABILITADO
+
+// Muestrea el PIR y mantiene el enclavamiento. Se llama en CADA vuelta del loop,
+// ANTES del limite de 10 s de publicacion: si se leyera solo al publicar, un
+// pulso de movimiento mas corto que ese limite se perderia.
+void muestrear_pir(uint32_t ahora) {
+  if (pir_listo_en_ms == 0) {
+    pir_listo_en_ms = ahora + PIR_CALIENTE_MS;
+    log_info("sensores", "PIR calentando");
+    return;
+  }
+  if ((int32_t)(ahora - pir_listo_en_ms) < 0) {
+    return;  // calentando: la presencia se queda en false hasta «PIR listo»
+  }
+  if (!pir_log_listo) {
+    pir_log_listo = true;
+    log_info("sensores", "PIR listo");
+  }
+  const bool alto =
+      (pir_forzado >= 0) ? (pir_forzado != 0) : (digitalRead(GPIO_PIN_SENSOR_PIR) == HIGH);
+  if (alto && !pir_alto_enclavado) {
+    log_info("sensores", "PIR: movimiento");
+  }
+  pir_alto_actual = alto;
+  if (alto) {
+    pir_alto_enclavado = true;
+  }
+}
+
+// La presencia que se publica. False durante el calentamiento; despues, true si
+// el PIR esta en alto ahora o lo estuvo desde la ultima publicacion.
+bool presencia_del_pir(uint32_t ahora) {
+  if (pir_listo_en_ms == 0 || (int32_t)(ahora - pir_listo_en_ms) < 0) {
+    return false;
+  }
+  return pir_alto_enclavado || pir_alto_actual;
+}
+
+#else  // !PIR_HABILITADO: la simulacion de siempre
+
 void actualizar_presencia(uint32_t ahora) {
   if (proximo_cambio_presencia_ms == 0) {
     proximo_cambio_presencia_ms = ahora + (SIM_PRESENCIA_PERIODO_S * 1000UL);
@@ -43,6 +108,8 @@ void actualizar_presencia(uint32_t ahora) {
   proximo_cambio_presencia_ms = ahora + (SIM_PRESENCIA_PERIODO_S * 1000UL);
   presencia_cambio_pendiente = true;
 }
+
+#endif
 
 }  // namespace
 
@@ -68,12 +135,24 @@ void sensores_iniciar() {
   pinMode(GPIO_PIN_DHT22, INPUT);
   pinMode(GPIO_PIN_SENSOR_PIR, INPUT);
 
-  proximo_cambio_presencia_ms = 0;
   proxima_publicacion_minima_ms = 0;
   proximo_latido_ms = 0;
   hay_publicado = false;
+#if PIR_HABILITADO
+  pir_listo_en_ms = 0;
+  pir_log_listo = false;
+  pir_alto_enclavado = false;
+  pir_alto_actual = false;
+  pir_forzado = -1;
+  log_info("sensores", "presencia por PIR real en GPIO %d (calentamiento de %lu s), "
+           "gas simulado fijo %d",
+           GPIO_PIN_SENSOR_PIR,
+           static_cast<unsigned long>(PIR_CALIENTE_MS / 1000UL), SIM_GAS_POR_DEFECTO);
+#else
+  proximo_cambio_presencia_ms = 0;
   log_info("sensores", "simulacion activa (gas fijo %d, presencia cada %d s)", SIM_GAS_POR_DEFECTO,
            SIM_PRESENCIA_PERIODO_S);
+#endif
 }
 
 int sensores_aleatorio_entre(int minimo, int maximo) {
@@ -87,7 +166,9 @@ int sensores_aleatorio_entre(int minimo, int maximo) {
 
 Lectura sensores_leer() {
   const uint32_t ahora = millis();
+#if !PIR_HABILITADO
   actualizar_presencia(ahora);
+#endif
 
   Lectura lectura;
 
@@ -103,8 +184,14 @@ Lectura sensores_leer() {
   lectura.hum_pct =
       SIM_HUM_BASE_PCT + sensores_aleatorio_entre(0, 100) * (SIM_HUM_VARIACION_PCT / 100.0);
 
+#if PIR_HABILITADO
+  // La presencia sale del PIR enclavado; el muestreo del pin lo hace
+  // sensores_tarea en cada vuelta del loop, no aqui.
+  lectura.presencia = presencia_del_pir(ahora);
+#else
   // La presencia alterna sola cada 3 minutos, independiente de prueba_gas.
   lectura.presencia = presencia_alterna;
+#endif
 
   if (presencia_cambio_pendiente) {
     presencia_cambio_pendiente = false;
@@ -120,6 +207,26 @@ void sensores_fijar_gas_prueba(int valor_adc) {
 
 int sensores_gas_prueba_actual() {
   return gas_prueba;
+}
+
+void sensores_fijar_pir_prueba(int valor) {
+#if PIR_HABILITADO
+  // 0 o 1 fuerza la lectura como si el pin estuviera en ese nivel; -1 restaura
+  // el pin real. El enclavamiento no se toca aqui: el valor forzado se muestrea
+  // igual que el pin, y un 1 forzado enclava presencia true como cualquier
+  // movimiento.
+  pir_forzado = valor;
+#else
+  (void)valor;
+#endif
+}
+
+int sensores_pir_prueba_actual() {
+#if PIR_HABILITADO
+  return pir_forzado;
+#else
+  return -1;
+#endif
 }
 
 namespace {
@@ -156,6 +263,16 @@ String construir_payload(const Lectura &lectura) {
 }  // namespace
 
 void sensores_tarea() {
+  const uint32_t ahora = millis();
+
+#if PIR_HABILITADO
+  // El PIR se muestrea en cada vuelta del loop, ANTES del limite de 10 s y antes
+  // de mirar la sesion: un pulso de movimiento no se pierde aunque la publicacion
+  // no toque aun, y con el enclavado acumulado el primer publish al reconectar ya
+  // refleja si hubo movimiento mientras no habia sesion.
+  muestrear_pir(ahora);
+#endif
+
   if (!mqtt_conectado()) {
     // Sin sesion no hay retained que valga. Se sueltan los relojes para que al
     // reconectar se publique de inmediato en vez de esperar al margen.
@@ -163,8 +280,6 @@ void sensores_tarea() {
     proximo_latido_ms = 0;
     return;
   }
-
-  const uint32_t ahora = millis();
 
   // El limite de una publicacion cada 10 s manda sobre todo lo demas. Con el gas
   // simulado constante nunca se llega aqui, pero con el MQ-2 real un cambio
@@ -189,6 +304,11 @@ void sensores_tarea() {
   proximo_latido_ms = ahora + PERIODO_SENSORES_LATIDO_MS;
   publicado = lectura;
   hay_publicado = true;
+#if PIR_HABILITADO
+  // El enclavamiento cubre desde la publicacion ANTERIOR; con esta hecha, empieza
+  // uno nuevo. Si el pin sigue en alto, el siguiente muestreo vuelve a enclavar.
+  pir_alto_enclavado = false;
+#endif
 
   char motivo[32];
   if (toco_latido && hay_publicado) {

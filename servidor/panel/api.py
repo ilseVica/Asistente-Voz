@@ -141,6 +141,21 @@ class NuevoRecordatorio(BaseModel):
     dias: list[int] | None = None
 
 
+class TiempoInactividad(BaseModel):
+    """El cuerpo de `POST /api/inactividad`: los minutos sin movimiento antes de avisar.
+
+    El rango va en el tipo (`ge`/`le`) y no en la ruta, y sale de las MISMAS
+    constantes que usa el orquestador para validar: así el 422 del panel y el
+    `ValueError` de `db` no pueden discrepar, porque son el mismo número. Un
+    `extra="forbid"`, como todos, para que un campo de más no pase en silencio.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    tiempo_min: int = Field(ge=config.TIEMPO_INACTIVIDAD_MIN_MINIMO,
+                            le=config.TIEMPO_INACTIVIDAD_MIN_MAXIMO)
+
+
 # --- El ciclo de vida ---------------------------------------------------------
 
 
@@ -365,6 +380,29 @@ async def estado(sesion: dict = Depends(sesion_requerida)):
     """
     del sesion
     return estados.instantanea(base)
+
+
+@app.post("/api/inactividad")
+async def ajustar_inactividad(cuerpo: TiempoInactividad,
+                              sesion: dict = Depends(sesion_requerida)):
+    """Cambia los minutos de inactividad. Ajuste en caliente (Fase 4).
+
+    El panel NO se lo dice al orquestador por MQTT ni lo reinicia: escribe el valor
+    en la misma base que los dos comparten, y el orquestador lo relee en su ciclo
+    de 10 s. Ese es el motivo de que este endpoint no publique nada y de que el
+    cambio se note «en la siguiente vuelta» y no al instante.
+
+    Devuelve el valor que quedó, que es `cuerpo.tiempo_min`: `db` lo revalida (misma
+    franja) y solo puede lanzar si el tipo y la ruta se hubieran desincronizado, así
+    que ese `ValueError` se traduce a un 422 de todas formas en vez de a un 500.
+    """
+    try:
+        minutos = base.guardar_tiempo_inactividad(cuerpo.tiempo_min)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    registro.info("%s ajusta la inactividad a %d min",
+                  db.enmascarar_chat(sesion["chat_id"]), minutos)
+    return {"tiempo_min": minutos}
 
 
 # --- Las alertas -------------------------------------------------------------

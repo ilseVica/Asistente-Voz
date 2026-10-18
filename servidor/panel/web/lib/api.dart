@@ -130,6 +130,20 @@ class ClienteApi {
     return Estado.desde((await _json(respuesta) as Map).cast<String, dynamic>());
   }
 
+  /// `POST /api/inactividad`. Devuelve los minutos que quedaron guardados.
+  ///
+  /// El servidor revalida y responde 422 si el número se sale de la franja; ese
+  /// mensaje llega como `ErrorApi` y se enseña al lado del campo.
+  Future<int> guardarInactividad(int tiempoMin) async {
+    final http.Response respuesta = await _cliente
+        .post(_ruta('/api/inactividad'),
+            headers: _cabeceras, body: jsonEncode({'tiempo_min': tiempoMin}))
+        .timeout(const Duration(seconds: 15));
+    final Map<String, dynamic> datos =
+        (await _json(respuesta) as Map).cast<String, dynamic>();
+    return (datos['tiempo_min'] as num?)?.toInt() ?? tiempoMin;
+  }
+
   Future<List<Alerta>> alertas({int limite = 20, int desde = 0}) async {
     final http.Response respuesta = await _cliente
         .get(_ruta('/api/alertas', <String, String>{

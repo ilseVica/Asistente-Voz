@@ -45,6 +45,8 @@ class PantallaPanel extends StatelessWidget {
           const SizedBox(height: 16),
           const TarjetaAmbiente(),
           const SizedBox(height: 16),
+          const TarjetaInactividad(),
+          const SizedBox(height: 16),
           const _AlertasRecientes(),
           const SizedBox(height: 16),
           const TarjetaEnlaces(),

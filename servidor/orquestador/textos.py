@@ -155,6 +155,18 @@ ALERTA_AYUDA = (
     "Qué hacer:\n" + PASO_1_AYUDA + "\n" + PASOS_2_Y_3 + "\n\n" + PIE
 )
 
+# La inactividad es distinta de las otras dos: no hay un botón que nadie pulsó ni
+# un sensor que midió algo raro, sino AUSENCIA de señales durante demasiado
+# tiempo. El lugar de la frase («la sala») es donde vive el sensor de movimiento,
+# y va escrito en el texto porque es lo que le dice a la familia POR QUÉ no hay
+# noticias: no es que el sistema no sepa nada, es que el PIR no ha visto pasar a
+# nadie por la sala. La primera acción es la misma que en la ayuda —llamar—, así
+# que se reutiliza `PASO_1_AYUDA`.
+ALERTA_INACTIVIDAD = (
+    "No se ha detectado movimiento en la sala en los últimos {minutos} minutos.\n\n"
+    "Qué hacer:\n" + PASO_1_AYUDA + "\n" + PASOS_2_Y_3 + "\n\n" + PIE
+)
+
 # Los códigos de `origen` del contrato (config.ORIGENES_VALIDOS), en palabras.
 ORIGENES = {
     "boton": "el botón de ayuda",
@@ -184,6 +196,18 @@ def alerta_ayuda(origen, id_alerta: str) -> str:
     return ALERTA_AYUDA.format(linea_origen=linea_origen(origen), id=id_alerta)
 
 
+def alerta_inactividad(minutos, id_alerta: str) -> str:
+    """El aviso de que la casa lleva demasiado tiempo sin movimiento.
+
+    `minutos` es el número que quedó cuando se disparó la alerta, y se imprime tal
+    cual: si el ajuste de la familia son 120 minutos, el texto dice 120, y no una
+    cifra redondeada que no coincide con lo que ven en el panel. Un valor que no
+    sea un entero no debería llegar aquí (lo pone el propio servicio), pero si
+    llegara se imprime lo que sea antes que romper el aviso.
+    """
+    return ALERTA_INACTIVIDAD.format(minutos=minutos, id=id_alerta)
+
+
 def alerta_desconocida(texto: str, id_alerta: str) -> str:
     return ALERTA_DESCONOCIDA.format(texto=texto, id=id_alerta)
 
@@ -192,6 +216,7 @@ ATENDIDA = "ATENDIDA.\n\n{frase} a las {hora}.\n\nReferencia de la alerta: {id}"
 ATENDIDA_FRASE = {
     "gas": "La alerta de gas se marcó como atendida",
     "ayuda": "La petición de ayuda se marcó como atendida",
+    "inactividad": "El aviso de inactividad se marcó como atendido",
 }
 ATENDIDA_FRASE_OTRO = "El aviso se marcó como atendido"
 

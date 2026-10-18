@@ -44,11 +44,25 @@
 // PIR: salida digital del sensor que el ESP32 lee como entrada.
 #define GPIO_PIN_SENSOR_PIR 35
 
+// El PIR HC-SR501 esta cableado (OUT -> GPIO 35, salida push-pull de 3.3 V, sin
+// resistencia: GPIO 35 es solo entrada y no tiene pull interno). Con la bandera
+// en true la presencia sale del pin real; con false sigue la simulacion de
+// siempre (SIM_PRESENCIA_PERIODO_S). Temperatura, humedad y gas siguen simulados
+// en los dos casos.
+#define PIR_HABILITADO true
+
 // El buzzer todavia no existe (6.7), pero el pin queda cableado y pronto.
 // El modulo de rele ya llego, asi que RELE_HABILITADO pasa a true. Cambiar
 // cualquiera de las dos banderas no toca codigo.
 #define BUZZER_HABILITADO true
 #define RELE_HABILITADO true
+
+// El PIR HC-SR501 esta cableado (OUT -> GPIO 35, salida push-pull de 3.3 V, sin
+// resistencia: GPIO 35 es solo entrada y no tiene pull interno). Con la bandera
+// en true la presencia sale del pin real; con false sigue la simulacion de
+// siempre (SIM_PRESENCIA_PERIODO_S). Temperatura, humedad y gas siguen simulados
+// en los dos casos.
+#define PIR_HABILITADO true
 
 // El boton externo queda desactivado por defecto hasta que llegue el hardware.
 #define BOTON_EXTERNO_HABILITADO false
@@ -196,6 +210,11 @@
 #define PERIODO_SENSORES_MINIMO_MS MS_10S
 #define PERIODO_SENSORES_LATIDO_MS MS_60S
 #define PERIODO_NODO_ESTADO_MS MS_60S
+
+// Calentamiento del PIR HC-SR501: los primeros 60 s la salida no es confiable.
+// Durante ese tiempo la presencia se publica false y el log lo dice al empezar
+// («PIR calentando») y al terminar («PIR listo»).
+#define PIR_CALIENTE_MS MS_60S
 
 // ---------------------------------------------------------------------------
 // Simulacion. Los sensores reales todavia no estan (6.7), asi que las lecturas

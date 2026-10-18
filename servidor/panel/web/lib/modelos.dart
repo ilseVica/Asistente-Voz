@@ -205,6 +205,34 @@ class EntregaRecordatorio {
       );
 }
 
+/// El reloj de la inactividad, del bloque `inactividad` de `GET /api/estado`.
+///
+/// `ultimoMovimiento` es el epoch del último movimiento que vio el orquestador, o
+/// `null` si todavía no ha visto ninguno (y entonces se dice «sin datos», no se
+/// pinta una hora inventada). `tiempoMin` es el ajuste vigente y `minimo`/`maximo`
+/// su franja: el formulario del panel usa esa franja y no números escritos a mano,
+/// para que no pueda mandar un valor que el servidor vaya a rechazar.
+class Inactividad {
+  const Inactividad({
+    required this.ultimoMovimiento,
+    required this.tiempoMin,
+    required this.minimo,
+    required this.maximo,
+  });
+
+  final int? ultimoMovimiento;
+  final int tiempoMin;
+  final int minimo;
+  final int maximo;
+
+  factory Inactividad.desde(Map<String, dynamic> json) => Inactividad(
+        ultimoMovimiento: json['ultimo_movimiento'] as int?,
+        tiempoMin: (json['tiempo_min'] as num?)?.toInt() ?? 2,
+        minimo: (json['minimo'] as num?)?.toInt() ?? 2,
+        maximo: (json['maximo'] as num?)?.toInt() ?? 720,
+      );
+}
+
 /// La instantánea completa de `GET /api/estado`, apartado 4.2.
 class Estado {
   const Estado({
@@ -214,6 +242,7 @@ class Estado {
     required this.nodo,
     required this.satelite,
     required this.sitio,
+    required this.inactividad,
     required this.modo,
     required this.alertas,
     required this.familiares,
@@ -226,6 +255,7 @@ class Estado {
   final Componente nodo;
   final Componente satelite;
   final Componente sitio;
+  final Inactividad inactividad;
   final String modo;
   final Map<String, int> alertas;
   final int familiares;
@@ -240,6 +270,26 @@ class Estado {
     });
     return total;
   }
+
+  /// Una copia con otro bloque de inactividad.
+  ///
+  /// Existe sólo por el ajuste: al guardar los minutos, el servidor devuelve el
+  /// valor que quedó y se pinta sin esperar a la siguiente instantánea. No se hace
+  /// un `copyWith` general porque el único bloque que cambia la interfaz por su
+  /// cuenta es éste; los demás llegan por el WebSocket.
+  Estado conInactividad(Inactividad nueva) => Estado(
+        servidorHora: servidorHora,
+        luz: luz,
+        sensores: sensores,
+        nodo: nodo,
+        satelite: satelite,
+        sitio: sitio,
+        inactividad: nueva,
+        modo: modo,
+        alertas: alertas,
+        familiares: familiares,
+        conexiones: conexiones,
+      );
 
   factory Estado.desde(Map<String, dynamic> json) => Estado(
         servidorHora: json['servidor_hora'] as int? ?? 0,
@@ -256,6 +306,9 @@ class Estado {
                 const <String, dynamic>{}),
         sitio: Componente.desde((json['sitio'] as Map?)?.cast<String, dynamic>() ??
             const <String, dynamic>{}),
+        inactividad: Inactividad.desde(
+            (json['inactividad'] as Map?)?.cast<String, dynamic>() ??
+                const <String, dynamic>{}),
         modo: json['modo'] as String? ?? 'instalacion',
         alertas: ((json['alertas'] as Map?) ?? const {})
             .map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0)),

@@ -38,6 +38,12 @@ void main() {
             'recibido_en': 1699999940,
             'fuente': 'nodo',
           },
+          'inactividad': <String, dynamic>{
+            'ultimo_movimiento': 1699999800,
+            'tiempo_min': 120,
+            'minimo': 2,
+            'maximo': 720,
+          },
           'modo': 'instalacion',
           'alertas': <String, int>{'pendiente': 1, 'enviada': 0,
                                     'resuelta': 3, 'descartada': 0},
@@ -55,6 +61,8 @@ void main() {
       expect(e.nodo.estado, conectado);
       expect(e.satelite.estado, noInstalado);
       expect(e.sitio.fuente, 'nodo');
+      expect(e.inactividad.ultimoMovimiento, 1699999800);
+      expect(e.inactividad.tiempoMin, 120);
       expect(e.modo, 'instalacion');
       expect(e.familiares, 2);
       expect(e.conexiones, 1);
@@ -102,6 +110,66 @@ void main() {
       expect(e.luz.estado, sinDatos);
       expect(e.satelite.estado, sinDatos);
       expect(e.familiares, 0);
+    });
+  });
+
+  group('Inactividad', () {
+    test('lee el último movimiento, el ajuste y su franja', () {
+      final Inactividad i = Inactividad.desde(<String, dynamic>{
+        'ultimo_movimiento': 1700000000,
+        'tiempo_min': 45,
+        'minimo': 2,
+        'maximo': 720,
+      });
+      expect(i.ultimoMovimiento, 1700000000);
+      expect(i.tiempoMin, 45);
+      expect(i.minimo, 2);
+      expect(i.maximo, 720);
+    });
+
+    test('sin último movimiento es null, y no un cero que parezca una hora', () {
+      final Inactividad i = Inactividad.desde(<String, dynamic>{
+        'ultimo_movimiento': null,
+        'tiempo_min': 120,
+        'minimo': 2,
+        'maximo': 720,
+      });
+      expect(i.ultimoMovimiento, isNull);
+    });
+
+    test('un JSON sin el bloque deja la franja por defecto, no en cero', () {
+      // «No lo sé» y «cero» no son lo mismo: con minimo y maximo a cero el
+      // formulario no podría validar nada.
+      final Inactividad i = Inactividad.desde(const <String, dynamic>{});
+      expect(i.ultimoMovimiento, isNull);
+      expect(i.tiempoMin >= i.minimo && i.tiempoMin <= i.maximo, isTrue);
+      expect(i.maximo, greaterThan(i.minimo));
+    });
+  });
+
+  group('Estado.conInactividad', () {
+    test('cambia sólo el bloque de inactividad y conserva el resto', () {
+      final Estado e = Estado.desde(<String, dynamic>{
+        'servidor_hora': 1700000000,
+        'luz': <String, dynamic>{'encendida': true, 'estado': 'conectado'},
+        'inactividad': <String, dynamic>{
+          'ultimo_movimiento': 1699999800,
+          'tiempo_min': 120,
+          'minimo': 2,
+          'maximo': 720,
+        },
+        'familiares': 2,
+      });
+      final Estado otro = e.conInactividad(const Inactividad(
+        ultimoMovimiento: 1699999800,
+        tiempoMin: 45,
+        minimo: 2,
+        maximo: 720,
+      ));
+      expect(otro.inactividad.tiempoMin, 45);
+      expect(otro.luz.encendida, isTrue);
+      expect(otro.familiares, 2);
+      expect(otro.servidorHora, 1700000000);
     });
   });
 

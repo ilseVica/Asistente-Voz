@@ -28,6 +28,7 @@ import bot
 import config
 import db
 import cola
+import inactividad
 import mqtt_cliente
 import recordatorios
 import registro
@@ -135,28 +136,62 @@ def tarea_recordatorios(base, publicar, satelites, parando) -> None:
         parando.wait(config.SEGUNDOS_CICLO_RECORDATORIOS)
 
 
-def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None) -> None:
+def tarea_inactividad(reloj, publicar, parando) -> None:
+    """El ciclo del reloj de inactividad, cada `SEGUNDOS_CICLO_INACTIVIDAD`.
+
+    Va en un hilo aparte, como la purga y los recordatorios: `verificar` consulta
+    SQLite (el tiempo configurado) y puede publicar en MQTT y encolar una alerta, y
+    hacerlo en el bucle principal pararía la recepción de mensajes. Se relee el
+    ajuste en cada vuelta, así que un cambio del panel se aplica sin reiniciar.
+
+    Usa `parando.wait()` en vez de `sleep()` para que el SIGTERM lo despierte al
+    instante.
+    """
+    while not parando.is_set():
+        try:
+            if reloj.verificar(publicar):
+                registro_log.info("reloj de inactividad: alerta encolada")
+        except Exception as error:  # noqa: BLE001
+            registro_log.error("fallo en el ciclo de inactividad: %s", error)
+        parando.wait(config.SEGUNDOS_CICLO_INACTIVIDAD)
+
+
+def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
+            reloj=None) -> None:
     """Reparte un mensaje de MQTT a quien lo procesa.
 
     Es una funcion y no un `if` suelto para que se pueda probar sola, y para que el
     punto donde se decide «que topico va con que procesador» sea uno solo y este a
-    la vista. Hay tres caminos: el texto de voz, el estado de los satelites (para
+    la vista. Hay cuatro caminos: el texto de voz; el estado de los satelites (para
     repetir el gas sin atender y entregar los recordatorios pendientes al que se
-    conecta) y todo lo demas (las alertas).
+    conecta); las tres señales del reloj de inactividad (los sensores, el estado
+    del nodo y el estado del enlace del sitio); y todo lo demas (las alertas).
 
     El texto de voz NO pasa por `alertas.procesar`: si pasara, y como esa funcion
     decide el tipo por el topico, un `casa/sala/voz/texto` caeria en su rama de
     «topico no atendido» y no se haria nada con el.
 
-    `satelites` es el registro en memoria que hace que el orquestador sepa quien
-    esta conectado (lo necesitan los recordatorios). Es opcional para que las
-    pruebas viejas de `enrutar` sigan funcionando sin construirlo.
+    Los topicos del reloj de inactividad tampoco pasan por `alertas.procesar`: no
+    son alertas, son las señales con las que `inactividad.Estado` lleva la cuenta
+    del tiempo sin movimiento. El del enlace se reconoce por forma
+    (`inactividad.es_enlace_sitio`) y no por igualdad, porque lleva un `+`.
+
+    `satelites` y `reloj` son los dos registros en memoria. Los dos son opcionales
+    para que las pruebas viejas de `enrutar` sigan funcionando sin construirlos: sin
+    `reloj`, las señales de inactividad se ignoran (que es lo que hacian antes de
+    que existiera la Fase 4).
     """
     if topico == config.TOPICO_VOZ_TEXTO:
         voz.procesar(cuerpo, publicar)
     elif alertas.client_id_de_estado(topico) is not None:
         alertas.al_estado_satelite(topico, cuerpo, retenido, base, publicar,
                                    satelites=satelites)
+    elif reloj is not None and topico == config.TOPICO_SENSORES:
+        reloj.registrar_sensores(cuerpo)
+    elif reloj is not None and topico == config.TOPICO_NODO_ESTADO:
+        reloj.registrar_nodo(cuerpo)
+    elif reloj is not None and inactividad.es_enlace_sitio(topico):
+        reloj.registrar_enlace(cuerpo)
     else:
         alertas.procesar(topico, cuerpo, base, publicar)
 
@@ -249,10 +284,20 @@ def main() -> int:
     # conectado llega retenido al suscribirse.
     satelites = recordatorios.Satelites()
 
+    # El reloj de la inactividad (Fase 4). Se lee/hereda `ultimo_movimiento` de la
+    # base al construirlo (o se siembra con la hora de arranque), y a partir de ahi
+    # lo mueven los mensajes de sensores/nodo/enlace (en el hilo de red de paho) y
+    # el ciclo de su hilo. Lleva su propio cerrojo dentro.
+    reloj = inactividad.Estado(base)
+
     cliente = mqtt_cliente.ClienteMQTT(
         lambda topico, cuerpo, retenido=False: enrutar(topico, cuerpo, base,
                                                        publicar_eco, retenido,
-                                                       satelites)
+                                                       satelites, reloj),
+        # El gancho de reconexión reinicia el reloj tras un corte de MQTT (no en la
+        # primera conexión): durante el corte no llegaron los `presencia`, así que
+        # avisar justo al reconectar sería una alarma ciega.
+        al_reconectar=reloj.registrar_reconexion,
     )
 
     trabajador = cola.TrabajadorTelegram(base, remitente)
@@ -297,6 +342,15 @@ def main() -> int:
                                               parando),
             name="recordatorios", daemon=True)
         hilo_recordatorios.start()
+
+        # El ciclo del reloj de inactividad. También después de `conectar()`, por el
+        # mismo motivo que los recordatorios: un primer pase puede querer publicar
+        # la alerta en MQTT. Se pasa `cliente.publicar` (no `publicar_eco`): este
+        # hilo no es el de red de paho y puede esperar el PUBACK.
+        hilo_inactividad = threading.Thread(
+            target=tarea_inactividad, args=(reloj, cliente.publicar, parando),
+            name="inactividad", daemon=True)
+        hilo_inactividad.start()
 
         conteo = base.contar_por_estado()
         registro_log.info("alertas ya en la base: %s",

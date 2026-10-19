@@ -349,11 +349,14 @@ PANEL_NO_DISPONIBLE = (
     "El panel todavía no está disponible. Mientras tanto, puede consultar el "
     "estado con /alertas. Las alertas le seguirán llegando por aquí."
 )
-PANEL_ENLACE = (
-    "Su enlace al panel.\n\n"
-    "Este enlace es personal: vale por diez minutos y solo se puede usar una vez. "
-    "Si lo comparte, solo funcionará para quien lo abra primero.\n\n"
-    "El enlace abre directamente el panel del asistente."
+
+PANEL_CODIGO = (
+    "Su código para entrar al panel es:\n"
+    "```\n{codigo}\n```\n\n"
+    "{url}\n\n"
+    "Escriba el código en la pantalla de acceso. Es personal: vale por diez minutos "
+    "y solo se puede usar una vez. Si lo comparte, solo funcionará para quien lo use "
+    "primero."
 )
 
 # --- Botón «Ya lo atendí» y errores ------------------------------------------
@@ -366,3 +369,4 @@ YA_ATENDIDA = "Ya está atendida."
 YA_ESTABA_ATENDIDA = "Esta alerta ya estaba atendida."
 ERROR_BOTON = "Ocurrió un error. Por favor, inténtelo de nuevo."
 ERROR_COMANDO = "Ocurrió un error al procesar el comando. Por favor, inténtelo de nuevo."
+

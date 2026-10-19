@@ -14,23 +14,19 @@ class Textos {
   static const String pasoUno =
       'Escriba /panel al bot de la casa en Telegram.';
   static const String pasoDos =
-      'Le enviará un enlace que sirve una sola vez.';
+      'Le enviará un código de seis caracteres.';
   static const String pasoTres =
-      'Ábralo en este mismo navegador y entre.';
-  static const String yaLoTiene = '¿Ya lo tiene?';
-  static const String ayudaEnlace = 'Pegue el enlace completo si el navegador '
-      'que se abrió no es el que suele usar.';
-  static const String pistaEnlace = 'Pegue aquí el enlace del bot';
-  static const String pistaClave = 'Su clave de acceso';
-  static const String recienEntrado = 'Ya está dentro. Cópiela si quiere entrar '
-      'desde otro navegador sin pedir /panel: péguela y entre. No la comparta '
-      'con nadie.';
+      'Escríbalo aquí y entre. Vale diez minutos y una sola vez.';
+  static const String yaLoTiene = '¿Ya tiene su código?';
+  static const String ayudaCodigo = 'Escríbalo tal cual: no distingue entre '
+      'mayúsculas y minúsculas, y puede pegarlo.';
+  static const String pistaCodigo = 'Código de seis caracteres';
   static const String entrarAlPanel = 'Entrar al panel';
-  static const String faltaEnlace =
-      'Pegue el enlace que le envió el bot, o escriba /panel en Telegram.';
-  static const String enlaceNoReconocido = 'Eso no parece un enlace ni una '
-      'clave de acceso. Pegue el enlace del bot completo, o la clave de acceso '
-      'de otro navegador.';
+  static const String faltaCodigo =
+      'Escriba el código de seis caracteres que le envió el bot por Telegram.';
+  static const String codigoNoReconocido =
+      'Ese código no tiene seis caracteres. Cópielo del mensaje del bot y '
+      'vuelva a intentarlo.';
   static const String errorDeRed = 'No se pudo contactar con el servidor. '
       'Compruebe la conexión e inténtelo de nuevo.';
 
@@ -40,7 +36,7 @@ class Textos {
       'el servidor de la casa. Solo sale de ella para mostrarse en este panel y '
       'para enviar las alertas por Telegram.';
   static const String avisoDos = 'Solo pueden entrar los familiares '
-      'registrados en el bot de Telegram. Cada enlace sirve una sola vez y la '
+      'registrados en el bot de Telegram. Cada código sirve una sola vez y la '
       'sesión vence a los 30 días.';
   static const String avisoTres = 'El asistente no guarda grabaciones de lo '
       'que se dice en la casa. El panel no tiene micrófono ni cámara y no pide '
@@ -102,7 +98,7 @@ class Textos {
   static const String cerrarSesion = 'Cerrar sesión';
   static const String cerrarSesionTitulo = '¿Cerrar sesión?';
   static const String cerrarSesionTexto = 'En este navegador se borrará la '
-      'sesión. Para volver a entrar hará falta un enlace nuevo con /panel.';
+      'sesión. Para volver a entrar hará falta un código nuevo con /panel.';
   static const String cancelar = 'Cancelar';
 
   static const String alertasRecientes = 'Alertas recientes';

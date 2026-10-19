@@ -248,7 +248,7 @@ class EstadoSala:
             "inactividad": self.bloque_inactividad(base),
             "modo": self.modo,
             "alertas": _conteo(base.contar_por_estado()),
-            "familiares": base.contar_familiares(),
+            "familiares": base.contar_familiares_activos(),
             "conexiones": oyentes,
         }
 

@@ -98,19 +98,6 @@ class ClienteApi {
     return (await _json(respuesta) as Map).cast<String, dynamic>();
   }
 
-  /// Comprueba un token pegado SIN cambiar el de la sesión.
-  ///
-  /// Para pegar en el campo un token copiado de otro navegador: si el token es
-  /// válido devuelve los datos de `/api/yo`, y si no responde 401 (un 401 de
-  /// `/api/yo` no toca el límite de accesos, que sólo mira `/api/acceso`).
-  Future<Map<String, dynamic>> comprobarToken(String token) async {
-    final http.Response respuesta = await _cliente
-        .get(_ruta('/api/yo'),
-            headers: <String, String>{'Authorization': 'Bearer $token'})
-        .timeout(const Duration(seconds: 15));
-    return (await _json(respuesta) as Map).cast<String, dynamic>();
-  }
-
   Future<void> salir() async {
     try {
       await _cliente

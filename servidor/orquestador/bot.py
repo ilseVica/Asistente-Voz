@@ -7,8 +7,8 @@ botón:
   alertas. Los que ya estaban siguen estándolo.
 - `/alertas`: cuántas hay en la cola, cuántas se han mandado y cuáles son las
   últimas cinco. Contesta a cualquier familiar registrado.
-- `/panel`: un enlace de un solo uso al panel web, en un botón. Solo para un
-  familiar registrado, y solo si `PANEL_URL` está puesta.
+- `/panel`: un código de un solo uso al panel web. Solo para un familiar activo,
+  y solo si `PANEL_URL` está puesta.
 - Botón **«Ya lo atendí»**: marca la alerta como resuelta, edita el mensaje de
   Telegram para que el familiar vea uno solo con la hora, y publica en
   `casa/sala/satelite/decir` el aviso de que alguien ya está con el aviso (P17).
@@ -348,31 +348,33 @@ class ClienteBot:
             lineas.append(textos.ALERTAS_NINGUNA)
         await update.effective_message.reply_text("\n".join(lineas))
 
-    # --- /panel: el enlace al panel web -------------------------------------
+    # --- /panel: el código del panel web ------------------------------------
 
     async def cmd_panel(self, update: Update,
                         contexto: ContextTypes.DEFAULT_TYPE) -> None:
-        """Manda un enlace de un solo uso al panel web.
+        """Manda un código de acceso de un solo uso al panel web.
 
-        El enlace lleva un código que vale 10 minutos y que se gasta el primero que
-        lo abre. El botón se manda como botón de Telegram y no como texto: un botón
-        con `url=` abre el navegador sin que el familiar tenga que seleccionar y
-        copiar 40 caracteres de un mensaje.
+        El código tiene 6 caracteres, vale 10 minutos y se gasta el primero que lo
+        canjea. Se manda como texto en monoespaciado, no como enlace: el enlace de un
+        solo uso se sustituyó por el código, y el familiar lo teclea en la pantalla
+        de acceso del panel.
 
         Tres rechazos antes de generar nada, y el orden importa:
 
         1. **No es un chat privado.** En un grupo saldría el número de la persona.
-        2. **No está registrado.** Contesta EXACTAMENTE lo mismo que `/registro` sin
-           código, sin decir que el panel existe. `/registro` ya le responde ese
-           texto a cualquier chat privado, así que aquí no se revela nada nuevo; y
-           un bot de la casa que dice «para el panel hay que estar registrado» a
-           cualquiera que lo encuentre ya es medio punto de entrada.
-        3. **`PANEL_URL` está vacía.** No se manda un enlace roto nunca. Un botón
-           que lleva a una página en blanco hace que el familiar pulse lo que sea
-           en la próxima alerta de gas, que es el momento exacto en que un botón
-           falso se paga caro.
+        2. **No está registrado o está desactivado.** Contesta EXACTAMENTE lo mismo que
+           `/registro` sin código, sin decir que el panel existe. `/registro` ya le
+           responde ese texto a cualquier chat privado, así que aquí no se revela nada
+           nuevo; y un bot de la casa que dice «para el panel hay que estar registrado»
+           a cualquiera que lo encuentre ya es medio punto de entrada. Se pide
+           `familiar_activo` y no `familiar_registrado`: un familiar dado de baja sigue
+           en la base para el historial, pero no puede pedir código.
+        3. **`PANEL_URL` está vacía.** No se manda un código que no lleva a ningún
+           sitio. Un panel que no existe y un bot que manda códigos para él hace que
+           el familiar desconfíe del botón de la próxima alerta de gas, que es el
+           momento exacto en que un botón falso se paga caro.
 
-        Lo que sale del log: el familiar, enmascarado, y que se ha creado un enlace.
+        Lo que sale del log: el familiar, enmascarado, y que se ha creado un código.
         Nunca el código. `docker logs` lo lee cualquiera que tenga acceso al
         servidor, y un código en claro ahí es una entrada al panel de la familia.
         """
@@ -382,9 +384,9 @@ class ClienteBot:
         chat_id = str(update.effective_chat.id)
         quien = db_modulo.enmascarar_chat(chat_id)
 
-        if not self.base.familiar_registrado(chat_id):
-            registro.warning("/panel desde el chat %s, que no esta registrado; no se "
-                             "le manda ningun enlace", quien)
+        if not self.base.familiar_activo(chat_id):
+            registro.warning("/panel desde el chat %s, que no esta activo; no se "
+                             "le manda ningun codigo", quien)
             await update.effective_message.reply_text(
                 texto_pedir_registro(self.base)
             )
@@ -392,24 +394,18 @@ class ClienteBot:
 
         if not config.PANEL_URL:
             registro.warning("/panel sin PANEL_URL en el entorno: no se manda ningun "
-                             "enlace. El panel todavia no esta desplegado.")
+                             "codigo. El panel todavia no esta desplegado.")
             await update.effective_message.reply_text(textos.PANEL_NO_DISPONIBLE)
             return
 
         ahora = int(time.time())
-        codigo = panel_acceso.crear_enlace(self.base, chat_id, ahora)
-        url = panel_acceso.enlace_de(config.PANEL_URL, codigo)
-        registro.warning("enlace del panel creado para el familiar %s; vale hasta "
+        codigo = panel_acceso.crear_codigo_acceso(self.base, chat_id, ahora)
+        registro.warning("codigo del panel creado para el familiar %s; vale hasta "
                          "las %s", quien,
                          time.strftime("%H:%M:%S",
                                        time.localtime(ahora + registro_modulo.SEGUNDOS_CODIGO)))
-
-        teclado = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(textos.BOTON_ABRIR_PANEL, url=url)]]
-        )
         await update.effective_message.reply_text(
-            textos.PANEL_ENLACE,
-            reply_markup=teclado,
+            textos.PANEL_CODIGO.format(codigo=codigo, url=config.PANEL_URL),
         )
 
     # --- Botón "Ya lo atendí" (P17) -----------------------------------------

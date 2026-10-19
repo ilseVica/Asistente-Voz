@@ -44,6 +44,7 @@ ellos gastaría el código de un solo uso antes de que el familiar haya hecho na
 """
 
 import hashlib
+import hmac
 import logging
 import secrets
 import time
@@ -60,14 +61,28 @@ LONGITUD_CODIGO = registro_modulo.LONGITUD_CODIGO
 ALFABETO = registro_modulo.ALFABETO
 
 
-def hash_de(valor: str) -> str:
-    """El sha256 en hexadecimal de un código o de un token.
 
-    Sale de `hashlib`, no de un `hash()` de Python: `hash()` cambia entre
-    reinicios del proceso, así que un token guardado con él dejaría de valer cada
-    vez que se reiniciara el contenedor.
-    """
+# Alfabeto para el código de 6 caracteres del panel: MAYÚSCULAS y dígitos, y sin
+# 0, 1, O, I ni L, para que nadie confunda un carácter con otro al dictarlo o
+# teclearlo. Son 31 símbolos, así que 6 caracteres son 31^6 (~8,9x10^8): poco para
+# un ataque que pueda hacer miles de intentos por segundo, y por eso el canje tiene
+# además límite de 5 fallos por IP cada 10 minutos, 5 intentos por código y tope
+# global. El código NO sustituye al límite: el límite es lo que lo hace suficiente.
+LONGITUD_CODIGO_NUEVO = 6
+ALFABETO_CODIGO = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+
+
+def hash_de(valor: str) -> str:
     return hashlib.sha256(str(valor).encode("utf-8")).hexdigest()
+
+
+def hash_de_codigo(valor: str) -> str:
+    return hash_de(valor)
+
+
+def nuevo_codigo_acceso() -> str:
+    return "".join(secrets.choice(ALFABETO_CODIGO) for _ in range(LONGITUD_CODIGO_NUEVO))
+
 
 
 def nuevo_codigo() -> str:
@@ -180,3 +195,40 @@ def enlace_de(config_panel_url: str, codigo: str) -> str:
 def ahora() -> int:
     """El reloj, en un solo sitio, para que las pruebas puedan compararlo."""
     return int(time.time())
+
+
+def crear_codigo_acceso(base, chat_id: str, ahora: int = None) -> str:
+    """Crea un código de acceso de 6 caracteres para este familiar y lo devuelve.
+
+    Antes de emitir el nuevo, marca como usados los códigos sin gastar de ESE
+    familiar: pedir `/panel` otra vez invalida el anterior. Es lo que hace que
+    reenviar el comando no deje dos códigos vivos a la vez, que es lo que se
+    aprobó. El plazo es el de `registro.SEGUNDOS_CODIGO` (10 minutos).
+
+    `chat_id` se guarda junto al hash y es lo que permite revocar el acceso de
+    una persona concreta sin recorrer nada más.
+    """
+    if ahora is None:
+        ahora = int(time.time())
+    base.invalidar_codigos_acceso(chat_id, ahora)
+    codigo = nuevo_codigo_acceso()
+    base.crear_codigo_acceso(hash_de_codigo(codigo), chat_id,
+                             ahora + registro_modulo.SEGUNDOS_CODIGO, ahora)
+    return codigo
+
+
+def tomar_codigo_acceso(base, codigo: str, ahora: int = None) -> tuple:
+    """Canjea un código de acceso. Devuelve `(ok, fila)`.
+
+    Normaliza a mayúsculas y sin espacios porque el código se teclea a mano y una
+    minúscula o un espacio de más no deben ser un fallo. A partir de ahí decide
+    `db.tomar_codigo_acceso`: que exista, que el hash coincida (con
+    `hmac.compare_digest`), que no se haya gastado, que no haya caducado y que no
+    agote los 5 intentos. Aquí no se decide nada para no tener la condición en dos
+    sitios.
+    """
+    if ahora is None:
+        ahora = int(time.time())
+    codigo_limpio = (codigo or "").strip().upper()
+    fila = base.tomar_codigo_acceso(hash_de_codigo(codigo_limpio), ahora)
+    return (fila is not None), (fila or {})

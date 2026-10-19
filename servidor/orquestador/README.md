@@ -31,7 +31,7 @@ enterarse.
   sigue encendida»), pero no las manda.
 - No manda alertas de inactividad, y no avisa a nadie si alguien se queda
   postrado: eso necesita un reloj de avisos que no existe.
-- No habla con Alexa ni con el panel web. Con el panel solo entrega el enlace de
+- No habla con Alexa ni con el panel web. Con el panel solo entrega un código de
   un solo uso cuando alguien escribe `/panel`; los datos y las alertas del panel
   salen de la misma base, no del bot. Con el satélite solo avisa que una
   alerta quedó atendida.
@@ -87,6 +87,21 @@ Ya no se usa. Era el diseño de un solo familiar: un archivo con un `chat_id`. L
 primera vez que arranca esta versión, el familiar de ese archivo se copia a la
 tabla y el archivo se renombra a `familia.json.migrado` —se renombra, no se borra,
 por si el servicio se muere entre la copia y el renombrado—.
+
+## El código de acceso al panel
+
+Quien escribe `/panel` recibe un mensaje con un código de seis caracteres y la
+dirección donde teclearlo. El código no es el de `/registro`: se guarda en la tabla
+`codigos_acceso` solo como hash, vale diez minutos, sirve una sola vez y **un familiar
+desactivado no lo recibe**, aunque siga en la base.
+
+Pedir `/panel` otra vez invalida los anteriores, así que si a alguien se le cuela un
+código en un grupo y pide otro, el anterior deja de valer. El texto del mensaje explica
+que es personal y que solo sirve para quien lo teclea primero.
+
+El alfabeto deja fuera los caracteres que se leen mal al dictar o al teclear de memoria:
+sin `0`, `1`, `O`, `I` ni `L`. El panel acepta minúsculas, espacios y guiones, que se
+quitan al entrar.
 
 ## Por qué la sesión MQTT es persistente
 
@@ -203,7 +218,7 @@ El `.env` del servidor tiene que tener, además de lo que ya tenía:
 ```
 TELEGRAM_BOT_TOKEN=...    # el token de BotFather
 TELEGRAM_ACTIVAR_BOT=1    # sin esto el bot de /registro no arranca
-PANEL_URL=http://villaca.tail722206.ts.net:8080   # el botón "Abrir panel"
+PANEL_URL=https://asistente.tail722206.ts.net   # la dirección que se teclea el código
 ```
 
 `PANEL_URL` vacío no es un error: el bot contesta que el panel todavía no está
@@ -249,7 +264,7 @@ grupo del vecindario publicaría el teléfono de la persona que lo usa.
 | --- | --- |
 | `/registro <código>` | Suma **este** chat a la lista con un código de un solo uso, sin quitar a nadie |
 | `/alertas` | Cuántas hay pendientes, cuántas se mandaron y las últimas cinco |
-| `/panel` | Manda un botón **Abrir panel** con un enlace de un solo uso, que caduca a los 10 minutos |
+| `/panel` | Manda un código de seis caracteres con la dirección donde teclearlo: de un solo uso, caduca a los 10 minutos y solo vale para familiares activos |
 
 `/registro` sin código, o con un código que no sirve, pide el código. Y si el chat
 **ya está en la lista**, no se responde nada: el silencio es de ese chat, no global.
@@ -347,7 +362,7 @@ sube de verdad, que avise las veces que haga falta.
 | `MQTT_CLIENT_ID` | `orquestador` | El client id fijo |
 | `TELEGRAM_BOT_TOKEN` | vacío | Sin token el servicio arranca y no envía |
 | `TELEGRAM_ACTIVAR_BOT` | `0` | Si es `1`, arranca el bot de comandos |
-| `PANEL_URL` | vacío | El botón "Abrir panel". Vacío: el botón no se muestra y nunca se manda un enlace roto |
+| `PANEL_URL` | vacío | La dirección que se manda con el código de `/panel`, y la del botón «Ya lo atendí». Vacío: el botón no se muestra y nunca se manda un enlace roto |
 | `ORQUESTADOR_DB` | `/datos/orquestador.sqlite3` | La base, en el volumen |
 | `NIVEL_LOG` | `INFO` | `DEBUG` para ver todo |
 

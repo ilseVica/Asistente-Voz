@@ -454,3 +454,23 @@ CREATE TABLE IF NOT EXISTS configuracion (
     clave  TEXT NOT NULL PRIMARY KEY,
     valor  TEXT NOT NULL
 );
+
+-- --- codigos_acceso ---------------------------------------------------------
+--
+-- Nueva tabla para el flujo de código de acceso (6 caracteres, sin 0/O/1/I/L).
+-- Se mantiene panel_enlaces y panel_tokens para no romper sesiones existentes
+-- ni la ruta del enlace antiguo.
+CREATE TABLE IF NOT EXISTS codigos_acceso (
+    codigo_hash  TEXT NOT NULL PRIMARY KEY,
+    chat_id      TEXT NOT NULL,
+    creado_en    INTEGER NOT NULL,
+    expira_en    INTEGER NOT NULL,
+    intentos     INTEGER NOT NULL DEFAULT 0,
+    usado_en     INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_codigos_acceso_expira
+    ON codigos_acceso (expira_en);
+
+CREATE INDEX IF NOT EXISTS idx_codigos_acceso_chat
+    ON codigos_acceso (chat_id);

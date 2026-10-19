@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../main.dart';
 import '../tema.dart';
 import '../textos.dart';
 
-/// Sin token: explica cómo conseguirlo y acepta un enlace pegado.
+/// Sin token: explica cómo conseguir el código y lo pide.
 ///
-/// El campo de pegar no es adorno. El enlace abre el navegador del sistema y en
-/// algunos Android sale un navegador distinto del que está autenticado; sin poder
-/// pegar el enlace a mano, la sesión se pierde y hay que volver a pedir `/panel`.
+/// El campo es para el código de SEIS caracteres que manda `/panel`. Se teclea a
+/// mano y también se puede pegar: si el familiar lo copia del mensaje de Telegram
+/// y lo pega, entra igual. El campo pone en mayúsculas lo que se escribe y no
+/// admite nada que no esté en el alfabeto del código (sin 0, 1, O, I ni L), para
+/// que un carácter que no existe no llegue siquiera al servidor.
+///
+/// El teclado es de texto y no numérico a propósito: el código lleva letras, y
+/// con un teclado numérico no se podría escribir.
 class PantallaAcceso extends StatefulWidget {
   const PantallaAcceso({super.key});
 
@@ -20,13 +26,6 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
   final TextEditingController _control = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    // Si se entró en esta misma sesión, el campo ya lleva el token para copiarlo.
-    _control.text = PanelScope.de(context).sesionNueva ?? '';
-  }
-
-  @override
   void dispose() {
     _control.dispose();
     super.dispose();
@@ -36,7 +35,6 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
     final TextTheme tipografia = Theme.of(contexto).textTheme;
-    final bool recienEntrado = estado.sesionNueva != null;
 
     final Widget campos = estado.preparando
         ? const Padding(
@@ -49,33 +47,24 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
               TextField(
                 controller: _control,
                 keyboardType: TextInputType.text,
+                textCapitalization: TextCapitalization.characters,
                 autocorrect: false,
                 enableSuggestions: false,
-                readOnly: recienEntrado,
-                style: const TextStyle(fontSize: 16),
-                decoration: InputDecoration(
-                  hintText: recienEntrado
-                      ? Textos.pistaClave
-                      : Textos.pistaEnlace,
+                maxLength: 6,
+                inputFormatters: <TextInputFormatter>[_SoloCodigo()],
+                style: const TextStyle(fontSize: 22, letterSpacing: 6),
+                textAlign: TextAlign.center,
+                decoration: const InputDecoration(
+                  hintText: Textos.pistaCodigo,
+                  counterText: '',
                 ),
-                onSubmitted: recienEntrado
-                    ? (_) => estado.entrarAlPanel()
-                    : (String valor) => _entrar(estado, valor),
+                onSubmitted: (String valor) => _entrar(estado, valor),
               ),
-              if (recienEntrado) ...<Widget>[
-                const SizedBox(height: 10),
-                Text(
-                  Textos.recienEntrado,
-                  style: tipografia.bodySmall,
-                ),
-              ],
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: estado.preparando
                     ? null
-                    : recienEntrado
-                        ? estado.entrarAlPanel
-                        : () => _entrar(estado, _control.text),
+                    : () => _entrar(estado, _control.text),
                 child: const Text(Textos.entrarAlPanel),
               ),
             ],
@@ -105,7 +94,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
                       style: tipografia.titleMedium),
                   const SizedBox(height: 4),
                   Text(
-                    Textos.ayudaEnlace,
+                    Textos.ayudaCodigo,
                     style: tipografia.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -131,14 +120,33 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
 
   Future<void> _entrar(EstadoPanel estado, String valor) async {
     FocusManager.instance.primaryFocus?.unfocus();
-    final String limpio = valor.trim();
-    if (limpio.isEmpty) {
-      estado.avisar(Textos.faltaEnlace);
-      return;
+    await estado.entrar(valor);
+  }
+}
+
+/// Deja pasar solo caracteres del alfabeto del código, en mayúsculas.
+///
+/// Es el mismo alfabeto que `panel_acceso.ALFABETO_CODIGO` en el orquestador
+/// (sin 0, 1, O, I ni L). Se filtra al escribir y al pegar: pegar un código en
+/// minúsculas del portapapeles lo mete en mayúsculas, y pegar el mensaje entero
+/// del bot se queda solo con los caracteres que pueden ser del código.
+class _SoloCodigo extends TextInputFormatter {
+  static final RegExp _validos = RegExp(r'[23456789ABCDEFGHJKMNPQRSTUVWXYZ]');
+
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue anterior, TextEditingValue nuevo) {
+    final List<String> limpio = <String>[];
+    for (final int runa in nuevo.text.toUpperCase().runes) {
+      final String caracter = String.fromCharCode(runa);
+      if (_validos.hasMatch(caracter)) limpio.add(caracter);
     }
-    await estado.entrar(limpio);
-    // Entrado el token, el campo se queda con él delante para copiarlo.
-    _control.text = estado.sesionNueva ?? '';
+    final String texto = limpio.join();
+    final String recortado = texto.length > 6 ? texto.substring(0, 6) : texto;
+    return TextEditingValue(
+      text: recortado,
+      selection: TextSelection.collapsed(offset: recortado.length),
+    );
   }
 }
 
@@ -189,14 +197,15 @@ class _Aviso extends StatelessWidget {
   @override
   Widget build(BuildContext contexto) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6E9E9),
-        borderRadius: BorderRadius.circular(Tema.radioBoton),
-        border: Border.all(color: const Color(0xFFE3C9C9)),
+        color: Tema.suave,
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(texto,
-          style: const TextStyle(color: Tema.peligro, fontSize: 15, height: 1.4)),
+      child: Text(
+        texto,
+        style: Theme.of(contexto).textTheme.bodySmall,
+      ),
     );
   }
 }

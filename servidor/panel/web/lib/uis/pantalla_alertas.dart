@@ -90,7 +90,7 @@ class PantallaAlertas extends StatelessWidget {
                 padding: const EdgeInsets.all(32),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 900),
+                    constraints: const BoxConstraints(maxWidth: 1120),
                     child: contenido,
                   ),
                 ),

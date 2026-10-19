@@ -99,7 +99,7 @@ RUTA_ESQUEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # ya estaba en la 5 se crea vacia, y las dos claves que use el servicio se insertan
 # cuando hagan falta (el valor por defecto NO se escribe al migrar, lo devuelve
 # `db.tiempo_inactividad()` cuando la clave no esta). Tampoco tiene funcion propia.
-VERSION_ESQUEMA = 6
+VERSION_ESQUEMA = 7
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -269,6 +269,29 @@ class BaseDatos:
         # eso es lo correcto: `db.tiempo_inactividad()` devuelve el valor de
         # fabrica de `config.py` mientras no haya clave, y `ultimo_movimiento`
         # tampoco existe, asi que el reloj arranca en la hora de arranque.
+
+        # De la 6 a la 7 (códigos de acceso nuevos): nueva tabla `codigos_acceso`.
+        # Se crea con IF NOT EXISTS en esquema.sql y aquí nos aseguramos de que
+        # quede creada también en bases antiguas. No toca panel_enlaces/panel_tokens.
+        if version < 7:
+            self.conexion.execute("""
+                CREATE TABLE IF NOT EXISTS codigos_acceso (
+                    codigo_hash  TEXT NOT NULL PRIMARY KEY,
+                    chat_id      TEXT NOT NULL,
+                    creado_en    INTEGER NOT NULL,
+                    expira_en    INTEGER NOT NULL,
+                    intentos     INTEGER NOT NULL DEFAULT 0,
+                    usado_en     INTEGER
+                )
+            """)
+            self.conexion.execute("""
+                CREATE INDEX IF NOT EXISTS idx_codigos_acceso_expira
+                    ON codigos_acceso (expira_en)
+            """)
+            self.conexion.execute("""
+                CREATE INDEX IF NOT EXISTS idx_codigos_acceso_chat
+                    ON codigos_acceso (chat_id)
+            """)
 
         # El indice de las alertas que esperan a un familiar se crea AQUI y no en
         # `esquema.sql`, y el motivo es el orden: `esquema.sql` se ejecuta entero
@@ -632,6 +655,20 @@ class BaseDatos:
                 "SELECT 1 FROM familiares WHERE chat_id = ?", (str(chat_id),)
             ).fetchone() is not None
 
+    def familiar_activo(self, chat_id: str) -> bool:
+        """¿Este chat esta registrado Y activo?
+
+        Es la puerta del codigo de acceso del panel: un familiar desactivado sigue
+        en la base (y en la lista del operador) pero no puede pedir codigo. Es una
+        pregunta distinta de `familiar_registrado` a proposito: el historial de
+        alertas lo ve un desactivado, la entrada al panel no.
+        """
+        with _candado:
+            return self.conexion.execute(
+                "SELECT 1 FROM familiares WHERE chat_id = ? AND activo = 1",
+                (str(chat_id),)
+            ).fetchone() is not None
+
     def familiares_registrados(self) -> list:
         """Los familiares, del mas antiguo al mas reciente.
 
@@ -674,6 +711,18 @@ class BaseDatos:
         with _candado:
             return self.conexion.execute(
                 "SELECT COUNT(*) AS total FROM familiares"
+            ).fetchone()["total"]
+
+    def contar_familiares_activos(self) -> int:
+        """Cuenta solo los familiares activos.
+
+        Es lo que muestra el panel: cuanta gente puede usar el panel ahora mismo.
+        Un familiar desactivado sigue en la base y en la lista del operador, pero
+        no cuenta para este numero.
+        """
+        with _candado:
+            return self.conexion.execute(
+                "SELECT COUNT(*) AS total FROM familiares WHERE activo = 1"
             ).fetchone()["total"]
 
     def marcar_familiar_inactivo(self, chat_id: str) -> bool:
@@ -858,6 +907,81 @@ class BaseDatos:
             if cursor.rowcount != 1:
                 return None
             return dict(fila)
+
+    def crear_codigo_acceso(self, codigo_hash: str, chat_id: str, expira_en: int,
+                            ahora: int = None) -> None:
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "INSERT OR REPLACE INTO codigos_acceso "
+                "(codigo_hash, chat_id, creado_en, expira_en, intentos, usado_en) "
+                "VALUES (?, ?, ?, ?, 0, NULL)",
+                (codigo_hash, str(chat_id), ahora, int(expira_en)),
+            )
+            self.conexion.commit()
+
+    def invalidar_codigos_acceso(self, chat_id: str, ahora: int = None) -> int:
+        """Marca como usados los codigos sin gastar de un familiar.
+
+        Al pedir `/panel` otra vez, el codigo anterior de ESE familiar deja de
+        servir: es la regla «un solo codigo vivo por familiar». Se marca con
+        `usado_en` y no se borra, para que el codigo ya emitido quede en la tabla
+        como evidencia y no se pueda reutilizar. Devuelve cuantos invalido, que es
+        lo que la prueba puede contar.
+        """
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            cursor = self.conexion.execute(
+                "UPDATE codigos_acceso SET usado_en = ? "
+                "WHERE chat_id = ? AND usado_en IS NULL",
+                (ahora, str(chat_id)),
+            )
+            self.conexion.commit()
+            return cursor.rowcount
+
+    def tomar_codigo_acceso(self, codigo_hash: str, ahora: int = None) -> dict:
+        import hmac
+
+        import registro as registro_modulo
+
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            fila = self.conexion.execute(
+                "SELECT * FROM codigos_acceso WHERE codigo_hash = ?", (codigo_hash,)
+            ).fetchone()
+            if fila is None:
+                return None
+            # La busqueda es por el hash como clave primaria, pero la ultima
+            # comprobacion se hace con `compare_digest` para no depender de que la
+            # colacion de SQLite no cambie: comparar valores en claro con `==` filtra
+            # informacion por el tiempo, y aqui no cuesta nada hacerlo bien.
+            if not hmac.compare_digest(str(fila["codigo_hash"]), str(codigo_hash)):
+                return None
+            if fila["usado_en"] is not None:
+                return None
+            if fila["expira_en"] <= ahora:
+                return None
+            if fila["intentos"] >= registro_modulo.MAX_INTENTOS_CODIGO:
+                return None
+
+            self.conexion.execute(
+                "UPDATE codigos_acceso SET intentos = intentos + 1 "
+                "WHERE codigo_hash = ?",
+                (codigo_hash,),
+            )
+            cursor = self.conexion.execute(
+                "UPDATE codigos_acceso SET usado_en = ? "
+                "WHERE codigo_hash = ? AND usado_en IS NULL",
+                (ahora, codigo_hash),
+            )
+            self.conexion.commit()
+            if cursor.rowcount != 1:
+                return None
+            return dict(fila)
+
 
     def crear_token_panel(self, token_hash: str, chat_id: str, caduca_en: int,
                           ahora: int = None) -> None:

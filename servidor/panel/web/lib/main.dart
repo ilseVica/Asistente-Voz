@@ -56,15 +56,6 @@ class EstadoPanel extends ChangeNotifier {
   bool cargandoInactividad = false;
   String? aviso; // Un mensaje que sólo se ve una vez (un error, sobre todo).
 
-  /// Justo después de entrar: el token en claro, para que se pueda copiar.
-  ///
-  /// Sirve para entrar desde otro navegador sin pedir `/panel` otra vez. Se
-  /// muestra en el campo de la pantalla de acceso, y se borra al arrancar el
-  /// panel: la petición explícita de la familia fue que el token se vea a la
-  /// hora de entrar para poder copiarlo. Mientras está aquí, el panel no
-  /// arranca (le toca el turno a la pantalla de acceso).
-  String? sesionNueva;
-
   Destino destino = Destino.inicio;
 
   Vivo? _vivo;
@@ -132,7 +123,6 @@ class EstadoPanel extends ChangeNotifier {
     api.quitarToken();
     await sesion.borrarToken();
     nombre = '';
-    sesionNueva = null;
     estado = null;
     alertas = const <Alerta>[];
     recordatorios = const <Recordatorio>[];
@@ -537,30 +527,24 @@ class EstadoPanel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> entrar(String enlaceOcodigo) async {
-    final String entrada = enlaceOcodigo.trim();
-    if (entrada.isEmpty) {
-      aviso = Textos.faltaEnlace;
+  Future<void> entrar(String codigo) async {
+    final String? limpio = normalizarCodigo(codigo);
+    if (limpio == null) {
+      aviso = Textos.faltaCodigo;
       notifyListeners();
       return;
     }
-    final String? codigo = codigoDeEnlace(entrada);
     aviso = null;
     preparando = true;
     notifyListeners();
     try {
-      final Map<String, dynamic> datos =
-          await _sesionConTokenOCodigo(entrada, codigo);
-      sesionNueva = api.token;
+      final Map<String, dynamic> datos = await api.canjear(limpio);
+      nombre = datos['nombre'] as String? ?? '';
       await sesion.guardarToken(api.token);
-      final String nombreRecibido = datos['nombre'] as String? ?? '';
-      await sesion.guardarNombre(nombreRecibido);
-      nombre = nombreRecibido;
-      aviso = null;
+      await sesion.guardarNombre(nombre);
       preparando = false;
       notifyListeners();
-      // El panel NO arranca aquí a propósito: la pantalla de acceso se queda con
-      // el token delante para que se pueda copiar (petición de la familia).
+      _empezar();
     } on ErrorApi catch (error) {
       preparando = false;
       aviso = error.mensaje;
@@ -570,34 +554,6 @@ class EstadoPanel extends ChangeNotifier {
       aviso = Textos.errorDeRed;
       notifyListeners();
     }
-  }
-
-  /// Entrada por un token pegado (otro navegador) o por código/enlace del bot.
-  ///
-  /// Un token y un código son indistinguibles por la forma (los dos son letras y
-  /// números), así que se prueba el token primero: si `/api/yo` lo acepta, es de
-  /// esta sesión y no se canjea nada; si responde 401, cae al canje normal con el
-  /// código. El 401 de `/api/yo` no descuenta nada del límite de accesos, que sólo
-  /// mira `/api/acceso`, así que no hay riesgo de bloquear a nadie por pegar mal.
-  Future<Map<String, dynamic>> _sesionConTokenOCodigo(
-      String entrada, String? codigo) async {
-    try {
-      final Map<String, dynamic> datos = await api.comprobarToken(entrada);
-      api.ponerToken(entrada);
-      return datos;
-    } on ErrorApi catch (error) {
-      if (!error.sinSesion) rethrow;
-      if (codigo == null) {
-        throw const ErrorApi(Textos.enlaceNoReconocido);
-      }
-      return await api.canjear(codigo);
-    }
-  }
-
-  /// Termina la entrada: arranca el panel y quita el token de la pantalla.
-  void entrarAlPanel() {
-    sesionNueva = null;
-    _empezar();
   }
 
   Future<void> cerrarSesion() async {
@@ -707,10 +663,6 @@ class _AsistentePanelState extends State<AsistentePanel> {
     if (estado.avisoPendiente) return const PantallaAviso();
 
     if (!estado.api.tieneToken) return const PantallaAcceso();
-
-    // Recién entrado: la pantalla de acceso se queda con el token a la vista para
-    // que se pueda copiar a otro navegador (petición de la familia).
-    if (estado.sesionNueva != null) return const PantallaAcceso();
 
     if (estado.errorArranque != null) {
       return PantallaErrorArranque(mensaje: estado.errorArranque!);

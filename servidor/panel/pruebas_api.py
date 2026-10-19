@@ -18,8 +18,8 @@
 #   - que resolver una alerta dos veces avisa al satélite UNA vez;
 #   - que el WebSocket manda la instantánea inicial, los eventos y el latido, y cierra
 #     con 1008 sin sesión;
-#   - que la respuesta de la página de canje lleva el código en el cuerpo del POST y no
-#     en la URL de la petición, y que el canje es un POST.
+#   - que la respuesta de la página del enlace antiguo es solo un aviso (sin
+#     JavaScript, sin POST y sin inyectar el código de la URL);
 #
 # No se prueba aquí:
 #   - la conexión MQTT real. El cliente se sustituye por un doble que anota lo
@@ -149,8 +149,8 @@ base.registrar_familiar("222", nombre="Luis")
 
 
 def entrar(chat_id):
-    """El camino completo de entrada: `/panel` genera el enlace y la API lo canjea."""
-    codigo = panel_acceso.crear_enlace(base, chat_id)
+    """El camino completo de entrada: `/panel` genera el código y la API lo canjea."""
+    codigo = panel_acceso.crear_codigo_acceso(base, chat_id)
     r = cliente.post("/api/acceso", json={"codigo": codigo})
     return r.json()["token"]
 
@@ -265,11 +265,11 @@ finally:
 # 2. El canje
 # =============================================================================
 
-titulo("2. El canje del enlace")
+titulo("2. El canje del código")
 
-codigo = panel_acceso.crear_enlace(base, "111")
+codigo = panel_acceso.crear_codigo_acceso(base, "111")
 r = cliente.post("/api/acceso", json={"codigo": codigo})
-prueba("un enlace bueno devuelve token, nombre y caducidad",
+prueba("un código bueno devuelve token, nombre y caducidad",
        r.status_code == 200 and r.json()["token"]
        and r.json()["nombre"] == "Marta" and r.json()["caduca_en"] > time.time(),
        r.text[:120])
@@ -277,14 +277,15 @@ prueba("y el token devuelto no es el código del enlace",
        r.json()["token"] != codigo)
 
 r = cliente.post("/api/acceso", json={"codigo": codigo})
-prueba("el mismo enlace otra vez es 401", r.status_code == 401, r.status_code)
+prueba("el mismo código otra vez es 401", r.status_code == 401, r.status_code)
 
 # El texto del fallo dice lo mismo para los tres casos, para que no se pueda aprender
 # por diferencia qué códigos existen.
 texto_gastado = cliente.post("/api/acceso", json={"codigo": codigo}).text
-texto_fantasma = cliente.post("/api/acceso", json={"codigo": "no-existe-este"}).text
+texto_fantasma = cliente.post("/api/acceso", json={"codigo": "ZZZZZZ"}).text
 texto_caducado = cliente.post("/api/acceso", json={
-    "codigo": panel_acceso.crear_enlace(base, "111", ahora=int(time.time()) - 3600)
+    "codigo": panel_acceso.crear_codigo_acceso(base, "111",
+                                               ahora=int(time.time()) - 3600)
 }).text
 prueba("código gastado, inexistente y caducado dicen EXACTAMENTE lo mismo",
        texto_gastado == texto_fantasma == texto_caducado,
@@ -292,34 +293,86 @@ prueba("código gastado, inexistente y caducado dicen EXACTAMENTE lo mismo",
 prueba("y el texto no dice cuál de los tres fue", "gastado" not in texto_gastado
        and "caducado" not in texto_gastado, texto_gastado)
 
+# El alfabeto: seis caracteres sin 0, 1, O, I ni L, y se teclea como se quiera.
+nuevo = panel_acceso.crear_codigo_acceso(base, "111")
+prueba("el código nuevo son 6 caracteres del alfabeto de 31",
+       len(nuevo) == panel_acceso.LONGITUD_CODIGO_NUEVO
+       and all(c in panel_acceso.ALFABETO_CODIGO for c in nuevo), nuevo)
+r = cliente.post("/api/acceso", json={"codigo": nuevo.lower() + "  "})
+prueba("una minúscula o un espacio de más no es un fallo",
+       r.status_code == 200, r.text[:120])
+prueba("y el código con 0/1/O/I/L se rechaza sin llegar a canjear",
+       cliente.post("/api/acceso", json={"codigo": "01OILU"}).status_code == 401)
+
+# Pedir otro código invalida el anterior: solo uno vivo por familiar.
+codigo_viejo = panel_acceso.crear_codigo_acceso(base, "111")
+codigo_nuevo = panel_acceso.crear_codigo_acceso(base, "111")
+prueba("pedir /panel otra vez invalida el código anterior",
+       cliente.post("/api/acceso", json={"codigo": codigo_viejo}).status_code == 401)
+prueba("y el último sigue valiendo",
+       cliente.post("/api/acceso", json={"codigo": codigo_nuevo}).status_code == 200)
+
+# Un familiar desactivado no puede abrir la puerta con un código viejo.
+codigo_baja = panel_acceso.crear_codigo_acceso(base, "111")
+base.dar_de_baja("111")
+prueba("un código de un familiar desactivado no entra",
+       cliente.post("/api/acceso", json={"codigo": codigo_baja}).status_code == 401)
+base.registrar_familiar("111", nombre="Marta")
+token_marta = entrar("111")
+
 r = cliente.post("/api/acceso", json={"codigo": "x"})
 prueba("un cuerpo mal formado es 422 y no 500", r.status_code == 422, r.status_code)
-r = cliente.post("/api/acceso", json={"codigo": panel_acceso.nuevo_codigo(),
+r = cliente.post("/api/acceso", json={"codigo": panel_acceso.nuevo_codigo_acceso(),
                                       "admin": True})
 prueba("un campo de más es 422, no se acepta en silencio",
        r.status_code == 422, r.status_code)
 
-# El límite por IP: 20 fallos en 10 minutos. Se baja el límite para no tener que
-# escribir 20 líneas, que es lo que importa: que el límite CUENTE.
+# El límite por IP: 5 fallos en 10 minutos. Se baja el límite para no tener que
+# escribir 5 líneas, que es lo que importa: que el límite CUENTE. Se empieza de
+# cero para que el contador no arrastre los fallos de las pruebas anteriores.
 limite_original = api_modulo.limite_acceso.maximo
 api_modulo.limite_acceso.maximo = 3
+api_modulo.limite_acceso.anotar_exito("testclient")
 try:
     for _ in range(3):
-        cliente.post("/api/acceso", json={"codigo": "no-existe"})
-    r = cliente.post("/api/acceso", json={"codigo": "no-existe"})
+        cliente.post("/api/acceso", json={"codigo": "ZZZZZZ"})
+    r = cliente.post("/api/acceso", json={"codigo": "ZZZZZZ"})
     prueba("pasado el límite de fallos por IP es 429, no 401", r.status_code == 429,
            r.status_code)
-    codigo_bueno = panel_acceso.crear_enlace(base, "111")
-    prueba("y con el límite encima, un enlace BUENO tampoco entra",
+    codigo_bueno = panel_acceso.crear_codigo_acceso(base, "111")
+    prueba("y con el límite encima, un código BUENO tampoco entra",
            cliente.post("/api/acceso", json={"codigo": codigo_bueno}).status_code
            == 429)
 finally:
     api_modulo.limite_acceso.maximo = limite_original
     api_modulo.limite_acceso.anotar_exito("testclient")
 
-r = cliente.post("/api/acceso", json={"codigo": panel_acceso.crear_enlace(base, "111")})
+r = cliente.post("/api/acceso", json={"codigo": panel_acceso.crear_codigo_acceso(base, "111")})
 prueba("un acierto borra el contador de fallos de esa IP",
        r.status_code == 200, r.status_code)
+
+# El tope global: el que frena a quien reparte el ataque entre muchas IPs. Se
+# sube el límite por IP para que el único que puede dispararse aquí sea el global.
+limite_ip_original = api_modulo.limite_acceso.maximo
+limite_global_original = api_modulo.limite_codigo_global.maximo
+api_modulo.limite_acceso.maximo = 100
+api_modulo.limite_codigo_global.anotar_exito(api_modulo.CLAVE_GLOBAL)
+api_modulo.limite_codigo_global.maximo = 3
+try:
+    for _ in range(3):
+        cliente.post("/api/acceso", json={"codigo": "ZZZZZZ"})
+    r = cliente.post("/api/acceso", json={"codigo": "ZZZZZZ"})
+    prueba("pasado el tope GLOBAL de fallos es 429, no 401", r.status_code == 429,
+           r.status_code)
+    codigo_bueno = panel_acceso.crear_codigo_acceso(base, "111")
+    prueba("y con el tope global encima, un código BUENO tampoco entra",
+           cliente.post("/api/acceso", json={"codigo": codigo_bueno}).status_code
+           == 429)
+finally:
+    api_modulo.limite_acceso.maximo = limite_ip_original
+    api_modulo.limite_codigo_global.maximo = limite_global_original
+    api_modulo.limite_codigo_global.anotar_exito(api_modulo.CLAVE_GLOBAL)
+    api_modulo.limite_acceso.anotar_exito("testclient")
 
 
 # =============================================================================
@@ -691,10 +744,10 @@ prueba("un id con basura da 404 y la tabla sigue",
 
 
 # =============================================================================
-# 7. La página de canje
+# 7. La página del enlace antiguo
 # =============================================================================
 
-titulo("7. La página de canje")
+titulo("7. La página del enlace antiguo")
 
 r = cliente.get("/acceso/abcdefghijklmnop")
 prueba("/acceso/<codigo> devuelve HTML", r.status_code == 200
@@ -703,58 +756,24 @@ prueba("la página lleva `Referrer-Policy: no-referrer`",
        r.headers.get("Referrer-Policy") == "no-referrer", dict(r.headers))
 prueba("y `X-Robots-Tag: noindex`, para que un buscador no lo indexe",
        "noindex" in r.headers.get("X-Robots-Tag", ""), dict(r.headers))
-prueba("el canje lo hace la PÁGINA con un POST a /api/acceso",
-       "'POST'" in r.text and "/api/acceso" in r.text, r.text[:200])
-prueba("y no con un GET: un GET lo seguiría una vista previa de Telegram",
-       "method: 'GET'" not in r.text and 'method="GET"' not in r.text, None)
-prueba("el código va en un JSON escapado, no interpolado a pelo",
-       json.dumps("abcdefghijklmnop") in r.text, r.text[-1200:])
-prueba("y se guarda en localStorage antes de saltar a `/`",
-       "localStorage" in r.text and "location.replace('/')" in r.text,
-       r.text[-1200:])
-# La clave y el formato son los de `shared_preferences` en web, que es quien lee
-# la sesión desde Flutter (`lib/sesion.dart`): prefijo «flutter.» y valor en
-# JSON. Con la clave «panel_token» a pelo, el canje funcionaría y el panel
-# arrancaría sin sesión, que es el fallo del 2026-10-06.
-prueba("la clave del token lleva el prefijo `flutter.` de shared_preferences",
-       "'flutter.panel_token'" in r.text, r.text[-1600:])
-prueba("y la del nombre también", "'flutter.panel_nombre'" in r.text,
-       r.text[-1600:])
-prueba("se guardan con JSON.stringify, como escribe shared_preferences",
-       "localStorage.setItem(CLAVE_TOKEN, JSON.stringify(" in r.text
-       and "localStorage.setItem(CLAVE_NOMBRE, JSON.stringify(" in r.text,
-       r.text[-1600:])
-prueba("con sesión ya guardada se salta a `/` sin tocar el código",
-       "sesionPrevia()" in r.text and "/api/yo" in r.text, r.text[-1600:])
-prueba("y esa sesión previa se lee con JSON.parse dentro de un try/catch",
-       "JSON.parse(localStorage.getItem(CLAVE_TOKEN))" in r.text
-       and "catch" in r.text, r.text[-1600:])
-# Un fallo de red al comprobar la sesión no puede gastar el código: es de un solo
-# uso y quemarlo por un titubeo de la red deja al familiar sin enlace.
-prueba("un fallo de red al comprobar la sesión NO gasta el código",
-       "el código no se ha gastado" in r.text
-       and "comprobarSesion(intentos - 1)" in r.text, r.text[-2400:])
-prueba("y se reintenta antes de avisar", "comprobarSesion(1)" in r.text,
-       r.text[-2400:])
-# Sin la clave vieja. Se quitan las líneas de comentario, porque el comentario de
-# la propia página explica a propósito por qué NO hay que usarla.
-sin_comentarios = "\n".join(l for l in r.text.splitlines()
-                            if not l.strip().startswith("//"))
-prueba("no queda ninguna clave vieja sin prefijo",
-       "localStorage.setItem('panel_token'" not in sin_comentarios
-       and "localStorage.getItem('panel_token')" not in sin_comentarios
-       and "'panel_token'" not in sin_comentarios
-       and "'panel_nombre'" not in sin_comentarios, r.text)
+# El enlace ya no canjea nada: la página es solo un aviso que apunta a `/panel`.
+prueba("la página ya NO canjea nada: no hay ni POST ni /api/acceso",
+       "/api/acceso" not in r.text and "POST" not in r.text, r.text[:400])
+prueba("ni JavaScript", "<script" not in r.text.lower(), r.text[:400])
+prueba("el aviso dice que el enlace ya no funciona",
+       "ya no funciona" in r.text, r.text[:400])
+prueba("y por dónde se pide el código nuevo: /panel",
+       "/panel" in r.text, r.text[:400])
+prueba("y lleva un enlace a la raíz para entrar con el código",
+       'href="/"' in r.text, r.text[:400])
 
-# Un código con caracteres de HTML no rompe la página. Va sin barra porque un
-# `</script>` sí la lleva, y una barra convierte el resto en otra ruta: eso se
-# comprueba aparte, más abajo, y sale 404.
-r = cliente.get("/acceso/%3Cscript%3Ealert(1)")
+# Un código con caracteres de HTML no se interpola en la página: venga lo que venga,
+# la respuesta es la misma y fija, así que no hay nada que inyectar.
+r_script = cliente.get("/acceso/%3Cscript%3Ealert(1)")
 prueba("un código con `<script>` no se inyecta tal cual en la página",
-       "<script>alert(1)" not in r.text, r.text[-1200:])
-# `json.dumps` pone `\u003c` en minúsculas; se mira en minúsculas para no depender de eso.
-prueba("y se escapa dentro del JSON de JavaScript",
-       "\\u003c" in r.text.lower(), r.text[-1200:])
+       "<script>alert(1)" not in r_script.text, r_script.text[-400:])
+prueba("y la respuesta es la MISMA que con un código normal",
+       r_script.text == r.text, None)
 prueba("con una barra en el código tampoco hay página (404, no una inyección)",
        cliente.get("/acceso/%3C%2Fscript%3E").status_code == 404,
        cliente.get("/acceso/%3C%2Fscript%3E").status_code)
@@ -762,10 +781,10 @@ prueba("con una barra en el código tampoco hay página (404, no una inyección)
 r = cliente.get("/acceso/")
 prueba("/acceso/ sin código es 404", r.status_code == 404, r.status_code)
 
-# La página de canje es lo único que NO lleva el token, así que `no-store` no hace
-# falta por el token: pero el código es de un solo uso y no debe quedar en un caché.
+# La página no lleva token, así que `no-store` no hace falta por el token, pero un
+# aviso de una puerta vieja no debe quedar en un caché de alguien.
 r = cliente.get("/acceso/abcdefghijklmnop")
-prueba("la página del canje tampoco se cachea",
+prueba("la página del aviso tampoco se cachea",
        "no-store" in r.headers.get("Cache-Control", ""), dict(r.headers))
 
 

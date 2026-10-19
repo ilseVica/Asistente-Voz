@@ -69,9 +69,18 @@ registro = logging.getLogger("panel-api")
 RAIZ_WEB = os.environ.get("PANEL_RAIZ_WEB", "/srv/web")
 
 estados = EstadoSala()
-limite_acceso = seguridad.LimiteAccesos()
+# Dos topes para el canje del código, los dos en memoria (apartado 3.1): por IP real
+# y global. El de por IP frena a una casa; el global frena a quien reparte el ataque
+# entre muchas IPs. Se cuentan FALLOS, no intentos.
+limite_acceso = seguridad.LimiteAccesos(config.INTENTOS_CODIGO_POR_IP,
+                                        config.SEGUNDOS_LIMITE_CODIGO)
+limite_codigo_global = seguridad.LimiteAccesos(config.FALLOS_CODIGO_GLOBALES,
+                                               config.SEGUNDOS_LIMITE_CODIGO_GLOBAL)
 limite_token = seguridad.LimiteAccesos(config.INTENTOS_TOKEN_POR_IP,
                                        config.SEGUNDOS_LIMITE_TOKEN)
+# La clave con la que `LimiteAccesos` cuenta el tope global. No es una IP; es un
+# nombre fijo que solo usa ese contador.
+CLAVE_GLOBAL = "global"
 base: db.BaseDatos = None
 mqtt: ClienteEstado = None
 
@@ -309,29 +318,52 @@ async def salud(request: Request):
 
 @app.post("/api/acceso")
 async def acceso(cuerpo: Canje, request: Request):
-    """Canjea el código de un solo uso por un token de sesión.
+    """Canjea el código de acceso de 6 caracteres por un token de sesión.
 
     Es un POST y no un GET porque una vista previa de Telegram, un escáner del navegador
     o un antivirus siguen los enlaces, y con un GET cualquiera de ellos gastaría el
     código antes de que el familiar haya hecho nada (apartado 3.1).
 
-    El fallo responde 401 con el MISMO texto para un código que no existe, uno caducado
-    y uno ya gastado, y no dice cuál. Un «código no válido» seguido de «código ya usado»
-    en el mismo mensaje permite ir probando y aprender de los aciertos.
+    Dos límites, los dos de FALLOS y los dos en memoria: 5 por IP real cada 10 minutos y
+    50 globales cada 10 minutos. El primero frena a quien prueba desde una casa; el
+    segundo, a quien reparte el ataque entre muchas IPs, que es el que el primero no ve.
+    Un canje correcto no gasta cupo.
+
+    El fallo responde 401 con el MISMO texto para un código que no existe, uno caducado,
+    uno ya gastado y uno de un familiar desactivado, y no dice cuál. Un «código no
+    válido» seguido de «código ya usado» en el mismo mensaje permite ir probando y
+    aprender de los aciertos.
     """
     ip = ip_real(request.client.host if request.client else "", request.headers)
 
+    if not limite_codigo_global.permitido(CLAVE_GLOBAL):
+        registro.warning("acceso bloqueado por el tope global")
+        raise HTTPException(429, "Se han hecho demasiados intentos. Espere "
+                                 "unos minutos y vuelva a intentarlo.")
     if not limite_acceso.permitido(ip):
         registro.warning("acceso bloqueado por limite desde %s", ip)
         raise HTTPException(429, "Se han hecho demasiados intentos. Espere "
                                  "unos minutos y vuelva a intentarlo.")
 
-    exito, fila = panel_acceso.canjear(base, cuerpo.codigo.strip())
+    exito, fila = panel_acceso.tomar_codigo_acceso(base, cuerpo.codigo)
     if not exito:
         limite_acceso.anotar_fallo(ip)
+        limite_codigo_global.anotar_fallo(CLAVE_GLOBAL)
         registro.warning("canje fallido desde %s", ip)
-        raise HTTPException(401, "Este enlace ya no sirve. Escriba /panel al "
-                                 "bot de la casa para pedir uno nuevo.")
+        raise HTTPException(401, "Ese código no vale. Escríbale /panel al bot de "
+                                 "la casa para pedir uno nuevo.")
+
+    # Un familiar desactivado puede tener un código vivo generado antes de que se le
+    # diera de baja. El token que se creara con él ya no valdría (la puerta del
+    # panel mira `activo`), pero tampoco debe llegar a crearse: aquí se corta el
+    # canje y se responde igual que a un código que no vale, para no revelar que
+    # el familiar existe y está desactivado.
+    if not base.familiar_activo(fila["chat_id"]):
+        limite_acceso.anotar_fallo(ip)
+        limite_codigo_global.anotar_fallo(CLAVE_GLOBAL)
+        registro.warning("canje de un familiar no activo desde %s", ip)
+        raise HTTPException(401, "Ese código no vale. Escríbale /panel al bot de "
+                                 "la casa para pedir uno nuevo.")
 
     limite_acceso.anotar_exito(ip)
     token, caduca_en = panel_acceso.crear_token(base, fila["chat_id"])
@@ -891,16 +923,20 @@ async def _vigilar_saturacion(ws: WebSocket, oyente) -> None:
     await ws.close(code=1013, reason="recargando")
 
 
-# --- La página de canje ------------------------------------------------------
+# --- La página del enlace antiguo --------------------------------------------
 
-PAGINA_CANJE = """<!DOCTYPE html>
+# El enlace de un solo uso se sustituyó por un código de 6 caracteres (apartado 3.1).
+# Esta página ya NO canjea nada: avisa de que el enlace no vale y de dónde se saca el
+# código. Se sigue sirviendo para que un enlace viejo, guardado en un chat o en los
+# marcadores de alguien, no caiga en un 404 sin explicación.
+PAGINA_ENLACE_ANTIGUO = """<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
-<title>Entrar al panel</title>
+<title>El enlace ya no funciona</title>
 <style>
   :root { color-scheme: light; }
   body { margin:0; min-height:100vh; display:grid; place-items:center;
@@ -909,186 +945,33 @@ PAGINA_CANJE = """<!DOCTYPE html>
   main { max-width:26rem; padding:2rem; text-align:center; }
   h1 { font-size:1.3rem; margin:0 0 1rem; font-weight:600; }
   p { line-height:1.5; color:#4A524F; }
-  .mal { color:#9F1D1D; }
-  .bien { color:#0E5E5A; }
-  .barra { height:.35rem; background:#DADFDB; border-radius:99px; overflow:hidden; }
-  .barra > i { display:block; height:100%; width:0; background:#0E5E5A;
-               transition:width .3s; }
+  a { color:#0E5E5A; font-weight:600; }
 </style>
 </head>
 <body>
 <main>
-  <h1 id="titulo">Entrando al panel</h1>
-  <div class="barra"><i id="progreso"></i></div>
-  <p id="texto">Un momento, por favor.</p>
+  <h1>El enlace de acceso ya no funciona</h1>
+  <p>Ahora el panel se abre con un código de seis caracteres. Escriba <b>/panel</b>
+     al bot de la casa en Telegram y le enviará el suyo; vale diez minutos y solo
+     una vez. Después abra el panel y escríbalo ahí.</p>
+  <p><a href="/">Ir al panel</a></p>
 </main>
-<script>
-var CODIGO = /*CODIGO*/null;
-var titulo = document.getElementById('titulo');
-var texto = document.getElementById('texto');
-var progreso = document.getElementById('progreso');
-
-function fallo(mensaje, tituloNuevo) {
-  titulo.textContent = tituloNuevo || 'Este enlace ya no sirve';
-  texto.textContent = mensaje;
-  texto.className = 'mal';
-  progreso.style.width = '100%';
-  progreso.style.background = '#9F1D1D';
-}
-
-// ---------------------------------------------------------------------------
-// CLAVES DEL ALMACÉN: «flutter.» + valor en JSON. NO QUITAR EL PREFIJO.
-//
-// Este HTML no es el que lee la sesión: la lee el panel Flutter, que usa
-// `shared_preferences` (lib/sesion.dart). En web, `shared_preferences` es una
-// capa sobre `localStorage` que hace dos cosas antes de escribir:
-//
-//   1. Anteponer el prefijo «flutter.» a la clave, y
-//   2. guardar el valor con `JSON.stringify`, es decir, una cadena entre
-//      comillas dobles.
-//
-// Al leer hace lo contrario (`JSON.parse` y quita el prefijo). Así que si aquí
-// se guardase `localStorage.setItem('panel_token', token)`, la página saltaría
-// a `/`, Flutter leería `flutter.panel_token` (que no existe), no encontraría
-// sesión y mostraría la pantalla de acceso con «este enlace ya se usó»: el
-// código se habría gastado y la sesión existiría debajo de otra clave.
-//
-// OJO con «arreglar» esto quitando el prefijo o el JSON: es el síntoma exacto
-// del fallo del 2026-10-06. Las claves «panel_token» y «panel_nombre» son las
-// de `Sesion._claveToken` / `Sesion._claveNombre` en `lib/sesion.dart`; si allí
-// cambian, cambian aquí, en los dos sitios a la vez.
-// ---------------------------------------------------------------------------
-var CLAVE_TOKEN = 'flutter.panel_token';
-var CLAVE_NOMBRE = 'flutter.panel_nombre';
-
-function guardarSesion(token, nombre) {
-  localStorage.setItem(CLAVE_TOKEN, JSON.stringify(token));
-  localStorage.setItem(CLAVE_NOMBRE, JSON.stringify(nombre || ''));
-}
-
-// `try/catch` porque `JSON.parse` lanza sobre cualquier texto que no sea JSON
-// válido, y una clave con el mismo nombre puede haberla escrito otra cosa (otro
-// servicio en el mismo origen, o una versión vieja de esta página). Una sesión
-// ilegible vale lo mismo que ninguna: se canjea el código.
-function sesionPrevia() {
-  try {
-    var valor = JSON.parse(localStorage.getItem(CLAVE_TOKEN));
-    return (typeof valor === 'string' && valor) ? valor : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-function abrirPanel() {
-  titulo.textContent = 'Listo';
-  texto.textContent = 'Abriendo el panel';
-  texto.className = 'bien';
-  progreso.style.width = '100%';
-  // El código sale de la barra de direcciones en cuanto salta a `/`, y con él se va
-  // de los historiales del navegador y de la vista previa del enlace.
-  location.replace('/');
-}
-
-function canjear() {
-  fetch('/api/acceso', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    // Sin `credentials`: la API no usa cookie, así que mandarla solo añadiría ruido.
-    body: JSON.stringify({codigo: CODIGO})
-  }).then(function (r) {
-    progreso.style.width = '80%';
-    if (!r.ok) {
-      fallo('Este enlace ya se usó. Escriba /panel al bot de la casa y pida un enlace nuevo.');
-      return null;
-    }
-    return r.json();
-  }).then(function (d) {
-    if (!d) { return; }
-    // El token se guarda en `localStorage`, que es POR ORIGEN: por eso esta página
-    // canjea en el origen donde está abierta y no en la dirección que traía el enlace.
-    // Es lo que hace que pegar un enlace de `villaca` en un móvil que abre el panel por
-    // `192.168.1.169` funcione sin pedir `/panel` dos veces.
-    guardarSesion(d.token, d.nombre);
-    abrirPanel();
-  }).catch(function () {
-    fallo('No se pudo contactar con el servidor. Compruebe la conexión e inténtelo de nuevo.');
-  });
-}
-
-// Si este navegador ya tiene una sesión válida, se entra sin gastar el código: así
-// pegar un enlace viejo en el móvil de la persona funciona igual, y quien no tenga
-// sesión sigue viendo «ya no sirve». El «un solo uso» no pierde nada por esto.
-//
-// Un fallo de RED al comprobar esa sesión NO gasta el código. El código es de un
-// solo uso, y quemarlo porque Tailscale titubeó un segundo deja al familiar sin
-// enlace y con un «ya se usó» que no es verdad: por eso se reintenta una vez y,
-// si sigue sin responder, se avisa sin canjear nada.
-function comprobarSesion(intentos) {
-  fetch('/api/yo', {
-    headers: {'Authorization': 'Bearer ' + tokenPrevio}
-  }).then(function (r) {
-    if (r.ok) { abrirPanel(); } else { canjear(); }
-  }).catch(function () {
-    if (intentos > 0) {
-      setTimeout(function () { comprobarSesion(intentos - 1); }, 1500);
-    } else {
-      fallo('No se pudo comprobar la sesión. Compruebe la conexión y vuelva a '
-            + 'abrir el enlace; el código no se ha gastado.',
-            'No se pudo entrar');
-    }
-  });
-}
-
-var tokenPrevio = sesionPrevia();
-if (tokenPrevio) {
-  comprobarSesion(1);
-} else {
-  canjear();
-}
-</script>
 </body>
 </html>
 """
 
 
-def _js_seguro(texto: str) -> str:
-    r"""Un texto de Python como literal de JavaScript, seguro dentro de un `<script>`.
-
-    `json.dumps` solo escapa lo que no es ASCII, y deja los `<`, `>` y `&` como están.
-    Para un valor que va a un `localStorage` o a un cuerpo JSON eso da igual, pero este
-    va dentro de un `<script>` del HTML que devuelve la respuesta: ahí un
-    `</script>` en el dato cierra la etiqueta y lo que venga después se ejecuta. Un
-    `<script>alert(1)</script>` en el campo de la URL se ejecutaría en el navegador de
-    quien lo abriera, y quien lo abre es el que ve el enlace.
-
-    Por eso se escapan a mano los tres que rompen el HTML, y también U+2028 y U+2029,
-    que son separadores de línea válidos en un literal de JavaScript pero no en
-    JavaScript de verdad: `json.dumps` los deja pasar y el navegador los cuenta como
-    fin de línea, que rompe el `var CODIGO = ...` por la mitad.
-
-    El resultado sigue siendo un literal de JavaScript válido, porque `\uXXXX` lo es
-    dentro de una cadena. Es lo que hacen las librerías de plantillas que se toman en
-    serio esto.
-    """
-    escapado = json.dumps(texto)
-    for caracter, reemplazo in (("<", "\\u003c"), (">", "\\u003e"), ("&", "\\u0026"),
-                                 ("\u2028", "\\u2028"), ("\u2029", "\\u2029")):
-        escapado = escapado.replace(caracter, reemplazo)
-    return escapado
-
-
 @app.get("/acceso/{codigo}", response_class=HTMLResponse)
 async def pagina_acceso(codigo: str):
-    """La página de canje: HTML mínimo, sin Flutter (apartado 3.1).
+    """El aviso del enlace antiguo: HTML mínimo, sin Flutter (apartado 3.1).
 
     Va declarada ANTES que el montaje de los ficheros estáticos a propósito. Con el
     `StaticFiles` montado en `/`, una ruta como `/acceso/abc` acabaría resoliéndose
-    contra el build y el código se leería en el cliente en vez de canjearse aquí.
+    contra el build y el aviso no se vería. No lee el `codigo` de la URL: venga lo
+    que venga, la respuesta es la misma, así que no hay nada que inyectar ni que
+    escapar (`_js_seguro` se fue con el canje).
     """
-    codigo = codigo.strip("/")
-    if not codigo or "/" in codigo or len(codigo) > 128:
-        raise HTTPException(404, "El enlace de acceso no es válido.")
-    return HTMLResponse(PAGINA_CANJE.replace("/*CODIGO*/null", _js_seguro(codigo)),
+    return HTMLResponse(PAGINA_ENLACE_ANTIGUO,
                         headers={"Referrer-Policy": "no-referrer",
                                  "X-Robots-Tag": "noindex, nofollow"})
 

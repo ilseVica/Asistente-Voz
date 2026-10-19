@@ -62,10 +62,9 @@ class Tema {
   static const double altoMinimo = 52;
   static const double altoNavegacion = 56;
 
-  /// A partir de 900 px el panel pasa a tres columnas con barra lateral; por
-  /// debajo, una columna con barra inferior. El número está en el diseño y aquí
-  /// es donde se decide.
-  static const double anchoEscritorio = 900;
+  /// A partir de 1024 px el panel pasa a barra lateral; por debajo, una columna
+  /// con barra inferior. El número está en el diseño y aquí es donde se decide.
+  static const double anchoEscritorio = 1024;
 
   static ThemeData construir() {
     final TextTheme base = textoTema.apply(
@@ -86,8 +85,9 @@ class Tema {
         style: FilledButton.styleFrom(
           backgroundColor: primario,
           foregroundColor: tarjeta,
-          minimumSize: const Size.fromHeight(altoMinimo),
-          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          minimumSize: const Size(0, altoMinimo),
+          textStyle: const TextStyle(
+              fontSize: 18, fontWeight: FontWeight.w700, fontFamily: familia),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(radioBoton)),
         ),
@@ -95,9 +95,10 @@ class Tema {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: primario,
-          minimumSize: const Size.fromHeight(altoMinimo),
+          minimumSize: const Size(0, altoMinimo),
           side: const BorderSide(color: primario, width: 1.5),
-          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          textStyle: const TextStyle(
+              fontSize: 17, fontWeight: FontWeight.w700, fontFamily: familia),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(radioBoton)),
         ),

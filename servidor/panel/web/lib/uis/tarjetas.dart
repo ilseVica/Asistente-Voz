@@ -145,6 +145,11 @@ class TarjetaLuz extends StatelessWidget {
             Text(detalle, style: Theme.of(contexto).textTheme.bodySmall),
             const SizedBox(height: 16),
             FilledButton(
+              // La luz se enciende con un botón ancho, como el interruptor del
+              // prototipo: el tema ya no fuerza ese ancho para no aplastar los
+              // botones que van en fila junto a un texto.
+              style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(Tema.altoMinimo)),
               // Sin datos no se manda nada: apagar una luz de la que no se sabe ni
               // si existe es una orden a ciegas.
               onPressed: (encendida == null || estado.cargandoLuz)

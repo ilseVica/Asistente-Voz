@@ -3,49 +3,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:asistente_panel/sesion.dart';
 
 void main() {
-  group('codigoDeEnlace', () {
-    test('acepta el enlace completo de Telegram', () {
-      expect(
-        codigoDeEnlace(
-            'http://villaca.tail722206.ts.net:8080/acceso/abc123DEF'),
-        'abc123DEF',
-      );
+  group('normalizarCodigo', () {
+    test('acepta un código válido de seis caracteres', () {
+      expect(normalizarCodigo('A2B3C4'), 'A2B3C4');
+      expect(normalizarCodigo('234567'), '234567');
     });
 
-    test('acepta el enlace con otros parámetros detrás', () {
-      // Los enlaces de Telegram pueden llegar con `?` o `#`. El código no lleva
-      // ninguno de los dos, así que se corta por ahí antes de partir por `/`.
-      expect(
-        codigoDeEnlace('https://192.168.1.169:8080/acceso/abc123DEF?utm=x'),
-        'abc123DEF',
-      );
-      expect(
-        codigoDeEnlace('https://ejemplo/acceso/abc123DEF#seccion'),
-        'abc123DEF',
-      );
+    test('lo pasa a mayúsculas y quita espacios y guiones al pegarlo', () {
+      expect(normalizarCodigo('a2b3c4'), 'A2B3C4');
+      expect(normalizarCodigo('  A2B3C4  '), 'A2B3C4');
+      expect(normalizarCodigo('A2B 3C4'), 'A2B3C4');
+      expect(normalizarCodigo('A2B-3C4'), 'A2B3C4');
     });
 
-    test('acepta el código suelto, por si alguien lo teclea', () {
-      expect(codigoDeEnlace('abc123DEF'), 'abc123DEF');
-      expect(codigoDeEnlace('  abc123DEF  '), 'abc123DEF');
+    test('rechaza lo que no tiene seis caracteres del alfabeto', () {
+      expect(normalizarCodigo(''), isNull);
+      expect(normalizarCodigo('     '), isNull);
+      expect(normalizarCodigo('A2B3C'), isNull); // cinco
+      expect(normalizarCodigo('A2B3C45'), isNull); // siete
     });
 
-    test('no devuelve nada para lo que no es un enlace ni un código', () {
-      expect(codigoDeEnlace(''), isNull);
-      expect(codigoDeEnlace('     '), isNull);
-      expect(codigoDeEnlace('hola'), isNull); // muy corto
-      expect(codigoDeEnlace('http://'), isNull); // sin último segmento
-      expect(codigoDeEnlace('<script>alert(1)</script>'), isNull);
-    });
-
-    test('no deja pasar de lado cualquier cosa pegada en el campo', () {
-      // El campo acepta el enlace completo, pero eso no significa que acepte
-      // cualquier cosa: sólo el último segmento si parece un código.
-      expect(codigoDeEnlace('https://ejemplo/acceso/abc def'), isNull);
-      // Un último segmento demasiado corto no es un código: si se aceptara
-      // cualquier cosa que haya después de la última barra, un `/acceso/` sin
-      // código mandaría una petición inútil al servidor.
-      expect(codigoDeEnlace('https://ejemplo/acceso/abc'), isNull);
+    test('rechaza los caracteres que el alfabeto no usa (0, 1, O, I, L)', () {
+      expect(normalizarCodigo('A0B3C4'), isNull);
+      expect(normalizarCodigo('A1B3C4'), isNull);
+      expect(normalizarCodigo('AOB3C4'), isNull);
+      expect(normalizarCodigo('AIB3C4'), isNull);
+      expect(normalizarCodigo('ALB3C4'), isNull);
     });
   });
 }

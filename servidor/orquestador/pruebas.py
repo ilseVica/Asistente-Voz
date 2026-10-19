@@ -1558,11 +1558,11 @@ finally:
         else:
             os.environ[nombre] = valor
 
-# --- 18. `/panel`: el enlace es de un solo uso y solo para los registrados ----
+# --- 18. `/panel`: el código es de un solo uso y solo para los activos ----------
 #
-# El enlace es la puerta de entrada al panel, así que sus tres reglas se comprueban
-# una a una: quién puede pedirlo, qué pasa si no hay `PANEL_URL`, y que el código
-# valga una vez y solo esa.
+# El código es la puerta de entrada al panel, así que sus tres reglas se comprueban
+# una a una: quién puede pedirlo (registrado y activo), qué pasa si no hay
+# `PANEL_URL`, y que el código valga una vez y solo esa.
 print("\n18. El comando /panel")
 print("---------------------")
 
@@ -1622,26 +1622,46 @@ try:
            u.contestado)
     config.PANEL_URL = PANEL_URL_DE_PRUEBA
 
-    # El caso normal: botón con la URL completa, y el código solo en el hash.
+    # Un familiar DESACTIVADO no puede pedir código, aunque siga registrado en la
+    # base. El texto es el mismo que el de un no registrado: no se revela que está
+    # desactivado, que es una información sobre una persona.
+    base_panel.marcar_familiar_inactivo("111")
+    u_baja = UpdateFalso("111")
+    u_baja.effective_message = MensajeConTeclado()
+    asyncio.run(bot_panel.cmd_panel(u_baja, ContextoFalso([])))
+    prueba("a un familiar desactivado no se le manda ningún código",
+           getattr(u_baja.effective_message, "teclado", None) is None
+           and u_baja.contestado
+           and u_baja.contestado[0] == bot_modulo.texto_pedir_registro(base_panel),
+           u_baja.contestado)
+    con = sqlite3.connect(ruta_panel)
+    sin_codigo_baja = con.execute(
+        "SELECT COUNT(*) FROM codigos_acceso WHERE chat_id = '111'"
+    ).fetchone()[0]
+    con.close()
+    prueba("y tampoco se creó ningún código para él", sin_codigo_baja == 0,
+           sin_codigo_baja)
+    base_panel.marcar_familiar_activo("111")
+
+    # El caso normal: el código en un mensaje de texto, con la URL a la que teclearlo.
     u = UpdateFalso("111")
     u.effective_message = MensajeConTeclado()
     asyncio.run(bot_panel.cmd_panel(u, ContextoFalso([])))
     teclado = getattr(u.effective_message, "teclado", None)
-    prueba("a un familiar registrado sí le llega un botón", teclado is not None,
+    prueba("a un familiar registrado sí le llega un botón", teclado is None,
            u.contestado)
-    botones = teclado.inline_keyboard if teclado is not None else []
-    url_boton = botones[0][0].url if botones else ""
-    prueba("el botón lleva PANEL_URL completa, con dominio (Telegram lo exige)",
-           url_boton.startswith(PANEL_URL_DE_PRUEBA + "/acceso/")
-           and "." in url_boton, url_boton)
-    codigo = url_boton.rsplit("/", 1)[-1]
-    prueba("el código son 16 caracteres del alfabeto sin 0/O ni 1/l/I",
-           len(codigo) == 16
-           and all(c in panel_acceso_modulo.ALFABETO for c in codigo), codigo)
+    prueba("el mensaje lleva la URL completa de PANEL_URL, con dominio",
+           PANEL_URL_DE_PRUEBA in " ".join(u.contestado),
+           u.contestado)
+    codigo = u.contestado[0] if u.contestado else ""
+    codigo = codigo.split("```")[1].strip() if "```" in codigo else ""
+    prueba("el código son 6 caracteres del alfabeto sin 0/O ni 1/l/I",
+           len(codigo) == 6
+           and all(c in panel_acceso_modulo.ALFABETO_CODIGO for c in codigo), codigo)
 
     con = sqlite3.connect(ruta_panel)
-    hashes = [f[0] for f in con.execute("SELECT codigo_hash FROM panel_enlaces")]
-    expires = [f[0] for f in con.execute("SELECT expira_en FROM panel_enlaces")]
+    hashes = [f[0] for f in con.execute("SELECT codigo_hash FROM codigos_acceso")]
+    expires = [f[0] for f in con.execute("SELECT expira_en FROM codigos_acceso")]
     con.close()
     prueba("en la base solo está el hash, nunca el código",
            panel_acceso_modulo.hash_de(codigo) in hashes
@@ -1650,23 +1670,22 @@ try:
            expires and 595 <= expires[0] - int(time.time()) <= 600, expires)
 
     # Un solo uso: el primero que canjea entra y el segundo no.
-    fila = base_panel.tomar_enlace_panel(panel_acceso_modulo.hash_de(codigo))
-    prueba("el primer canje entra", fila is not None and fila["chat_id"] == "111",
-           fila)
+    ok_c, fila_c = panel_acceso_modulo.tomar_codigo_acceso(base_panel, codigo)
+    prueba("el primer canje entra", ok_c is True and fila_c.get("chat_id") == "111",
+           fila_c)
     prueba("el segundo canje NO entra (de un solo uso)",
-           base_panel.tomar_enlace_panel(panel_acceso_modulo.hash_de(codigo)) is None)
+           panel_acceso_modulo.tomar_codigo_acceso(base_panel, codigo)[0] is False)
 
     # Un código inventado no cuenta como intento ni abre nada: en la tabla solo hay
     # hashes, así que adivinar es recorrer 8x10^23 combinaciones.
     prueba("un código que no existe no abre nada",
-           base_panel.tomar_enlace_panel(panel_acceso_modulo.hash_de("nada-de-eso"))
-           is None)
+           panel_acceso_modulo.tomar_codigo_acceso(base_panel, "ZZZZZZ")[0] is False)
 
     # Dos `/panel` seguidos dan dos enlaces distintos, y caducan por separado.
     u2 = UpdateFalso("111")
     u2.effective_message = MensajeConTeclado()
     asyncio.run(bot_panel.cmd_panel(u2, ContextoFalso([])))
-    codigo2 = u2.effective_message.teclado.inline_keyboard[0][0].url.rsplit("/", 1)[-1]
+    codigo2 = u2.contestado[0].split("```")[1].strip() if u2.contestado else ""
     prueba("dos /panel seguidos dan dos códigos distintos", codigo != codigo2,
            (codigo, codigo2))
 

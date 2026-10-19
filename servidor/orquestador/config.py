@@ -192,6 +192,18 @@ COLA_EVENTOS_WS = 64
 INTENTOS_ACCESO_POR_IP = 20
 SEGUNDOS_LIMITE_ACCESO = 600
 
+# El canje del código de 6 caracteres sí necesita su propio límite, porque 31^6 se
+# recorre en un ataque con miles de intentos por segundo. Dos topes, en memoria, los
+# dos en `seguridad.LimiteAccesos`:
+#   - Por IP real: 5 fallos cada 10 minutos. Frena a quien prueba desde una casa.
+#   - Global: 50 fallos cada 10 minutos entre TODAS las IPs. Es el que frena a quien
+#     reparte el ataque entre muchas IPs, que es el que el primero no ve.
+# Los dos son de fallos, no de intentos: un canje que sale bien no gasta cupo.
+INTENTOS_CODIGO_POR_IP = 5
+SEGUNDOS_LIMITE_CODIGO = 600
+FALLOS_CODIGO_GLOBALES = 50
+SEGUNDOS_LIMITE_CODIGO_GLOBAL = 600
+
 # El límite por IP de los 401 del panel (tokens de sesión y WebSocket). El token
 # tiene 43 caracteres, así que no protege el token: protege, igual que el de
 # arriba, de que un fallo convierta el endpoint en otra cosa. Separado del de

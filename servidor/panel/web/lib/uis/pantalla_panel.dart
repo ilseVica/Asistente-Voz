@@ -9,10 +9,11 @@ import 'tarjetas.dart';
 
 /// Inicio: las tarjetas, con la barra de abajo en móvil y lateral en escritorio.
 ///
-/// El corte son 900 px (apartado 5.4): por encima, tres columnas con barra
-/// lateral; por debajo, una columna con barra inferior. No hay tres pantallas,
-/// hay una que se ordena distinto, y eso es lo que evita que el panel de
-/// escritorio diga una cosa y el del móvil otra.
+/// El corte son 1024 px (apartado 5.4): por encima, barra lateral y el contenido
+/// centrado, con ambiente e inactividad en dos columnas; por debajo, una columna
+/// con barra inferior. No hay dos pantallas, hay una que se ordena distinto, y
+/// eso es lo que evita que el panel de escritorio diga una cosa y el del móvil
+/// otra.
 class PantallaPanel extends StatelessWidget {
   const PantallaPanel({super.key});
 
@@ -43,9 +44,20 @@ class PantallaPanel extends StatelessWidget {
           else
             const TarjetaLuz(),
           const SizedBox(height: 16),
-          const TarjetaAmbiente(),
-          const SizedBox(height: 16),
-          const TarjetaInactividad(),
+          if (escritorio)
+            const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(child: TarjetaAmbiente()),
+                SizedBox(width: 16),
+                Expanded(child: TarjetaInactividad()),
+              ],
+            )
+          else ...<Widget>[
+            const TarjetaAmbiente(),
+            const SizedBox(height: 16),
+            const TarjetaInactividad(),
+          ],
           const SizedBox(height: 16),
           const _AlertasRecientes(),
           const SizedBox(height: 16),
@@ -74,7 +86,7 @@ class PantallaPanel extends StatelessWidget {
                 padding: const EdgeInsets.all(32),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1040),
+                    constraints: const BoxConstraints(maxWidth: 1120),
                     child: contenido,
                   ),
                 ),

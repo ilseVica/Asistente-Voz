@@ -70,39 +70,22 @@ class Sesion {
   }
 }
 
-/// De un enlace de acceso al código.
+/// Normaliza el código de acceso que se teclea o se pega en la pantalla.
 ///
-/// Acepta dos cosas, y la razón es práctica y no estética:
+/// El código son SEIS caracteres del alfabeto `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
+/// (sin 0, 1, O, I ni L, para que no se confundan al dictarlo). Se acepta en
+/// minúsculas y con espacios o guiones de más porque se copia y se pega a mano, y
+/// una minúscula no debe ser un fallo. Devuelve `null` si, ya normalizado, no
+/// tiene la forma exacta: la pantalla lo usa para avisar antes de molestar al
+/// servidor, que es quien de verdad decide.
 ///
-///  - El enlace completo. En algunos Android el enlace de Telegram abre un
-///    navegador distinto del que está autenticado, y sin poder pegar el enlace a
-///    mano la sesión se pierde. El código es el último segmento de la URL.
-///  - El código suelto, por si alguien lo teclea a mano.
-///
-/// El canje se hace SIEMPRE en el origen donde está abierto el panel, porque el
-/// `localStorage` es por origen: canjear en el origen abierto es lo que hace que
-/// pegar el enlace funcione igual en `villaca...` y en `192.168.1.169`.
-String? codigoDeEnlace(String entrada) {
-  final String limpio = entrada.trim();
-  if (limpio.isEmpty) return null;
-
-  final String ultima;
-  if (limpio.contains('/')) {
-    // Se corta por `/` o por `?` o por `#`: el código nunca lleva ninguno de los
-    // tres, y un enlace de Telegram puede llevar los otros dos detrás.
-    final String fin = limpio
-        .replaceAll(RegExp(r'[?#].*$'), '')
-        .split('/')
-        .last
-        .trim();
-    ultima = fin;
-  } else {
-    ultima = limpio;
+/// El servidor normaliza igual (mayúsculas y sin espacios), así que este filtro
+/// no es la puerta: es para que un código incompleto no gaste un intento del
+/// límite de accesos.
+String? normalizarCodigo(String entrada) {
+  final String limpio = entrada.replaceAll(RegExp(r'[\s\-_]'), '').toUpperCase();
+  if (!RegExp(r'^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$').hasMatch(limpio)) {
+    return null;
   }
-
-  if (ultima.isEmpty) return null;
-  // Sólo letras, dígitos y guiones bajos: el código de canje es alfanumérico, y
-  // filtrar aquí evita mandar cualquier cosa que se haya pegado en el campo.
-  if (!RegExp(r'^[A-Za-z0-9_-]{6,128}$').hasMatch(ultima)) return null;
-  return ultima;
+  return limpio;
 }

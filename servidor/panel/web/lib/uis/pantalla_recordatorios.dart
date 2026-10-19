@@ -93,7 +93,7 @@ class PantallaRecordatorios extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 760),
+                    constraints: const BoxConstraints(maxWidth: 1040),
                     child: contenido,
                   ),
                 ),

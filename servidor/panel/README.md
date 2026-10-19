@@ -13,9 +13,9 @@ base compartida, no dos copias del codigo.
 |---|---|
 | `api.py` | FastAPI. Rutas, lifespan, WebSocket y el arranque por direcciones. |
 | `estado.py` | El estado de la casa en memoria, los eventos y el cliente MQTT. |
-| `seguridad.py` | Hash del token, canje del enlace y la dependencia de 401. |
-| `pruebas_api.py` | 130 comprobaciones de la API y del WebSocket, sin broker. |
-| `pruebas_estado.py` | 63 comprobaciones del estado en memoria y de los eventos. |
+| `seguridad.py` | Huella del token, sesión, límites de intentos y la dependencia de 401. |
+| `pruebas_api.py` | 190 comprobaciones de la API y del WebSocket, sin broker. |
+| `pruebas_estado.py` | 74 comprobaciones del estado en memoria y de los eventos. |
 | `pruebas_acl.py` | 8 comprobaciones de la ACL de Mosquitto: 2 escrituras permitidas y 6 denegadas. **Necesita un broker de prueba.** |
 | `web/` | El proyecto Flutter. |
 | `web_build/` | El resultado de compilar. Va montado en `/srv/web`. Ignorado por git. |
@@ -28,13 +28,14 @@ ninguno).
 
 El SDK no está en `/opt`: está en `$HOME/flutter` (Flutter 3.47.6, Dart 3.13.5). Además
 del `web_build` hay que compilar `flutter analyze` sin errores y `flutter test` verde
-(14 comprobaciones) antes de empaquetar:
+(50 comprobaciones, entre ellas la de rejilla a 390, 768, 1024, 1280, 1440 y 1920 px)
+antes de empaquetar:
 
 ```bash
 cd servidor/panel/web
 export PATH="$HOME/flutter/bin:$PATH"
 flutter analyze        # sin errores
-flutter test           # 14/14
+flutter test           # 50/50
 flutter build web \
     --release \
     --no-web-resources-cdn \
@@ -264,17 +265,25 @@ un error. Cualquier cierre (1013, 1001, 1008 o red caida) se trata como reconexi
 automatica con esperas 1, 2, 4, 8, 15, 30 s, y al reconectar recibe la instantanea
 entera, que es lo que lo hace seguro.
 
-## La pagina de canje
+## El codigo de acceso
 
-`/acceso/<codigo>` es HTML a pelo, sin Flutter, y canjea el codigo por un token con un
-`POST`. Es a proposito: Telegram y los navegadores hacen vista previa de un `GET`, y un
-`GET` a `/acceso/<codigo>` dejaria el codigo en un historial, en un `Referer` y en una
-vista previa de Telegram. Por eso el canje es un `POST` y la pagina lleva
-`Referrer-Policy: no-referrer` y `X-Robots-Tag: noindex`.
+La entrada al panel es un codigo de seis caracteres que el bot manda por Telegram al
+pedir `/panel`, y que el familiar teclea en `/panel` en el navegador. El codigo se guarda
+en la base como hash (`codigos_acceso`), es de un solo uso (se borra al canjearse), caduca
+a los 10 minutos y solo sirve a un familiar **registrado y activo**: pedir `/panel` otra vez
+invalida los anteriores.
 
-El codigo va dentro de la pagina como literal de JavaScript, y ahi `json.dumps` solo no
-basta: escapa lo no-ASCII y deja los `<`, `>` y `&` como estaban, asi que un
-`</script>` en la URL cerraria la etiqueta. Lo escapa `_js_seguro()`.
+El canje es `POST /api/acceso` con `{"codigo": "..."}`, y responde el token de sesión. Se
+normaliza al entrar (mayúsculas, sin espacios ni guiones), y los caracteres que se
+confunden se dejan fuera del alfabeto: sin `0`, `1`, `O`, `I` ni `L`. El límite es de 5
+fallos por IP en 10 minutos y, por encima, un tope global de 50 en el mismo tiempo: son dos
+contadores distintos y cada uno tiene su ventana.
+
+`/acceso/<codigo>` sigue respondiendo, pero ya no canjea nada: es un aviso fijo, sin
+JavaScript, que explica que el enlace ya no funciona y que se pide el código con `/panel`.
+Ahí no se interpola ni la URL ni el código de la petición, así que no hay nada que inyectar
+aunque alguien mande `/acceso/<script>`; la respuesta es la misma para cualquier entrada.
+Lleva `Referrer-Policy: no-referrer` y `X-Robots-Tag: noindex` igual que antes.
 
 ## Lo que este servicio no hace
 

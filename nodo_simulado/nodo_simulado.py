@@ -105,6 +105,16 @@ proxima_lectura = 0.0
 SEGUNDOS_LATIDO = 60.0
 ultimo_latido = 0.0
 
+# Cuando el firmware no puede leer un sensor real (el DHT22 falla tres veces
+# seguidas, el MQ-2 todavia calienta, o la bandera del sensor esta en false),
+# publica ese campo como `null`, no como un valor inventado. El simulador tiene que
+# poder hacer lo mismo: los comandos `temp sin`, `hum sin` y `gas sin` ponen estas
+# banderas, y el campo correspondiente sale `null` hasta que se vuelva a forzar un
+# valor.
+temp_sin_dato = False
+hum_sin_dato = False
+gas_sin_dato = False
+
 # Valor forzado por el comando de consola o por `prueba_gas`. Mientras no sea None,
 # la lectura muestreada es ese valor en lugar del del sensor.
 gas_forzado = None
@@ -273,7 +283,7 @@ def publicar_nodo_estado(conectado: bool = True) -> None:
         "ts": int(ahora()) if conectado else None,
         "ip": os.environ.get("SIMULADO_IP", "10.0.0.99"),
         "fw": "simulador-1.0",
-        "gas_adc": gas_adc,
+        "gas_adc": None if gas_sin_dato else gas_adc,
         "alertas_pendientes": alertas_pendientes,
         "gas_episodio": episodio_gas_abierto,
         "alexa": False,
@@ -308,9 +318,9 @@ def publicar_sensores(forzar: bool = False) -> None:
         temperatura = max(18.0, min(26.0, temperatura))
         humedad = max(30.0, min(70.0, humedad))
         carga = {
-            "temp_c": round(temperatura, 1),
-            "hum_pct": round(humedad),
-            "gas_adc": gas_adc,
+            "temp_c": None if temp_sin_dato else round(temperatura, 1),
+            "hum_pct": None if hum_sin_dato else round(humedad),
+            "gas_adc": None if gas_sin_dato else gas_adc,
             "presencia": presencia,
         }
         cliente.publish(
@@ -601,6 +611,12 @@ def gas_tarea() -> None:
         return
     proxima_lectura = momento + contrato.PERIODO_LECTURA_GAS_S
 
+    if gas_sin_dato:
+        # Sin dato no se abre ni se cierra nada: un null no es un cero. Es la misma
+        # regla de `gas.cpp` (SENSORES_SIN_GAS): el episodio abierto se queda como
+        # estaba y el que no estaba abierto no se abre con un valor que no existe.
+        return
+
     if oscilando:
         # Alterna por encima y por debajo del umbral de apertura, cada segundo. Con
         # la regla de tres lecturas seguidas, subir y bajar sin parar tres veces
@@ -715,7 +731,9 @@ def al_conectar(cliente, usuario, banderas, codigo, propiedades=None) -> None:
 
     log("mqtt", "umbrales de gas: abre con %d, cierra con %d",
         gas_on_adc, gas_off_adc)
-    publicar_luz_estado("panel")
+    # El origen del arranque es "arranque", igual que en el firmware (luz.cpp):
+    # el nodo no sabe quien encendio la luz, solo que al arrancar estaba apagada.
+    publicar_luz_estado("arranque")
     publicar_nodo_estado()
     publicar_sensores(forzar=True)
 
@@ -895,6 +913,7 @@ def _leer_comandos(entrada) -> None:
 def ejecutar_comando(linea: str) -> None:
     """Ejecuta un comando de consola. Cada uno responde con una linea."""
     global gas_forzado, oscilando, presencia, temperatura, humedad, luz_encendida
+    global temp_sin_dato, hum_sin_dato, gas_sin_dato
 
     if not linea:
         return
@@ -909,10 +928,14 @@ def ejecutar_comando(linea: str) -> None:
         return
 
     if comando == "estado":
+        # `gas_adc` puede ser None (comando `gas sin`): con %d saldria un
+        # "TypeError" y el comando de consola mas util del simulador se caeria.
+        # Se formatea a mano para que un None diga "sin dato".
+        gas_texto = "sin dato" if gas_sin_dato else str(gas_adc)
         log("consola",
-            "umbrales: abre %d, cierra %d | gas %d | luz %s | episodio %s | "
+            "umbrales: abre %d, cierra %d | gas %s | luz %s | episodio %s | "
             "lecturas sobre umbral %d | alertas publicadas %d | gas forzado %s",
-            gas_on_adc, gas_off_adc, gas_adc,
+            gas_on_adc, gas_off_adc, gas_texto,
             "encendida" if luz_encendida else "apagada",
             "abierto" if episodio_gas_abierto else "cerrado",
             lecturas_sobre_umbral, contador_alertas,
@@ -921,13 +944,24 @@ def ejecutar_comando(linea: str) -> None:
 
     if comando == "gas":
         if not argumentos:
-            log("consola", "uso: gas <valor> | gas normal | gas oscilar")
+            log("consola", "uso: gas <valor> | gas normal | gas oscilar | gas sin")
             return
         if argumentos[0] == "normal":
             oscilando = False
+            gas_sin_dato = False
             gas_forzado = contrato.GAS_NORMAL
             log("consola", "gas forzado a %d (aire limpio)" % contrato.GAS_NORMAL)
             publicar_sensores(forzar=True)
+            return
+        if argumentos[0] == "sin":
+            # El campo sale null, como cuando el MQ-2 todavia calienta o la bandera
+            # MQ2_HABILITADO esta en false. El conteo del gas se para.
+            oscilando = False
+            gas_sin_dato = True
+            gas_forzado = None
+            log("consola", "gas sin dato: gas_adc sale null en sensores y nodo/estado")
+            publicar_sensores(forzar=True)
+            publicar_nodo_estado()
             return
         if argumentos[0] == "oscilar":
             # Para la P09: oscila alrededor del umbral de apertura, y solo tiene
@@ -939,6 +973,7 @@ def ejecutar_comando(linea: str) -> None:
             return
         try:
             oscilando = False
+            gas_sin_dato = False
             gas_forzado = int(argumentos[0])
         except ValueError:
             log("consola", "gas %r no es un numero" % argumentos[0])
@@ -974,9 +1009,15 @@ def ejecutar_comando(linea: str) -> None:
 
     if comando in ("temp", "temp_c"):
         if not argumentos:
-            log("consola", "uso: temp <valor>")
+            log("consola", "uso: temp <valor> | temp sin")
+            return
+        if argumentos[0] == "sin":
+            temp_sin_dato = True
+            log("consola", "temp sin dato: temp_c sale null en sensores")
+            publicar_sensores(forzar=True)
             return
         try:
+            temp_sin_dato = False
             temperatura = float(argumentos[0])
         except ValueError:
             log("consola", "temp %r no es un numero" % argumentos[0])
@@ -986,9 +1027,15 @@ def ejecutar_comando(linea: str) -> None:
 
     if comando in ("hum", "hum_pct"):
         if not argumentos:
-            log("consola", "uso: hum <valor>")
+            log("consola", "uso: hum <valor> | hum sin")
+            return
+        if argumentos[0] == "sin":
+            hum_sin_dato = True
+            log("consola", "hum sin dato: hum_pct sale null en sensores")
+            publicar_sensores(forzar=True)
             return
         try:
+            hum_sin_dato = False
             humedad = float(argumentos[0])
         except ValueError:
             log("consola", "hum %r no es un numero" % argumentos[0])
@@ -1008,8 +1055,9 @@ def ejecutar_comando(linea: str) -> None:
         return
 
     log("consola", "comando %r desconocido. Comandos: ayuda, gas <valor>, gas "
-        "normal, gas oscilar, boton, luz on, luz off, presencia on, presencia off, "
-        "temp <valor>, hum <valor>, estado, salir" % comando)
+        "normal, gas oscilar, gas sin, boton, luz on, luz off, presencia on, "
+        "presencia off, temp <valor>, temp sin, hum <valor>, hum sin, estado, "
+        "salir" % comando)
 
 
 cliente = None

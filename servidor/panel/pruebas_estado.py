@@ -223,6 +223,28 @@ prueba("los sensores se renombran (temp_c -> temperatura_c, etc.)",
        and inst["sensores"]["movimiento"] is True
        and inst["sensores"]["gas_adc"] == 300, inst["sensores"])
 
+# Un latido con los tres campos sin dato (null): el firmware los manda así cuando
+# el DHT22 falla, el MQ-2 calienta o la bandera del sensor está en false. El
+# servidor NO los convierte en ceros ni los descarta: los deja pasar como null, que
+# es lo que el panel necesita para poner «Sin sensor» (2026-10-19).
+sala.recibir(config.TOPICO_SENSORES,
+             '{"temp_c":null,"hum_pct":null,"gas_adc":null,"presencia":true}')
+inst = sala.instantanea(base1)
+prueba("un latido con los tres campos en null se acepta y NO se inventa un valor",
+       inst["sensores"]["temperatura_c"] is None
+       and inst["sensores"]["humedad_pct"] is None
+       and inst["sensores"]["gas_adc"] is None, inst["sensores"])
+prueba("pero la presencia que trae el mismo mensaje sí se refleja",
+       inst["sensores"]["movimiento"] is True, inst["sensores"])
+
+# El origen «arranque» del arranque en frío: lo publica el nodo al encenderse. El
+# panel tiene que aceptarlo y enseñarlo, no tratarlo como un origen roto.
+sala.recibir(config.TOPICO_LUZ_ESTADO, '{"estado":"off","origen":"arranque"}')
+inst = sala.instantanea(base1)
+prueba("una luz con origen «arranque» se acepta y se muestra tal cual",
+       inst["luz"]["origen"] == "arranque" and inst["luz"]["encendida"] is False,
+       inst["luz"])
+
 # Un mensaje con la forma equivocada no rompe nada, pero tampoco se inventa un dato.
 sala.recibir(config.TOPICO_LUZ_ESTADO, "no soy json")
 prueba("un retenido que no es el de la luz no la enciende",

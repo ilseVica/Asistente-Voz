@@ -438,6 +438,28 @@ prueba("una lectura inyectada sale en la instantánea",
        inst["luz"]["encendida"] is True and inst["luz"]["estado"] == "conectado",
        inst["luz"])
 
+# Los sensores reales pueden venir sin dato (null) y eso tiene que llegar a la
+# interfaz como null, no como 0 ni como ausencia del campo: es lo que distingue
+# «Sin sensor» de «Sin datos» en la tarjeta de ambiente (2026-10-19).
+api_modulo.estados.recibir(
+    config.TOPICO_SENSORES,
+    '{"temp_c":null,"hum_pct":null,"gas_adc":null,"presencia":false}')
+inst = cliente.get("/api/estado", headers=cab(token_marta)).json()
+prueba("un latido con temp, hum y gas en null sale por la API como null",
+       inst["sensores"]["temperatura_c"] is None
+       and inst["sensores"]["humedad_pct"] is None
+       and inst["sensores"]["gas_adc"] is None, inst["sensores"])
+prueba("y la presencia del mismo latido se refleja",
+       inst["sensores"]["movimiento"] is False, inst["sensores"])
+
+# El origen «arranque» del arranque en frío también pasa por la API.
+api_modulo.estados.recibir(config.TOPICO_LUZ_ESTADO,
+                           '{"estado":"off","origen":"arranque"}')
+inst = cliente.get("/api/estado", headers=cab(token_marta)).json()
+prueba("una luz con origen «arranque» sale por la API sin perder el origen",
+       inst["luz"]["origen"] == "arranque" and inst["luz"]["encendida"] is False,
+       inst["luz"])
+
 # El bloque de la inactividad. Sale de SQLite (la tabla `configuracion` que comparte
 # con el orquestador), no de MQTT, y por eso lleva el ajuste y su franja.
 inact = inst["inactividad"]

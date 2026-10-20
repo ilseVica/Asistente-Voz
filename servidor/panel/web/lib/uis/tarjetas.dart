@@ -188,30 +188,40 @@ class TarjetaAmbiente extends StatelessWidget {
             recibidoEn: null);
     final int ahora = estado.ahoraServidor();
     final String antiguedad = hace(s.recibidoEn, ahora: ahora);
+    // «Sin sensor» sólo tiene sentido si el nodo está conectado y aun así manda el
+    // campo en null; sin nodo, lo que falta es información, no el sensor.
+    final bool nodoConectado = estado.estado?.nodo.estado == conectado;
 
     final List<_Dato> datos = <_Dato>[
       _Dato(
         rotulo: Textos.temperatura,
-        valor: s.temperaturaC == null
-            ? Textos.sinDatos
-            : '${_num(s.temperaturaC)} °C',
+        valor: datoDeSensor(
+            nodoConectado: nodoConectado,
+            valor: s.temperaturaC,
+            conValor: () => '${_num(s.temperaturaC)} °C'),
         tamano: 26,
       ),
       _Dato(
         rotulo: Textos.humedad,
-        valor: s.humedadPct == null ? Textos.sinDatos : '${_num(s.humedadPct)} %',
+        valor: datoDeSensor(
+            nodoConectado: nodoConectado,
+            valor: s.humedadPct,
+            conValor: () => '${_num(s.humedadPct)} %'),
         tamano: 26,
       ),
       _Dato(
         rotulo: Textos.gas,
-        valor: s.gasAdc == null ? Textos.sinDatos : Textos.noSeDetectaGas,
+        valor: datoDeSensor(
+            nodoConectado: nodoConectado,
+            valor: s.gasAdc,
+            conValor: () => Textos.noSeDetectaGas),
         tamano: 26,
         color: s.gasAdc == null ? Tema.secundario : Tema.primario,
       ),
       _Dato(
         rotulo: Textos.movimiento,
         valor: s.movimiento == null
-            ? Textos.sinDatos
+            ? (nodoConectado ? Textos.sinSensor : Textos.sinDatos)
             : s.movimiento!
                 ? Textos.ahoraMismo
                 : Textos.noSeDetectaNadie,
@@ -589,4 +599,27 @@ String _num(num? valor) {
   final double d = valor.toDouble();
   if (d == d.roundToDouble()) return d.toStringAsFixed(0);
   return d.toStringAsFixed(1);
+}
+
+/// El texto de un dato de ambiente cuando el valor puede faltar.
+///
+/// Distingue dos cosas que no son lo mismo:
+///
+///   - «Sin datos»: no se sabe nada del nodo (desconectado, o todavía no ha
+///     llegado ningún mensaje). Que el campo venga `null` aquí no dice nada del
+///     sensor, dice que no hay con quién hablar.
+///   - «Sin sensor»: el nodo SÍ está conectado y ha mandado el campo como `null`.
+///     Es lo que manda el firmware cuando el DHT22 falla tres veces, el MQ-2
+///     calienta o la bandera del sensor está en false: el nodo está vivo y dice
+///     que ese sensor no tiene dato, que es una información distinta y más útil.
+///
+/// Con el nodo conectado y el valor presente, devuelve el valor ya formateado con
+/// [conValor]. Es una función pura para poder probarla sin montar la interfaz.
+String datoDeSensor({
+  required bool nodoConectado,
+  required num? valor,
+  required String Function() conValor,
+}) {
+  if (valor != null) return conValor();
+  return nodoConectado ? Textos.sinSensor : Textos.sinDatos;
 }

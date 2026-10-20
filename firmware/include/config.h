@@ -39,7 +39,11 @@
 
 // DHT22: sensor de un solo hilo con su propio protocolo. NO es I2C, por eso el
 // nombre GPIO_PIN_DHT22 y no GPIO_PIN_SENSOR_I2C.
-#define GPIO_PIN_DHT22 4
+//
+// 2026-10-19: el cableado real lleva el DHT22 a la fila de 3.3 V del NodeMCU,
+// que es GPIO 32 (ADC1_CH4, aqui no se usa para leer analogico). El GPIO 4 con
+// el que se desarrollo era un pin libre de la tabla del plan, no el del cableado.
+#define GPIO_PIN_DHT22 32
 
 // PIR: salida digital del sensor que el ESP32 lee como entrada.
 #define GPIO_PIN_SENSOR_PIR 35
@@ -47,12 +51,24 @@
 // El PIR HC-SR501 esta cableado (OUT -> GPIO 35, salida push-pull de 3.3 V, sin
 // resistencia: GPIO 35 es solo entrada y no tiene pull interno). Con la bandera
 // en true la presencia sale del pin real; con false sigue la simulacion de
-// siempre (SIM_PRESENCIA_PERIODO_S). Temperatura, humedad y gas siguen simulados
-// en los dos casos.
+// siempre (SIM_PRESENCIA_PERIODO_S). Temperatura, humedad y gas NO se simulan:
+// con su bandera en false el campo sale null (ver la seccion de sensores).
 #define PIR_HABILITADO true
 
-// El buzzer todavia no existe (6.7), pero el pin queda cableado y pronto.
-// El modulo de rele ya llego, asi que RELE_HABILITADO pasa a true. Cambiar
+// 2026-10-19, sensores reales: banderas de los dos sensores nuevos. Con true la
+// lectura sale del componente fisico (DHT22 en GPIO 32, MQ-2 en GPIO 34); con
+// false ese campo se publica como null, que es «todavia no lo se» y no un valor
+// inventado. El panel lo enseña como «Sin sensor» mientras el nodo este conectado.
+//
+// La excepcion es el valor forzado por casa/sala/nodo/prueba_gas y por el comando
+// GAS del monitor serie (solo con PRUEBAS=1): manda sobre la bandera y sobre el
+// calentamiento del MQ-2, porque es la via con la que se prueba la alarma sin
+// tener el sensor delante.
+#define DHT22_HABILITADO true
+#define MQ2_HABILITADO true
+
+// El buzzer todavia no tiene modulo en la pared, pero el pin queda cableado.
+// El modulo de rele ya llego, asi que RELE_HABILITADO esta en true. Cambiar
 // cualquiera de las dos banderas no toca codigo.
 #define BUZZER_HABILITADO true
 #define RELE_HABILITADO true
@@ -60,8 +76,8 @@
 // El PIR HC-SR501 esta cableado (OUT -> GPIO 35, salida push-pull de 3.3 V, sin
 // resistencia: GPIO 35 es solo entrada y no tiene pull interno). Con la bandera
 // en true la presencia sale del pin real; con false sigue la simulacion de
-// siempre (SIM_PRESENCIA_PERIODO_S). Temperatura, humedad y gas siguen simulados
-// en los dos casos.
+// siempre (SIM_PRESENCIA_PERIODO_S). Temperatura, humedad y gas NO se simulan:
+// con su bandera en false el campo sale null (ver la seccion de sensores).
 #define PIR_HABILITADO true
 
 // El boton externo queda desactivado por defecto hasta que llegue el hardware.
@@ -183,6 +199,12 @@
 #define LUZ_ORIGEN_ALEXA "alexa"
 #define LUZ_ORIGEN_PANEL "panel"
 #define LUZ_ORIGEN_BOTON "boton"
+// Origen que el propio nodo publica en luz/estado cuando la luz nace apagada en un
+// arranque en frio: no la cambio nadie, asi que atribuirselo a «boton», «panel» o
+// «voz» seria mentir sobre quien la dejo asi (2026-10-19). NO entra en la lista de
+// origenes validos de una orden de luz/set de contrato.cpp: solo lo publica el
+// nodo, nunca lo recibe.
+#define LUZ_ORIGEN_ARRANQUE "arranque"
 
 // Antiguedad maxima de una orden de luz. El plan (Fase 4, "Regla de antiguedad") y
 // la propuesta v3 (2.3) ponen 10 segundos: se descarta lo que tenga mas, y tambien
@@ -216,25 +238,28 @@
 // («PIR calentando») y al terminar («PIR listo»).
 #define PIR_CALIENTE_MS MS_60S
 
-// ---------------------------------------------------------------------------
-// Simulacion. Los sensores reales todavia no estan (6.7), asi que las lecturas
-// las genera este modulo. Cuando llegue el hardware se sustituyen las funciones
-// de lectura de sensores.cpp y no se toca nada mas.
-// El gas simulado es una CONSTANTE en rango de aire limpio. Dos versiones
-// anteriores lo hicieron mal y las dos se corrigieron en la v3 (6.16):
-//   - fluctuaba entre 1400 y 2200 y cruzaba el umbral de 1800 por su cuenta, con
-//     alertas falsas en el firmware normal;
-//   - luego oscilaba entre 250 y 450. Eso ya no daba alertas falsas, pero si
-//     llenaba el topic casa/sala/sensores, porque la regla de frecuencia compara
-//     gas_adc con un margen de 50 y cada lectura se salia del margen.
-// Con un valor fijo la simulacion no publica nada por si sola. El unico camino
-// para moverlo es casa/sala/nodo/prueba_gas.
-// ---------------------------------------------------------------------------
-#define SIM_GAS_POR_DEFECTO 312
-#define SIM_TEMP_BASE_C 24.5
-#define SIM_TEMP_VARIACION_C 0.5
-#define SIM_HUM_BASE_PCT 60
-#define SIM_HUM_VARIACION_PCT 3
+// Calentamiento del MQ-2: los primeros 3 minutos el valor no es confiable (datasheet
+// de la resistencia de calefaccion). Durante ese tiempo gas_adc se publica null y
+// la maquina de episodios no evalua umbrales, asi que un arranque no puede abrir un
+// episodio falso. El valor forzado por nodo/prueba_gas o por el comando GAS SI
+// funciona durante el calentamiento: es la via de prueba del plan (P45), y exigir
+// 3 minutos de espera para probarla no tiene sentido.
+#define MQ2_MS_CALIENTE MS_3MIN
+
+// El DHT22 no admite lecturas mas seguidas que cada 2 s: por debajo devuelve NAN o
+// repite el valor anterior. Si tres lecturas seguidas salen mal, los campos temp y
+// hum se publican null en lugar de inventar un numero, y el log lo dice.
+#define DHT22_MS_ENTRE_LECTURAS 2000UL
+#define DHT22_FALLIDAS_MAX 3
+
+// 2026-10-19, fin de la simulacion de sensores: se borraron SIM_GAS_POR_DEFECTO,
+// SIM_TEMP_BASE_C, SIM_TEMP_VARIACION_C, SIM_HUM_BASE_PCT, SIM_HUM_VARIACION_PCT y
+// sensores_aleatorio_entre(). Con un sensor deshabilitado o fallando el campo se
+// publica null; no hay ningun valor inventado. Queda SOLO la simulacion de
+// presencia, que sigue siendo el respaldo de PIR_HABILITADO=false.
+//
+// La unica excepcion, ya antes, es casa/sala/nodo/prueba_gas y el comando GAS del
+// monitor serie: mueve gas_adc a mano cuando hace falta probar la alarma.
 
 // La presencia alterna sola cada 3 minutos, independiente de prueba_gas (correccion 8).
 #define SIM_PRESENCIA_PERIODO_S 180

@@ -61,6 +61,7 @@ class Textos {
   static const String encendida = 'Encendida';
   static const String apagada = 'Apagada';
   static const String sinDatos = 'Sin datos';
+  static const String sinSensor = 'Sin sensor';
   static const String todaviaNoHayLuz = 'Todavía no hay información de la luz.';
   static const String sinDatosDeLaLuz = 'Sin datos de la luz';
   static const String apagarLaLuz = 'Apagar la luz';
@@ -236,6 +237,8 @@ String origenDeLuz(String? origen) {
       return 'Con el botón';
     case 'alexa':
       return 'Con Alexa';
+    case 'arranque':
+      return 'Tras un reinicio';
     default:
       return 'Origen desconocido';
   }

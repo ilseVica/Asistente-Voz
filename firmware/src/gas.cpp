@@ -11,7 +11,11 @@ constexpr char ETIQUETA[] = "gas";
 
 bool episodio_abierto = false;
 int lecturas_sobre_umbral = 0;
-int ultima_lectura = SIM_GAS_POR_DEFECTO;
+// -1 = sin dato (SENSORES_SIN_GAS): MQ-2 calentando o deshabilitado. El valor
+// forzado por nodo/prueba_gas si hay, porque manda sobre las dos.
+int ultima_lectura = SENSORES_SIN_GAS;
+// Aviso de «sin dato» emitido una sola vez, no una vez por segundo.
+bool aviso_sin_dato = false;
 
 // Cierre: cuenta los segundos seguidos por debajo del umbral de cierre.
 uint32_t inicio_bajo_umbral_ms = 0;
@@ -36,9 +40,12 @@ uint32_t ultimo_pitido_fin_ms = 0;
 }  // namespace
 
 void gas_iniciar() {
-  ultima_lectura = SIM_GAS_POR_DEFECTO;
+  ultima_lectura = SENSORES_SIN_GAS;
   proxima_lectura_ms = 0;
   ultimo_pitido_fin_ms = 0;
+  aviso_sin_dato = false;
+  episodio_abierto = false;
+  lecturas_sobre_umbral = 0;
 #if BUZZER_HABILITADO
   pinMode(GPIO_PIN_BUZZER, OUTPUT);
   digitalWrite(GPIO_PIN_BUZZER, LOW);
@@ -140,7 +147,26 @@ void gas_tarea() {
   }
   proxima_lectura_ms = ahora + PERIODO_LECTURA_GAS_MS;
 
-  ultima_lectura = sensores_leer().gas_adc;
+  const Lectura lectura = sensores_leer();
+  ultima_lectura = lectura.hay_gas ? lectura.gas_adc : SENSORES_SIN_GAS;
+
+  if (!lectura.hay_gas) {
+    // Sin dato no se abren ni se cierran episodios: un null no es un cero y
+    // compararlo con el umbral abriria (o cerraria) por un hueco de la lectura.
+    // Un episodio YA abierto se mantiene, porque el valor que lo abrio si fue
+    // valido; lo que no se hace es mirar umbrales con una lectura que no existe.
+    lecturas_sobre_umbral = 0;
+    if (!aviso_sin_dato) {
+      aviso_sin_dato = true;
+      log_aviso(ETIQUETA, "sin lectura de gas (MQ-2 calentando o deshabilitado); no se "
+                "miran umbrales%s", episodio_abierto ? ", el episodio abierto sigue" : "");
+    }
+    return;
+  }
+  if (aviso_sin_dato) {
+    aviso_sin_dato = false;
+    log_info(ETIQUETA, "lectura de gas disponible: gas=%d", ultima_lectura);
+  }
 
   // Los dos umbrales se leen de la persistencia, y el de cierre es un numero
   // propio. Antes era `umbral - GAS_HISTERESIS`, o sea 1650 en vez de los 1550 del

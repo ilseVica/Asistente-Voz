@@ -67,7 +67,7 @@ la Flash. El ESP32 resuelve ese host por mDNS una vez al arrancar.
 | Botón externo | 33 | Cableado, con antirrebote, pero `BOTON_EXTERNO_HABILITADO = false` hasta que llegue el hardware |
 | Módulo de relé | 26 | `RELE_HABILITADO = false`. Con módulo de relé de 3.3 V y transistor, nunca el relé directo |
 | Buzzer | 27 | Con módulo con transistor |
-| DHT22 | 4 | **No es I2C**: es un pin de datos con su propia librería |
+| DHT22 | 32 | **No es I2C**: es un pin de datos con su propia librería. Cableado a la fila de 3.3 V |
 | MQ-2 | 34 | ADC1, atenuación 11 dB |
 | PIR | 35 | Solo entrada |
 
@@ -198,7 +198,9 @@ docker compose exec mosquitto mosquitto_pub -h 127.0.0.1 -p 1883 \
 
 1. **Prueba P10 (aire limpio, cero alertas).** Con `nodemcu-32s`, déjala 30 minutos
    con el broker conectado. No debe aparecer ningún mensaje en `casa/sala/alerta/gas`.
-   El gas simulado es una constante (312) precisamente para que esto sea cierto.
+   El MQ-2 real da un valor bajo en aire limpio y no llega al umbral; durante los
+   primeros 3 minutos (`MQ2_MS_CALIENTE`) el campo `gas_adc` sale `null` a propósito,
+   porque un sensor sin calentar no mide.
 
 2. **Prueba P32 (todolocal sin broker).** Detén el broker o quita el Wi-Fi. El botón
    BOOT, Alexa y la alarma de gas tienen que funcionar las tres.
@@ -249,10 +251,15 @@ de MQTT, que descarta justamente lo que no lo trae: son locales, como las del bo
   donde se compiló, así que ninguna de las pruebas de arriba está ejecutada. Los dos
   builds compilan y enlazan.
 - **No hay relé ni buzzer reales.** `RELE_HABILITADO = false`; el LED hace de luz.
-- **Los sensores son simulados.** Cuando lleguen el DHT22, el PIR y el MQ-2 se
-  sustituyen las funciones de lectura de `src/sensores.cpp` y no se toca nada más.
+- **Los sensores de ambiente ya son reales.** El DHT22 se lee en GPIO 32 y el MQ-2 en
+  GPIO 34; cada uno puede salir `null` si no tiene dato (DHT22: tres fallos seguidos;
+  MQ-2: los primeros 3 minutos de calentamiento, o `MQ2_HABILITADO = false`). La
+  presencia sigue con el PIR real y, como respaldo, la simulación de
+  `SIM_PRESENCIA_PERIODO_S`. Ya no quedan valores de gas, temperatura ni humedad
+  simulados.
 - **La polaridad del LED está sin confirmar.** Si en la primera prueba GPIO 2 alto
   resulta ser apagar, se cambia `LED_ACTIVO_EN_NIVEL_BAJO` en `include/config.h`, no el
   código.
-- **El NTP local (chrony) no está configurado**, así que el respaldo por SNTP contra
-  la VM todavía no funciona. Requiere `sudo`.
+- **Orden de la hora:** el NTP primario es la VM (`192.168.1.169`) y el respaldo
+  `pool.ntp.org`. Mientras no haya hora válida, `ts` y la hora de los registros salen
+  `null` y el reintento es cada 5 s (`MS_REINTENTO_SIN_HORA`).

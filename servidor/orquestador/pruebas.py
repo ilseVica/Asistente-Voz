@@ -1572,11 +1572,19 @@ bot_panel = bot_modulo.ClienteBot(base_panel, RemitenteFalso())
 
 
 class MensajeConTeclado(MensajeFalso):
-    """El de `MensajeFalso`, pero guardando también el teclado del botón."""
+    """El de `MensajeFalso`, pero guardando también el teclado y el parse_mode."""
 
     async def reply_text(self, texto, **kw):
         self.respuestas.append(texto)
         self.teclado = kw.get("reply_markup")
+        self.parse_mode = kw.get("parse_mode")
+
+
+def codigo_de(texto):
+    """El código que hay dentro de <code>...</code>, o '' si no lo hay."""
+    import re  # noqa: PLC0415
+    encontrado = re.search(r"<code>([^<]+)</code>", texto or "")
+    return encontrado.group(1) if encontrado else ""
 
 
 PANEL_URL_DE_PRUEBA = "http://villaca.tail722206.ts.net:8080"
@@ -1643,21 +1651,77 @@ try:
            sin_codigo_baja)
     base_panel.marcar_familiar_activo("111")
 
-    # El caso normal: el código en un mensaje de texto, con la URL a la que teclearlo.
+    # El caso normal: el código en un mensaje de HTML, con la URL a la que
+    # teclearlo y dos botones: copiar el código y abrir el panel.
+    from telegram.constants import ParseMode  # noqa: E402
+
     u = UpdateFalso("111")
     u.effective_message = MensajeConTeclado()
     asyncio.run(bot_panel.cmd_panel(u, ContextoFalso([])))
     teclado = getattr(u.effective_message, "teclado", None)
-    prueba("a un familiar registrado sí le llega un botón", teclado is None,
-           u.contestado)
+    prueba("a un familiar registrado sí le llega un teclado",
+           teclado is not None and len(teclado.inline_keyboard) == 2, teclado)
+    prueba("y el mensaje va con parse_mode HTML, para pintar el código",
+           getattr(u.effective_message, "parse_mode", None) == ParseMode.HTML,
+           getattr(u.effective_message, "parse_mode", None))
     prueba("el mensaje lleva la URL completa de PANEL_URL, con dominio",
-           PANEL_URL_DE_PRUEBA in " ".join(u.contestado),
-           u.contestado)
-    codigo = u.contestado[0] if u.contestado else ""
-    codigo = codigo.split("```")[1].strip() if "```" in codigo else ""
+           PANEL_URL_DE_PRUEBA in " ".join(u.contestado), u.contestado)
+    codigo = codigo_de(u.contestado[0] if u.contestado else "")
     prueba("el código son 6 caracteres del alfabeto sin 0/O ni 1/l/I",
            len(codigo) == 6
            and all(c in panel_acceso_modulo.ALFABETO_CODIGO for c in codigo), codigo)
+
+    # El teclado: fila 1 = copiar el código (copy_text), fila 2 = abrir el panel.
+    botones = teclado.to_dict()["inline_keyboard"] if teclado else []
+    copiar = botones[0][0] if len(botones) >= 1 and botones[0] else {}
+    abrir = botones[1][0] if len(botones) >= 2 and botones[1] else {}
+    prueba("el primer botón copia el código con un toque",
+           copiar.get("text") == textos.PANEL_BOTON_COPIAR
+           and copiar.get("copy_text", {}).get("text") == codigo, copiar)
+    prueba("el segundo botón abre el panel en la URL de PANEL_URL",
+           abrir.get("text") == textos.PANEL_BOTON_ABRIR
+           and abrir.get("url") == PANEL_URL_DE_PRUEBA, abrir)
+    prueba("y el código NO va dentro de la URL del botón",
+           codigo and codigo not in (abrir.get("url") or ""), abrir.get("url"))
+
+    # Un mensaje con parse_mode HTML se le como HTML: si se escapa mal cualquier
+    # cosa, Telegram lo rechaza y el familiar no ve ni el código ni el error. Se
+    # parsea con el parser del navegador y se mira lo que sale: el unico marcado
+    # permitido es <code>, y el texto tiene que seguir llevando el codigo y la URL.
+    import html.parser  # noqa: E402, PLC0415
+
+    class _ParserHTML(html.parser.HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.etiquetas = []
+            self.texto = ""
+
+        def handle_starttag(self, etiqueta, _atributos):
+            self.etiquetas.append(etiqueta)
+
+        def handle_data(self, dato):
+            self.texto += dato
+
+    _parser = _ParserHTML()
+    _parser.feed(u.contestado[0] if u.contestado else "")
+    prueba("el mensaje se puede parsear como HTML y solo lleva <code>",
+           sorted(set(_parser.etiquetas)) == ["code"], _parser.etiquetas)
+    prueba("y dentro sigue estando el codigo y la URL, sin que se pierda nada",
+           codigo in _parser.texto and PANEL_URL_DE_PRUEBA in _parser.texto,
+           _parser.texto[:120])
+    prueba("el URL que se enseña es la de config, escapada como texto",
+           html.escape(PANEL_URL_DE_PRUEBA) in u.contestado[0], u.contestado[0])
+
+    # Ningún carácter con significado en HTML queda suelto fuera del <code>: si
+    # alguien metiera un < o un & en la plantilla, Telegram devolveria un 400 y el
+    # codigo no llegaria.
+    plantilla_sin_tag = (textos.PANEL_CODIGO.replace("<code>", "")
+                         .replace("</code>", ""))
+    prueba("fuera del <code> la plantilla no tiene marcado HTML suelto",
+           "<" not in plantilla_sin_tag and ">" not in plantilla_sin_tag,
+           plantilla_sin_tag[:80])
+    prueba("el URL que se enseña es la de config, escapada como texto",
+           html.escape(PANEL_URL_DE_PRUEBA) in u.contestado[0], u.contestado[0])
 
     con = sqlite3.connect(ruta_panel)
     hashes = [f[0] for f in con.execute("SELECT codigo_hash FROM codigos_acceso")]
@@ -1685,7 +1749,7 @@ try:
     u2 = UpdateFalso("111")
     u2.effective_message = MensajeConTeclado()
     asyncio.run(bot_panel.cmd_panel(u2, ContextoFalso([])))
-    codigo2 = u2.contestado[0].split("```")[1].strip() if u2.contestado else ""
+    codigo2 = codigo_de(u2.contestado[0] if u2.contestado else "")
     prueba("dos /panel seguidos dan dos códigos distintos", codigo != codigo2,
            (codigo, codigo2))
 
@@ -3039,6 +3103,241 @@ prueba("y sin valor guardado, el tiempo de inactividad es el de fabrica",
 prueba("sin perder lo que ya habia en la base",
        base_v5.familiar_registrado("999") is True)
 base_v5.cerrar()
+
+
+# =============================================================================
+# 23. Sensores sin datos, origen «arranque», hora del firmware y el conteo del fan out
+# =============================================================================
+#
+# La entrega del 2026-10-19 cambia tres cosas en el firmware y una en el servidor, y
+# ninguna de las cuatro se puede probar con una red: se comprueba leyendo el codigo
+# que va a compilar (la misma filosofia de la seccion 21, que ya lee el acl.conf y
+# el docker-compose) y, en el servidor, con una base de 1 activo y 1 inactivo.
+print("\n23. Sensores sin datos, arranque, hora y el conteo del fan out")
+print("---------------------------------------------------------------")
+
+# --- a) El log del fan out cuenta ACTIVOS, no el total ------------------------
+#
+# insertar_alerta hace el fan out SOLO a familiares_activos (db.insertar_alerta), y
+# el log decia contar_familiares(), que cuenta tambien a los dados de baja: en la
+# base real (2 registrados, 1 activo) salia «encolada para 2 familiar(es)» con un
+# solo envio. Un log que miente sobre cuantos reciben es un log con el que no se
+# puede diagnosticar nada.
+base_fan, _ = base_nueva("fanout-")
+base_fan.registrar_familiar("1111111111111")
+base_fan.registrar_familiar("2222222222222")
+base_fan.marcar_familiar_inactivo("2222222222222")
+# inactividad y alertas tienen cada uno su logger (logging.getLogger("inactividad")
+# y "alertas"). El manipulador de arriba cuelga del de alertas, asi que para esta
+# prueba hace falta capturar tambien el de inactividad.
+log_inactividad = []
+
+
+class _CapturaInactividad(logging.Handler):
+    def emit(self, registro_emitido):
+        log_inactividad.append(registro_emitido.getMessage())
+
+
+manejador_inactividad = _CapturaInactividad()
+manejador_inactividad.setLevel(logging.WARNING)
+inactividad_modulo.registro.addHandler(manejador_inactividad)
+inactividad_modulo.registro.setLevel(logging.WARNING)
+
+T0F = 1_700_000_000
+reloj_fan = inactividad_modulo.Estado(base_fan, ahora=T0F)
+reloj_fan.registrar_nodo('{"conectado":true}', ahora=T0F)
+reloj_fan.registrar_sensores('{"presencia":true}', ahora=T0F + 1)
+reloj_fan.registrar_sensores('{"presencia":false}', ahora=T0F + 10)
+base_fan.guardar_tiempo_inactividad(2)
+log_inactividad.clear()
+apuntes_fan, publicar_fan = publicar_que_recoge()
+alertada_fan = reloj_fan.verificar(publicar_fan, ahora=T0F + 10 + 120)
+avisos_fan = [m for m in log_inactividad if "encolada" in m]
+prueba("con 1 activo y 1 inactivo la inactividad si se avisa",
+       alertada_fan is True and apuntes_fan, apuntes_fan)
+prueba("y el log dice 1 familiar activo, no el total de 2",
+       len(avisos_fan) == 1 and "1 familiar(es) activo(s)" in avisos_fan[0]
+       and "2 familiar" not in avisos_fan[0], avisos_fan)
+envios_fan = base_fan.conexion.execute(
+    "SELECT COUNT(*) FROM envios WHERE alerta_id = ?",
+    ("srv-inactividad-%d" % (T0F + 10),)).fetchone()[0]
+prueba("y solo hay UN envio en la base, el del familiar activo", envios_fan == 1,
+       envios_fan)
+inactividad_modulo.registro.removeHandler(manejador_inactividad)
+
+# El mismo log, ahora para una alerta de ayuda (alertas.procesar).
+log_capturado.clear()
+base_fan2, _ = base_nueva("fanout2-")
+base_fan2.registrar_familiar("1111111111111")
+base_fan2.registrar_familiar("2222222222222")
+base_fan2.marcar_familiar_inactivo("2222222222222")
+alertas.procesar(config.TOPICO_ALERTA_AYUDA,
+                 '{"id":"000000-b023-0001","origen":"alexa"}', base_fan2)
+avisos_gas = [r.getMessage() for r in log_capturado if "encolada" in r.getMessage()]
+prueba("el log de alertas.procesar tambien cuenta 1 familiar activo",
+       len(avisos_gas) == 1 and "1 familiar(es) activo(s)" in avisos_gas[0]
+       and "ningun familiar" not in avisos_gas[0], avisos_gas)
+prueba("y solo un envio en la base", base_fan2.conexion.execute(
+    "SELECT COUNT(*) FROM envios WHERE alerta_id = ?",
+    ("000000-b023-0001",)).fetchone()[0] == 1)
+
+# Sin NINGUN activo (el unico registrado esta dado de baja), el log lo dice.
+log_capturado.clear()
+base_fan3, _ = base_nueva("fanout3-")
+base_fan3.registrar_familiar("3333333333333")
+base_fan3.marcar_familiar_inactivo("3333333333333")
+alertas.procesar(config.TOPICO_ALERTA_AYUDA,
+                 '{"id":"000000-b023-0002","origen":"alexa"}', base_fan3)
+avisos_baja = [r.getMessage() for r in log_capturado if "encolada" in r.getMessage()]
+prueba("sin ningun familiar activo el log lo dice y no inventa un numero",
+       len(avisos_baja) == 1 and "ningun familiar activo" in avisos_baja[0],
+       avisos_baja)
+prueba("y la alerta se guarda igual, esperando a que se active alguien",
+       base_fan3.obtener_alerta("000000-b023-0002") is not None)
+
+# --- b) Un latido con temp/hum/gas en null no rompe el orquestador ------------
+#
+# Es lo que manda el firmware cuando el DHT22 falla tres veces, el MQ-2 calienta o
+# la bandera del sensor esta en false. El orquestador solo mira `presencia`, y ese
+# «solo» hay que probarlo, no creerlo.
+base_nul, _ = base_nueva("nulos-")
+T0N = 1_700_000_000
+reloj_nul = inactividad_modulo.Estado(base_nul, ahora=T0N)
+reloj_nul.registrar_nodo('{"conectado":true}', ahora=T0N)
+try:
+    reloj_nul.registrar_sensores(
+        '{"temp_c":null,"hum_pct":null,"gas_adc":null,"presencia":true}',
+        ahora=T0N + 1)
+    nulos_ok = True
+except Exception as error:  # noqa: BLE001
+    nulos_ok = error
+prueba("un latido con temp, hum y gas en null no revienta", nulos_ok is True,
+       nulos_ok)
+prueba("y la presencia que trae el mismo mensaje si se tiene en cuenta",
+       reloj_nul.ultimo_movimiento == T0N + 1, reloj_nul.ultimo_movimiento)
+
+# --- c) El firmware: lo que hay que ver en el codigo --------------------------
+ruta_firmware = None
+_candidato = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _ in range(4):
+    _posible = os.path.join(_candidato, "firmware", "platformio.ini")
+    if os.path.exists(_posible):
+        ruta_firmware = os.path.dirname(_posible)
+        break
+    _candidato = os.path.dirname(_candidato)
+
+if ruta_firmware:
+    def _leer(relativa):
+        with open(os.path.join(ruta_firmware, relativa), encoding="utf-8") as f:
+            return f.read()
+
+    hora_cpp = _leer("src/hora.cpp")
+    hora_h = _leer("src/hora.h")
+    config_h = _leer("include/config.h")
+    sensores_cpp = _leer("src/sensores.cpp")
+    sensores_h = _leer("src/sensores.h")
+    gas_cpp = _leer("src/gas.cpp")
+    nodo_estado_cpp = _leer("src/nodo_estado.cpp")
+    luz_cpp = _leer("src/luz.cpp")
+    platformio_ini = _leer("platformio.ini")
+
+    # Hora (decision 7). El NTP primario es el de la VM y el respaldo el publico.
+    prueba("el NTP primario es el de la VM y el respaldo el publico",
+           'NTP_PRIMARIO[] = "192.168.1.169"' in hora_cpp
+           and 'NTP_RESPALDO[] = "pool.ntp.org"' in hora_cpp, hora_cpp[:400])
+    prueba("el reintento sin hora baja de 60 s a 5 s",
+           "MS_REINTENTO_SIN_HORA = 5000UL" in hora_cpp, None)
+    # hora_es_valida lee el reloj en cada llamada, sin depender de la bandera.
+    cuerpo_hora_valida = hora_cpp[hora_cpp.find("bool hora_es_valida()"):]
+    cuerpo_hora_valida = cuerpo_hora_valida[:cuerpo_hora_valida.find("\n}")]
+    prueba("hora_es_valida lee time(nullptr) y compara con el umbral",
+           "time(nullptr)" in cuerpo_hora_valida
+           and "UMBRAL_HORA_VALIDA" in cuerpo_hora_valida, cuerpo_hora_valida)
+    prueba("y no devuelve la bandera guardada",
+           "return hora_valida" not in cuerpo_hora_valida, cuerpo_hora_valida)
+    cuerpo_epoch = hora_cpp[hora_cpp.find("int64_t hora_epoch_o_desconocida()"):]
+    cuerpo_epoch = cuerpo_epoch[:cuerpo_epoch.find("\n}")]
+    prueba("hora_epoch_o_desconocida usa hora_es_valida, no la bandera",
+           "hora_es_valida()" in cuerpo_epoch, cuerpo_epoch)
+    prueba("el -1 de «todavia no hay hora» sigue siendo -1 y no 0",
+           "hora_es_valida() ? hora_epoch() : -1" in cuerpo_epoch, cuerpo_epoch)
+    prueba("hora.h documenta que el criterio se aplica leyendo el reloj",
+           "LEYENDO el reloj" in hora_h, None)
+
+    # Sensores (decisiones 1 y 2): sin sensor no hay valor inventado.
+    prueba("el DHT22 esta en el GPIO 32 del cableado real",
+           "#define GPIO_PIN_DHT22 32" in config_h, None)
+    prueba("las dos banderas de sensor arrancan en true",
+           "#define DHT22_HABILITADO true" in config_h
+           and "#define MQ2_HABILITADO true" in config_h, None)
+    prueba("el MQ-2 calienta 3 minutos antes de dar gas_adc",
+           "MQ2_MS_CALIENTE MS_3MIN" in config_h
+           and "MQ2_MS_CALIENTE" in sensores_cpp, None)
+    prueba("el DHT22 se lee cada 2 s y cae a null a los 3 fallos",
+           "DHT22_MS_ENTRE_LECTURAS 2000UL" in config_h
+           and "DHT22_FALLIDAS_MAX 3" in config_h
+           and "DHT22_FALLIDAS_MAX" in sensores_cpp, None)
+    prueba("el ADC del MQ-2 sigue con atenuacion de 11 dB",
+           "analogSetPinAttenuation(GPIO_PIN_GAS_ADC, ADC_11db)" in sensores_cpp
+           and "ADCN_GAS ADC1_CHANNEL_6" in config_h, None)
+    prueba("los campos sin dato van como null explicito en el JSON de sensores",
+           'String("null")' in sensores_cpp
+           and "lectura.hay_temp ?" in sensores_cpp
+           and "lectura.hay_hum ?" in sensores_cpp
+           and "lectura.hay_gas ?" in sensores_cpp, None)
+    prueba("gas_adc sin dato sale null tambien en nodo/estado",
+           '\\"gas_adc\\":null' in nodo_estado_cpp
+           and "gas < 0" in nodo_estado_cpp, None)
+    prueba("y el resumen del monitor dice sin_dato en vez de -1",
+           '"sin_dato"' in nodo_estado_cpp, None)
+    prueba("la simulacion de temp, hum y gas se borro",
+           "#define SIM_GAS_POR_DEFECTO" not in config_h
+           and "#define SIM_TEMP_BASE_C" not in config_h
+           and "#define SIM_HUM_BASE_PCT" not in config_h
+           and "#define SIM_TEMP_VARIACION_C" not in config_h
+           and "sensores_aleatorio_entre" not in sensores_h
+           and "SIM_GAS_POR_DEFECTO" not in sensores_cpp, None)
+    prueba("y sigue existiendo la de presencia, que es el respaldo del PIR",
+           "#define SIM_PRESENCIA_PERIODO_S 180" in config_h, None)
+    prueba("el gas sin dato no abre ni cierra episodios",
+           "SENSORES_SIN_GAS" in gas_cpp
+           and "Sin dato no se abren ni se cierran episodios" in gas_cpp
+           and "int ultima_lectura = SIM_GAS_POR_DEFECTO" not in gas_cpp, None)
+    prueba("la libreria del DHT22 va con version fija en platformio.ini",
+           "adafruit/DHT sensor library@1.4.7" in platformio_ini
+           and "adafruit/Adafruit Unified Sensor@1.1.15" in platformio_ini, None)
+
+    # Origen «arranque» (decision 4): lo publica el nodo al arrancar, y solo eso.
+    prueba("la luz nace apagada con origen arranque",
+           '#define LUZ_ORIGEN_ARRANQUE "arranque"' in config_h
+           and "origen_actual = LUZ_ORIGEN_ARRANQUE" in luz_cpp, None)
+    prueba("y el arranque en frio deja el estado como conocido",
+           "estado_conocido = true" in luz_cpp, None)
+    prueba("arranque NO se acepta como origen de una orden de luz/set",
+           "LUZ_ORIGEN_ARRANQUE" not in _leer("src/contrato.cpp"), None)
+    prueba("el orquestador no mete arranque en los origenes de AYUDA",
+           "arranque" not in config.ORIGENES_VALIDOS, config.ORIGENES_VALIDOS)
+else:
+    prueba("existe el firmware con platformio.ini para revisar el codigo", False,
+           ruta_firmware)
+
+# --- d) El nodo simulado: «arranque» al conectar y comandos «sin» -------------
+ruta_simulador = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "nodo_simulado", "nodo_simulado.py")
+if os.path.exists(ruta_simulador):
+    with open(ruta_simulador, encoding="utf-8") as _f:
+        simulador = _f.read()
+    prueba("el simulador publica luz/estado con origen «arranque» al conectar",
+           'publicar_luz_estado("arranque")' in simulador, None)
+    prueba("tiene comandos para publicar campos sin dato (temp/hum/gas sin)",
+           "temp <valor> | temp sin" in simulador
+           and "hum <valor> | hum sin" in simulador
+           and "gas oscilar | gas sin" in simulador, None)
+    prueba("y su comando estado no usa %d con un gas que puede ser None",
+           'gas_texto = "sin dato" if gas_sin_dato' in simulador, None)
+else:
+    prueba("existe el nodo simulado para revisarlo", False, ruta_simulador)
 
 
 print("\n" + "=" * 66)

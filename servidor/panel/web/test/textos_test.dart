@@ -11,6 +11,10 @@ void main() {
       expect(origenDeLuz('alexa'), 'Con Alexa');
     });
 
+    test('el arranque en frío del nodo tiene su propia frase', () {
+      expect(origenDeLuz('arranque'), 'Tras un reinicio');
+    });
+
     test('lo que no es del contrato no se enseña en crudo', () {
       expect(origenDeLuz(null), 'Origen desconocido');
       expect(origenDeLuz(''), 'Origen desconocido');

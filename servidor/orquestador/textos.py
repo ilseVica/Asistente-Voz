@@ -350,14 +350,31 @@ PANEL_NO_DISPONIBLE = (
     "estado con /alertas. Las alertas le seguirán llegando por aquí."
 )
 
+# El mensaje de /panel va con parse_mode=HTML (2026-10-19): el codigo se enseña en
+# <code> para que Telegram lo pinte en monoespaciado y lo pueda copiar con un toque,
+# y el teclado lleva ademas un boton «Abrir panel» con la URL. El codigo NO va
+# dentro de la URL: teclearlo es el camino, y un enlace con el codigo a la vista
+# en un chat seria una puerta abierta a quien vea la pantalla.
+#
+# Regla al tocar esta plantilla: los unicos caracteres con significado en HTML son
+# los del codigo (<code>), que es texto fijo; el codigo y la URL se escapan con
+# html.escape() en bot.cmd_panel antes de llamar a .format(), y el codigo solo puede
+# traer letras y numeros del alfabeto de panel_acceso, o sea nunca < ni &.
 PANEL_CODIGO = (
     "Su código para entrar al panel es:\n"
-    "```\n{codigo}\n```\n\n"
+    "<code>{codigo}</code>\n\n"
     "{url}\n\n"
     "Escriba el código en la pantalla de acceso. Es personal: vale por diez minutos "
     "y solo se puede usar una vez. Si lo comparte, solo funcionará para quien lo use "
     "primero."
 )
+
+# Los dos botones que acompanan al codigo. El primero copia el codigo con un toque
+# (copy_text, que Telegram no ofrece en web: ahi hace falta selecionarlo a mano); el
+# segundo abre el panel. Van separados en dos filas para que ninguno de los dos
+# quede sin tocar por apretar demasiado cerca.
+PANEL_BOTON_COPIAR = "Copiar código"
+PANEL_BOTON_ABRIR = "Abrir panel"
 
 # --- Botón «Ya lo atendí» y errores ------------------------------------------
 

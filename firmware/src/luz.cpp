@@ -147,16 +147,29 @@ void luz_iniciar() {
 #endif
 
   escribir_salidas();
-  log_info(ETIQUETA, "boton BOOT (GPIO %d) habilitado: corto alterna la luz, %lu ms reinicia",
-           GPIO_PIN_BOTON_BOOT, static_cast<unsigned long>(MS_PULSON_REINICIO));
+
+  // Arranque en frio (2026-10-19): la luz nace apagada por el propio firmware,
+  // sin que ninguna orden la haya cambiado, y ese ES su origen. Antes el estado
+  // se quedaba «desconocido» y luz_estado_json() le atribuia «boton», o sea un
+  // actor que no hizo nada. Con esto el primer luz/estado retenido que publica
+  // mqtt_al_conectar() ya trae {"estado":"off","origen":"arranque"}.
+  estado_conocido = true;
+  encendida = false;
+  origen_actual = LUZ_ORIGEN_ARRANQUE;
+  ultimo_cambio_ms = 0;
+  publicacion_pendiente = false;
+
+  log_info(ETIQUETA, "luz nace apagada (origen %s); boton BOOT (GPIO %d) habilitado: "
+           "corto alterna la luz, %lu ms reinicia",
+           LUZ_ORIGEN_ARRANQUE, GPIO_PIN_BOTON_BOOT,
+           static_cast<unsigned long>(MS_PULSON_REINICIO));
 }
 
 String luz_estado_json() {
-  // Estado de la luz con origen valido del contrato. Con estado conocido se hace
-  // eco del origen del ultimo cambio; sin el (arranque en frio) se usa "boton"
-  // como origen fisico por defecto: la luz nace apagada sin que ninguna orden la
-  // cambiara, y "boton" es el unico de los cuatro origenes que no atribuye el
-  // estado a un actor remoto inexistente.
+  // Estado de la luz con origen valido del contrato. Siempre hay estado conocido,
+  // porque luz_iniciar() ya deja la luz apagada con origen «arranque»; la rama sin
+  // conocer se queda solo como red de seguridad y usa «boton», el unico de los
+  // origenes que no atribuye el estado a un actor remoto inexistente.
   const bool estado = estado_conocido ? encendida : false;
   const char *origen = estado_conocido ? origen_actual : LUZ_ORIGEN_BOTON;
   return String("{\"" JSON_CLAVE_ESTADO "\":\"") + (estado ? LUZ_ESTADO_ON : LUZ_ESTADO_OFF) +

@@ -39,7 +39,14 @@ String nodo_estado_json() {
   }
   carga += ",\"ip\":\"" + red_ip() + "\"";
   carga += ",\"fw\":\"" + String(NODO_ESTADO_CAMPO_VERSION) + "\"";
-  carga += ",\"gas_adc\":" + String(gas_ultima_lectura());
+  // gas_adc sin dato sale como null, igual que «ts»: -1 no es un valor del ADC y
+  // meterlo en el JSON dejaria al consumidor creyendo que hubo una lectura.
+  const int gas = gas_ultima_lectura();
+  if (gas < 0) {
+    carga += ",\"gas_adc\":null";
+  } else {
+    carga += ",\"gas_adc\":" + String(gas);
+  }
   carga += ",\"alertas_pendientes\":" + String(alertas_pendientes());
   carga += ",\"gas_episodio\":" + String(gas_episodio_abierto() ? "true" : "false");
   carga += ",\"alexa\":" + String(alexa_habilitado() ? "true" : "false");
@@ -48,11 +55,17 @@ String nodo_estado_json() {
 }
 
 String nodo_estado_resumen() {
+  char texto_gas[12];
+  const int gas = gas_ultima_lectura();
+  if (gas < 0) {
+    snprintf(texto_gas, sizeof(texto_gas), "sin_dato");
+  } else {
+    snprintf(texto_gas, sizeof(texto_gas), "%d", gas);
+  }
   char texto[160];
-  snprintf(texto, sizeof(texto), "ip=%s gas=%d umbral_ok=%s alertas=%d gas_episodio=%s luz=%s",
-           red_ip().c_str(), gas_ultima_lectura(),
-           hora_es_valida() ? "ok" : "sin_hora", alertas_pendientes(),
-           gas_episodio_abierto() ? "abierto" : "cerrado",
+  snprintf(texto, sizeof(texto), "ip=%s gas=%s umbral_ok=%s alertas=%d gas_episodio=%s luz=%s",
+           red_ip().c_str(), texto_gas, hora_es_valida() ? "ok" : "sin_hora",
+           alertas_pendientes(), gas_episodio_abierto() ? "abierto" : "cerrado",
            luz_tiene_estado_conocido() ? (luz_encendida() ? "on" : "off") : "desconocido");
   return String(texto);
 }

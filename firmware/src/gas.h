@@ -23,8 +23,13 @@ void gas_iniciar();
 void gas_tarea();
 
 // Valor forzado, solo para el comando GAS del monitor serie en PRUEBAS=1 y para
-// nodo/prueba_gas. -1 devuelve el simulador.
+// nodo/prueba_gas. Manda sobre la bandera MQ2_HABILITADO y sobre el calentamiento.
+// -1 vuelve al sensor (y si no hay dato, gas_ultima_lectura() devuelve -1).
 void gas_fijar_lectura_forzada(int valor_adc);
 
 bool gas_episodio_abierto();
+
+// Ultima lectura muestreada, o -1 (SENSORES_SIN_GAS) si todavia no hay dato:
+// MQ-2 calentando, MQ2_HABILITADO en false, o sensor sin cablear. El -1 va al
+// JSON de nodo/estado como null, nunca como 0.
 int gas_ultima_lectura();

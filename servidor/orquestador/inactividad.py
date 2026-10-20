@@ -360,7 +360,16 @@ class Estado:
             except Exception as error:  # noqa: BLE001
                 registro.error("no se pudo publicar la alerta de inactividad en "
                                "MQTT: %s", error)
-        destinatarios = self.base.contar_familiares()
-        registro.warning("ALERTA de inactividad %s: %d min sin movimiento; encolada "
-                         "para %d familiar(es)", id_alerta, minutos, destinatarios)
+        # Solo se encola a los ACTIVOS (db.insertar_alerta hace el fan out a
+        # familiares_activos), y este log tiene que contar lo mismo que encola: con
+        # contar_familiares() salia el total, incluidos los dados de baja.
+        destinatarios = self.base.contar_familiares_activos()
+        if destinatarios:
+            registro.warning("ALERTA de inactividad %s: %d min sin movimiento; encolada "
+                             "para %d familiar(es) activo(s)", id_alerta, minutos,
+                             destinatarios)
+        else:
+            registro.warning("ALERTA de inactividad %s: %d min sin movimiento; encolada, "
+                             "pero no hay ningun familiar activo: se queda esperando a "
+                             "que se active uno", id_alerta, minutos)
         return True

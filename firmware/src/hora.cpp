@@ -8,35 +8,40 @@
 namespace {
 constexpr char ETIQUETA[] = "hora";
 
-// El respaldo es el NTP de la VM, que hoy NO escucha en el puerto 123 (6.5). El
-// firmware funciona sin el porque los publicos van primero; cuando el usuario
-// aplique la configuracion de chrony, este empieza a responder y la prueba P44 pasa.
-constexpr char NTP_PRIMARIO[] = "pool.ntp.org";
-constexpr char NTP_RESPALDO[] = "192.168.1.169";
+// 2026-10-19: el NTP PRIMARIO es el de la VM (192.168.1.169, la misma red local
+// de casa) y el respaldo es el servidor publico. Antes era al reves: con el de la
+// VM todavia sin configurar chrony (6.5), la hora llegaba solo si habia internet,
+// que es exactamente lo que la VM esta puesta para no depender.
+constexpr char NTP_PRIMARIO[] = "192.168.1.169";
+constexpr char NTP_RESPALDO[] = "pool.ntp.org";
 constexpr char NTP_ZONA[] = "UTC0";  // se guarda UTC y se convierte al publicar
 
-// 2024-01-01T00:00:00Z. Antes de esto, el reloj no se considera ajustado.
+// 2024-01-01T00:00:00Z. Antes de esto, el reloj no se considera ajustado. Sin
+// sincronizar, time(nullptr) en el ESP32 cuenta desde el arranque, o sea segundos
+// de un dígito: el umbral no se cumple y no hace falta ningun otro indicador.
 constexpr int64_t UMBRAL_HORA_VALIDA = 1704067200LL;
 
+// Bandera SOLO para decidir cada cuanto se reintenta y para el log de transicion.
+// La validez en si NO sale de aqui sino del reloj, en hora_es_valida(): si SNTP
+// ajusta el reloj a mitad de intervalo, la hora deja de ser invalida en ese
+// instante y no en el siguiente reintento.
 bool hora_valida = false;
 uint32_t proximo_intento_ms = 0;
-constexpr uint32_t MS_REINTENTO_SIN_HORA = 60000UL;
+// 5 s: el reintento es barato (solo reconfigura SNTP) y es el que permite que la
+// primera hora valida llegue poco despues de conectar, no un minuto despues.
+constexpr uint32_t MS_REINTENTO_SIN_HORA = 5000UL;
 constexpr uint32_t MS_REINTENTO_CON_HORA = MS_60S;
 
-bool intentar_sincronizar() {
+void intentar_sincronizar() {
   configTime(0, 0, NTP_PRIMARIO, NTP_RESPALDO);
-  time_t ahora = time(nullptr);
-  if (ahora < UMBRAL_HORA_VALIDA) {
-    return false;
-  }
-  return true;
 }
 }  // namespace
 
 void hora_iniciar() {
   setenv("TZ", ZONA_HORARIA, 1);
   tzset();
-  hora_valida = intentar_sincronizar();
+  intentar_sincronizar();
+  hora_valida = hora_es_valida();
   proximo_intento_ms = millis() + (hora_valida ? MS_REINTENTO_CON_HORA : MS_REINTENTO_SIN_HORA);
   if (hora_valida) {
     log_info(ETIQUETA, "hora valida: %s", hora_iso_utc().c_str());
@@ -50,19 +55,28 @@ void hora_tarea() {
   if ((int32_t)(ahora_ms - proximo_intento_ms) < 0) {
     return;
   }
-  proximo_intento_ms = ahora_ms + (hora_valida ? MS_REINTENTO_CON_HORA : MS_REINTENTO_SIN_HORA);
 
+  // Primero se mira el reloj y despues se reconfigura SNTP: si el reloj ya quedo
+  // ajustado por la respuesta que estaba en camino, no hace falta reiniciar nada.
   const bool antes = hora_valida;
-  hora_valida = intentar_sincronizar();
+  hora_valida = hora_es_valida();
+  proximo_intento_ms = ahora_ms + (hora_valida ? MS_REINTENTO_CON_HORA : MS_REINTENTO_SIN_HORA);
   if (hora_valida && !antes) {
     log_info(ETIQUETA, "hora conseguida: %s", hora_iso_utc().c_str());
   } else if (!hora_valida && antes) {
     log_aviso(ETIQUETA, "se perdio la hora; luz/set se descartara");
   }
+  if (!hora_valida) {
+    intentar_sincronizar();
+  }
 }
 
 bool hora_es_valida() {
-  return hora_valida;
+  // El reloj se lee en CADA llamada: sin sincronizar devuelve segundos desde el
+  // arranque, que es un numero pequenisimo, y el umbral de 2024 lo descarta sin
+  // que haga falta ningun otro indicador. En cuanto SNTP ajusta, vale a partir de
+  // ese instante, no en el siguiente reintento.
+  return static_cast<int64_t>(time(nullptr)) >= UMBRAL_HORA_VALIDA;
 }
 
 int64_t hora_epoch() {
@@ -70,11 +84,11 @@ int64_t hora_epoch() {
 }
 
 int64_t hora_epoch_o_desconocida() {
-  return hora_valida ? hora_epoch() : -1;
+  return hora_es_valida() ? hora_epoch() : -1;
 }
 
 String hora_iso_utc() {
-  if (!hora_valida) {
+  if (!hora_es_valida()) {
     return String("");
   }
   const time_t ahora = time(nullptr);

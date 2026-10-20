@@ -525,16 +525,17 @@ def procesar(topico: str, cuerpo: str, base, publicar=None) -> bool:
     # aqui no la deshace: lo de la familia (Telegram, la cola) no cambia.
     anunciar(tipo, publicar)
 
-    # `insertar_alerta` ya ha creado un envio por cada familiar registrado. Que no
-    # haya ninguno no es un error: el aviso queda pendiente a la espera de que se
-    # registre alguien, y en ese momento se le hace fan out
-    # (`db.fan_out_sin_destino`).
-    destinatarios = base.contar_familiares()
+    # `insertar_alerta` ya ha creado un envio por cada familiar ACTIVO
+    # (db.insertar_alerta hace el fan out a familiares_activos; los dados de baja
+    # siguen en la base para el historial pero no reciben nada). Que no haya ninguno
+    # activo no es un error: el aviso queda pendiente a la espera de que se active
+    # alguien, y en ese momento se le hace fan out (`db.fan_out_sin_destino`).
+    destinatarios = base.contar_familiares_activos()
     if destinatarios:
-        registro.warning("ALERTA %s de %s encolada para %d familiar(es)",
+        registro.warning("ALERTA %s de %s encolada para %d familiar(es) activo(s)",
                          tipo.upper(), id_alerta, destinatarios)
     else:
         registro.warning("ALERTA %s de %s encolada, pero no hay ningun familiar "
-                         "registrado: se queda esperando a que se registre uno",
+                         "activo: se queda esperando a que se active uno",
                          tipo.upper(), id_alerta)
     return True

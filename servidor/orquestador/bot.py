@@ -86,11 +86,14 @@ El aviso de gas es lo único que este sistema manda a la familia, y no admite
 excepciones: ni por comando ni por botón.
 """
 
+import html
 import logging
 import threading
 import time
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup,
+                      Update)
+from telegram.constants import ParseMode
 from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
                           CommandHandler, ContextTypes)
 
@@ -355,9 +358,15 @@ class ClienteBot:
         """Manda un código de acceso de un solo uso al panel web.
 
         El código tiene 6 caracteres, vale 10 minutos y se gasta el primero que lo
-        canjea. Se manda como texto en monoespaciado, no como enlace: el enlace de un
-        solo uso se sustituyó por el código, y el familiar lo teclea en la pantalla
-        de acceso del panel.
+        canjea. Se manda como HTML con parse_mode=ParseMode.HTML: el código va en
+        <code>, que Telegram pinta en monoespaciado, y el teclado lleva un botón
+        «Copiar código» (copy_text, que lo pone en el portapapeles con un toque) y
+        otro «Abrir panel» con la URL. El código no va dentro de la URL.
+
+        El único texto que lleva marcas HTML es el de textos.PANEL_CODIGO, que es de
+        este paquete; el código y la URL se pasan por html.escape antes de meterlos
+        en la plantilla. Si algún día se cambia el texto, hay que acordarse de que
+        .format() no escapa nada.
 
         Tres rechazos antes de generar nada, y el orden importa:
 
@@ -404,8 +413,18 @@ class ClienteBot:
                          "las %s", quien,
                          time.strftime("%H:%M:%S",
                                        time.localtime(ahora + registro_modulo.SEGUNDOS_CODIGO)))
+        # El codigo y la URL se escapan antes de meterlos en la plantilla; el texto
+        # de textos.PANEL_CODIGO ya esta pensado como HTML.
+        mensaje = textos.PANEL_CODIGO.format(codigo=html.escape(codigo),
+                                             url=html.escape(config.PANEL_URL))
+        teclado = InlineKeyboardMarkup([
+            [InlineKeyboardButton(textos.PANEL_BOTON_COPIAR,
+                                  copy_text=CopyTextButton(text=codigo))],
+            [InlineKeyboardButton(textos.PANEL_BOTON_ABRIR,
+                                  url=config.PANEL_URL)],
+        ])
         await update.effective_message.reply_text(
-            textos.PANEL_CODIGO.format(codigo=codigo, url=config.PANEL_URL),
+            mensaje, parse_mode=ParseMode.HTML, reply_markup=teclado,
         )
 
     # --- Botón "Ya lo atendí" (P17) -----------------------------------------

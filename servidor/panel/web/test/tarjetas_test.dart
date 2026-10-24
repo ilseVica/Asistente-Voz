@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:asistente_panel/tema.dart';
 import 'package:asistente_panel/textos.dart';
 import 'package:asistente_panel/uis/tarjetas.dart';
 
@@ -45,6 +46,50 @@ void main() {
       expect(
           datoDeSensor(nodoConectado: false, valor: 0, conValor: () => '0 %'),
           '0 %');
+    });
+  });
+
+  group('estadoDelGas', () {
+    test('por debajo de tres cuartas partes del umbral es «Normal»', () {
+      expect(
+          estadoDelGas(gasAdc: 1300, umbral: 1800), Textos.gasNormal);
+      expect(estadoDelGas(gasAdc: 1349, umbral: 1800), Textos.gasNormal);
+    });
+
+    test('de 0,75×umbral hasta el umbral es «Gas elevado»', () {
+      expect(
+          estadoDelGas(gasAdc: 1350, umbral: 1800), Textos.gasElevado);
+      expect(
+          estadoDelGas(gasAdc: 1799, umbral: 1800), Textos.gasElevado);
+    });
+
+    test('en o por encima del umbral es «Gas detectado»', () {
+      expect(
+          estadoDelGas(gasAdc: 1800, umbral: 1800), Textos.gasDetectado);
+      expect(
+          estadoDelGas(gasAdc: 2400, umbral: 1800), Textos.gasDetectado);
+    });
+
+    test('sin umbral no se juzga nada: no se dice «Normal» a ciegas', () {
+      expect(
+          estadoDelGas(gasAdc: 4000, umbral: null), Textos.gasSinUmbral);
+    });
+
+    test('sin lectura es «Sin datos»', () {
+      expect(estadoDelGas(gasAdc: null, umbral: 1800), Textos.sinDatos);
+    });
+  });
+
+  group('colorDelGas', () {
+    test('cada escalón con su color: normal, ámbar, rojo', () {
+      expect(colorDelGas(gasAdc: 100, umbral: 1800), Tema.primario);
+      expect(colorDelGas(gasAdc: 1700, umbral: 1800), Tema.ambarPildora);
+      expect(colorDelGas(gasAdc: 2000, umbral: 1800), Tema.peligro);
+    });
+
+    test('lo que no se puede juzgar va en gris de texto, no en verde', () {
+      expect(colorDelGas(gasAdc: 2000, umbral: null), Tema.secundario);
+      expect(colorDelGas(gasAdc: null, umbral: 1800), Tema.secundario);
     });
   });
 }

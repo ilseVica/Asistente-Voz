@@ -121,6 +121,26 @@ ANTIRREBOTE_AYUDA_S = 60
 ADC_MINIMO = 0
 ADC_MAXIMO = 4095
 
+# El umbral con el que el firmware decide que hay gas, en cuenta del ADC.
+#
+# El ESP32 compara su lectura contra los suyos (aquel `GPIO_GAS_UMBRAL_*` del
+# firmware), pero el panel y el contrato necesitan los números para enseñar la
+# barra y para decir «Lectura: 312 / Umbral: 1800». Como el umbral del firmware
+# no viaja en `nodo/estado` (verificado el 2026-10-20), el orquestador publica el
+# suyo en `casa/sala/nodo/config` (retenido, QoS 1) y el panel lo lee de la
+# instantánea. Si el firmware cambia, cambian estas dos variables (o el `.env`),
+# y no hay que tocar el código.
+#
+# Reglas, iguales a las del firmware: los dos dentro del rango del ADC, y
+# `GAS_OFF_ADC` SIEMPRE por debajo de `GAS_ON_ADC` (si no, el relé encendido
+# nunca se soltaría). Un valor que no cumpla no se usa: se vuelve al par por
+# defecto, porque un umbral publicado y mal leído es peor que el de siempre.
+GAS_ON_ADC = int(os.environ.get("GAS_ON_ADC", "1800"))
+GAS_OFF_ADC = int(os.environ.get("GAS_OFF_ADC", "1550"))
+if not (ADC_MINIMO < GAS_OFF_ADC < GAS_ON_ADC < ADC_MAXIMO):
+    GAS_ON_ADC = 1800
+    GAS_OFF_ADC = 1550
+
 # Orígenes que admite el contrato para las órdenes, el estado de la luz y las
 # alertas de ayuda (plan, línea 195).
 ORIGENES_VALIDOS = ("voz", "alexa", "panel", "boton")
@@ -171,6 +191,13 @@ TOPICO_NODO_ESTADO = "casa/sala/nodo/estado"
 # un patron con `+`: el panel y el orquestador se suscriben a todos a la vez.
 TOPICO_SATELITE_ESTADO = "casa/sala/satelite/+/estado"
 TOPICO_ENLACE_SITIO = "$SYS/broker/connection/+/state"
+
+# La configuración que el orquestador manda al ESP32 y al panel (Fase 2):
+# `{"gas_on_adc":1800,"gas_off_adc":1550}` en JSON, con retain y QoS 1, al
+# arrancar (y al reconectar). El ACL ya deja escribirlo al orquestador
+# (`servidor/mosquitto/config/acl.conf`) y prohibía LEERLO al panel: eso se
+# arregla al desplegar (Fase 3), no aquí.
+TOPICO_NODO_CONFIG = "casa/sala/nodo/config"
 
 # El WebSocket. El servidor manda `latido` cada 20 s y espera un `pong`; si pasan
 # 45 s sin `pong`, cierra. Los dos lados tienen latido porque el navegador no puede

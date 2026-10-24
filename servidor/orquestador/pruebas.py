@@ -3340,6 +3340,241 @@ else:
     prueba("existe el nodo simulado para revisarlo", False, ruta_simulador)
 
 
+# =============================================================================
+# 24. Fase 2: el umbral de gas, `resuelto_por` y la config del nodo
+# =============================================================================
+#
+# Tres cosas de las decisiones aprobadas el 2026-10-20 que no se pueden probar con
+# la red (aquí no hay broker):
+#
+#   a) `GAS_ON_ADC` / `GAS_OFF_ADC` en `config.py`, con su validación, y el
+#      mensaje `{"gas_on_adc":...,"gas_off_adc":...}` en `casa/sala/nodo/config`,
+#      RETENIDO y con QoS 1, publicado al conectar.
+#   b) La migración v7 -> v8 (`alertas.resuelto_por`) y `marcar_resuelta`
+#      guardando el NOMBRE de quien atendió, NUNCA un chat_id.
+#   c) El ACL sigue dejando escribir `nodo/config` al orquestador, sin tocarlo.
+
+titulo("24. Fase 2: umbral de gas, resuelto_por y nodo/config")
+
+import subprocess  # noqa: E402
+
+# --- a) Los umbrales, leídos del entorno -------------------------------------
+prueba("config trae el umbral de gas por defecto: 1800 al encender y 1550 al soltar",
+       config.GAS_ON_ADC == 1800 and config.GAS_OFF_ADC == 1550,
+       (config.GAS_ON_ADC, config.GAS_OFF_ADC))
+prueba("y el de soltar siempre queda por debajo del de encender",
+       0 < config.GAS_OFF_ADC < config.GAS_ON_ADC < 4096,
+       (config.GAS_ON_ADC, config.GAS_OFF_ADC))
+prueba("el tópico de la config del nodo es el del contrato",
+       config.TOPICO_NODO_CONFIG == "casa/sala/nodo/config",
+       config.TOPICO_NODO_CONFIG)
+
+
+def config_con_umbral(**entorno):
+    """`(GAS_ON_ADC, GAS_OFF_ADC)` de un proceso limpio con ese entorno.
+
+    Se prueba en un proceso aparte y no con `importlib.reload(config)`: recargar
+    el módulo en mitad de las pruebas reejecutaría TODO `config.py` (con el
+    entorno cambiado a medias) sobre un módulo al que el resto ya le toma su
+    nombre, y un fallo ahí se vería como un fallo de cualquier otra cosa.
+    """
+    entorno_completo = dict(os.environ)
+    entorno_completo.pop("GAS_ON_ADC", None)
+    entorno_completo.pop("GAS_OFF_ADC", None)
+    entorno_completo.update(entorno)
+    salida = subprocess.run(
+        [sys.executable, "-c",
+         "import config; print(config.GAS_ON_ADC, config.GAS_OFF_ADC)"],
+        cwd=RAIZ, env=entorno_completo, capture_output=True, text=True, timeout=60,
+    )
+    return salida.stdout.strip(), salida.stderr.strip()[-200:]
+
+
+valor, error = config_con_umbral(GAS_ON_ADC="2000", GAS_OFF_ADC="1600")
+prueba("un par del entorno se usa tal cual (el umbral es configurable)",
+       valor == "2000 1600", (valor, error))
+valor, error = config_con_umbral(GAS_ON_ADC="1500", GAS_OFF_ADC="1600")
+prueba("un par imposible (soltar por ENCIMA de encender) cae en los de fábrica",
+       valor == "1800 1550", (valor, error))
+valor, _ = config_con_umbral(GAS_ON_ADC="9999")
+prueba("y un umbral fuera del rango del ADC, también", valor == "1800 1550", valor)
+
+
+# --- a2) `nodo/config` publicado AL CONECTAR ---------------------------------
+class _CodigoFalso:
+    """Solo lo que `_al_conectar` le pregunta: si el código de éxito falla."""
+    is_failure = False
+
+
+class _DobleRed:
+    """Un doble del `cliente` de paho que anota publicaciones y suscripciones."""
+
+    def __init__(self):
+        self.publicados = []
+        self.suscritos = []
+        self.esperas = 0
+
+    def publish(self, topico, cuerpo, qos=1, retain=False):
+        self.publicados.append((topico, cuerpo, qos, retain))
+        return self
+
+    def wait_for_publish(self, timeout=None):
+        self.esperas += 1
+
+    def subscribe(self, topico, qos=1):
+        self.suscritos.append((topico, qos))
+        return (0, 1)
+
+
+def cliente_de_prueba():
+    """Un `ClienteMQTT` sin `__init__`, para llamarle `_al_conectar` a mano.
+
+    Igual que hace la sección de publicaciones de más arriba: el `__init__`
+    exige la contraseña del broker, y aquí hace falta un cliente entero que
+    nunca se conecta de verdad.
+    """
+    doble = mqtt_cliente.ClienteMQTT.__new__(mqtt_cliente.ClienteMQTT)
+    doble.cliente = _DobleRed()
+    doble.al_recibir = lambda *args, **kwargs: None
+    doble.al_reconectar = None
+    doble._primera_conexion = True
+    doble.conectado = False
+    doble._hilo_red = None
+    doble.contador_ayuda = 0
+    return doble
+
+
+al_conectar = cliente_de_prueba()
+al_conectar._al_conectar(None, None, None, _CodigoFalso())
+publicados = [p for p in al_conectar.cliente.publicados
+              if p[0] == config.TOPICO_NODO_CONFIG]
+prueba("al conectar publica en casa/sala/nodo/config", len(publicados) == 1,
+       publicados)
+cuerpo_config = json.loads(publicados[0][1])
+prueba("con gas_on_adc y gas_off_adc, en el formato del contrato",
+       cuerpo_config == {"gas_on_adc": config.GAS_ON_ADC,
+                         "gas_off_adc": config.GAS_OFF_ADC}, cuerpo_config)
+prueba("retenido y con QoS 1, para que lo reciba quien se conecte después",
+       publicados[0][2] == 1 and publicados[0][3] is True, publicados[0])
+esperados = [config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA,
+             config.TOPICO_VOZ_TEXTO, config.TOPICO_SATELITE_ESTADO,
+             config.TOPICO_SENSORES, config.TOPICO_NODO_ESTADO,
+             config.TOPICO_ENLACE_SITIO]
+prueba("y la suscripción sigue siendo la de siempre, sin nodo/config",
+       [t for t, _ in al_conectar.cliente.suscritos] == esperados,
+       al_conectar.cliente.suscritos)
+prueba("la primera conexión no dispara el aviso de reconexión",
+       al_conectar._primera_conexion is False, al_conectar._primera_conexion)
+
+reconectado = cliente_de_prueba()
+reconectado._al_conectar(None, None, None, _CodigoFalso())
+reconectado._al_conectar(None, None, None, _CodigoFalso())
+prueba("y AL RECONECTAR vuelve a publicarla, con la config del proceso actual",
+       len([p for p in reconectado.cliente.publicados
+            if p[0] == config.TOPICO_NODO_CONFIG]) == 2,
+       reconectado.cliente.publicados)
+
+
+# --- b) La migración v7 -> v8 y el NOMBRE de quien atendió -------------------
+ruta_v7 = os.path.join(tempfile.mkdtemp(prefix="resuelto-por-v7-"), "v7.sqlite3")
+cruda7 = sqlite3.connect(ruta_v7)
+cruda7.execute(
+    "CREATE TABLE alertas ("
+    "id TEXT NOT NULL PRIMARY KEY, tipo TEXT NOT NULL, "
+    "carga_json TEXT NOT NULL, resuelto_en INTEGER, descartada_en INTEGER, "
+    "creado_en INTEGER NOT NULL, purgable_en INTEGER NOT NULL, "
+    "fanout_hecho INTEGER NOT NULL DEFAULT 0)")
+cruda7.execute("INSERT INTO alertas (id, tipo, carga_json, creado_en, "
+               "purgable_en, resuelto_en) "
+               "VALUES ('a1', 'gas', '{}', 111, 222, 333)")
+cruda7.execute("INSERT INTO alertas (id, tipo, carga_json, creado_en, "
+               "purgable_en) VALUES ('a2', 'ayuda', '{}', 444, 555)")
+cruda7.execute("PRAGMA user_version = 7")
+cruda7.commit()
+cruda7.close()
+base_v7 = db_modulo.BaseDatos(ruta_v7)
+prueba("una base en la versión 7 sube a la actual (%d)"
+       % db_modulo.VERSION_ESQUEMA,
+       base_v7.conexion.execute("PRAGMA user_version").fetchone()[0]
+       == db_modulo.VERSION_ESQUEMA,
+       base_v7.conexion.execute("PRAGMA user_version").fetchone()[0])
+columnas_v7 = {f["name"] for f in
+               base_v7.conexion.execute("PRAGMA table_info(alertas)")}
+prueba("y alertas gana la columna resuelto_por", "resuelto_por" in columnas_v7,
+       sorted(columnas_v7))
+filas_v7 = {f["id"]: f for f in base_v7.conexion.execute("SELECT * FROM alertas")}
+prueba("sin perder ninguna fila de antes",
+       set(filas_v7) == {"a1", "a2"}
+       and filas_v7["a1"]["resuelto_en"] == 333
+       and filas_v7["a2"]["creado_en"] == 444, sorted(filas_v7))
+prueba("y las de antes quedan con resuelto_por en NULL (no se inventa historico)",
+       filas_v7["a1"]["resuelto_por"] is None
+       and filas_v7["a2"]["resuelto_por"] is None, None)
+base_v7.cerrar()
+
+# Quién atendió, por los DOS caminos (Telegram y panel).
+base_24, _ruta_24 = base_nueva("fase2-")
+base_24.registrar_familiar("3003", nombre="Ana")
+base_24.registrar_familiar("4004", nombre="Luis")
+base_24.insertar_alerta("f2-1", "gas", json.dumps({"gas_adc": 2100}),
+                        chat_ids=["3003"])
+base_24.marcar_resuelta("f2-1", quien="Ana")
+fila_24 = base_24.obtener_alerta("f2-1")
+prueba("marcar_resuelta guarda el NOMBRE en resuelto_por",
+       fila_24["resuelto_por"] == "Ana", fila_24["resuelto_por"])
+base_24.marcar_resuelta("f2-1", quien="Luis")
+prueba("y una segunda pulsación no cambia al de la primera",
+       base_24.obtener_alerta("f2-1")["resuelto_por"] == "Ana",
+       base_24.obtener_alerta("f2-1")["resuelto_por"])
+
+base_24.insertar_alerta("f2-2", "gas", json.dumps({"gas_adc": 2100}),
+                        chat_ids=["3003"])
+alertas.resolver(base_24, None, "f2-2", quien="el familiar ...3003",
+                 origen="el boton del bot", nombre_quien=base_24.nombre_de("3003"))
+prueba("por el botón del bot se guarda el nombre del familiar",
+       base_24.obtener_alerta("f2-2")["resuelto_por"] == "Ana",
+       base_24.obtener_alerta("f2-2")["resuelto_por"])
+base_24.insertar_alerta("f2-3", "gas", json.dumps({"gas_adc": 2100}),
+                        chat_ids=["4004"])
+alertas.resolver(base_24, None, "f2-3", quien="el familiar ...4004",
+                 origen="el panel", nombre_quien="")
+prueba("sin nombre se guarda «Familiar» y no un chat_id",
+       base_24.obtener_alerta("f2-3")["resuelto_por"] == "Familiar",
+       base_24.obtener_alerta("f2-3")["resuelto_por"])
+prueba("ningún resuelto_por es un chat_id",
+       all(base_24.obtener_alerta(i)["resuelto_por"] in ("Ana", "Familiar")
+           for i in ("f2-1", "f2-2", "f2-3")), None)
+
+# Un aviso SIN resolver todavía tiene su fila en `envios` (al resolverse se
+# cancelan los que no salieron), y esa fila es la que la línea de tiempo enseña.
+base_24.insertar_alerta("f2-4", "ayuda", json.dumps({"origen": "voz"}),
+                        chat_ids=["3003"])
+envios_24 = base_24.envios_de_alerta("f2-4")
+prueba("envios_de_alerta trae el nombre y NO el chat_id",
+       len(envios_24) == 1
+       and set(envios_24[0].keys()) == {"creado_en", "enviado_en", "nombre"}
+       and envios_24[0]["nombre"] == "Ana", sorted(envios_24[0].keys()))
+base_24.cerrar()
+
+
+# --- c) El ACL: sigue sin tocarse --------------------------------------------
+ruta_acl_24 = os.path.join(
+    os.path.dirname(RAIZ), "mosquitto", "config", "acl.conf")
+if os.path.exists(ruta_acl_24):
+    with open(ruta_acl_24, encoding="utf-8") as f_24:
+        bloques_24 = bloques_de_usuario(f_24.read())
+    prueba("el ACL deja al orquestador ESCRIBIR casa/sala/nodo/config "
+           "(verificado sin tocarlo)",
+           "topic write casa/sala/nodo/config" in bloques_24.get("orquestador", []),
+           bloques_24.get("orquestador"))
+    prueba("y el panel sigue SIN leerlo: el umbral le llega por /api/estado",
+           "topic read casa/sala/nodo/config" not in bloques_24.get("panel", []),
+           bloques_24.get("panel"))
+else:
+    prueba("existe el acl.conf para verificar la escritura de nodo/config", False,
+           ruta_acl_24)
+
+
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))

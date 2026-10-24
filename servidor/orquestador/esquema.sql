@@ -128,6 +128,11 @@ CREATE TABLE IF NOT EXISTS alertas (
     tipo           TEXT NOT NULL,
     carga_json     TEXT NOT NULL,
     resuelto_en    INTEGER,
+    -- El NOMBRE (nunca un chat_id) de quien atendio, para la linea de tiempo
+    -- del panel («Atendida por Ana»). Nace vacia: las alertas de antes no
+    -- guardaron a quien y quedan NULL, que es la verdad. La agrega la
+    -- migracion v7->v8 en bases viejas.
+    resuelto_por   TEXT,
     descartada_en  INTEGER,
     creado_en      INTEGER NOT NULL,
     purgable_en    INTEGER NOT NULL,

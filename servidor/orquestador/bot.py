@@ -492,6 +492,10 @@ class ClienteBot:
             self.base, self.publicar, id_alerta, ahora,
             quien="el familiar %s" % db_modulo.enmascarar_chat(chat_id),
             origen="el boton del bot",
+            # El NOMBRE va aparte y queda en `alertas.resuelto_por`, para la
+            # linea de tiempo del panel. Nunca el chat_id: un número no le
+            # significa nada a nadie en una pantalla de familia.
+            nombre_quien=self.base.nombre_de(chat_id),
         )
         tipo = fila["tipo"] if fila is not None else "alerta"
 

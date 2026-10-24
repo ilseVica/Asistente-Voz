@@ -100,6 +100,7 @@ class Alerta {
     required this.creadoEn,
     required this.carga,
     required this.resueltaEn,
+    this.resueltoPor,
     this.enviados,
     this.sinMandar,
   });
@@ -110,6 +111,11 @@ class Alerta {
   final int creadoEn;
   final Map<String, dynamic> carga;
   final int? resueltaEn;
+
+  /// El NOMBRE de quien la atendió («Ana»), nunca el chat_id. Las alertas
+  /// anteriores al campo 8 del esquema lo traen `null` y entonces en pantalla
+  /// sólo se pinta la hora, sin darle nombre a nadie.
+  final String? resueltoPor;
   final int? enviados;
   final int? sinMandar;
 
@@ -123,8 +129,54 @@ class Alerta {
         carga: (json['carga'] as Map?)?.cast<String, dynamic>() ??
             const <String, dynamic>{},
         resueltaEn: json['resuelta_en'] as int?,
+        resueltoPor: json['resuelto_por'] as String?,
         enviados: json['enviados'] as int?,
         sinMandar: json['sin_mandar'] as int?,
+      );
+}
+
+/// Un evento de la línea de tiempo «Qué pasó» (`GET /api/alertas/{id}`).
+///
+/// El servidor manda SOLO hechos reales de la base: `creada`, `enviada`,
+/// `pendiente`, `atendida` y `descartada`, con su hora (`en`) y, cuando el
+/// envío o la atención los traen, el NOMBRE de la persona. Aquí no se calcula
+/// nada: si un evento no viene, no se pinta.
+class EventoAlerta {
+  const EventoAlerta({required this.tipo, required this.en, this.nombre});
+
+  final String tipo;
+  final int en;
+  final String? nombre;
+
+  factory EventoAlerta.desde(Map<String, dynamic> json) => EventoAlerta(
+        tipo: json['tipo'] as String? ?? '',
+        en: (json['en'] as num?)?.toInt() ?? 0,
+        nombre: json['nombre'] as String?,
+      );
+}
+
+/// Una alerta con su línea de tiempo, tal como devuelve `GET /api/alertas/{id}`.
+class AlertaDetalle {
+  const AlertaDetalle({
+    required this.alerta,
+    required this.eventos,
+    required this.servidorHora,
+  });
+
+  final Alerta alerta;
+
+  /// En el orden en que pasaron las cosas, ya ordenado por el servidor.
+  final List<EventoAlerta> eventos;
+  final int servidorHora;
+
+  factory AlertaDetalle.desde(Map<String, dynamic> json) => AlertaDetalle(
+        alerta: Alerta.desde(
+            (json['alerta'] as Map).cast<String, dynamic>()),
+        eventos: ((json['eventos'] as List?) ?? const <dynamic>[])
+            .map((dynamic e) =>
+                EventoAlerta.desde((e as Map).cast<String, dynamic>()))
+            .toList(),
+        servidorHora: json['servidor_hora'] as int? ?? 0,
       );
 }
 
@@ -247,6 +299,7 @@ class Estado {
     required this.alertas,
     required this.familiares,
     required this.conexiones,
+    this.gasOnAdc,
   });
 
   final int servidorHora;
@@ -260,6 +313,12 @@ class Estado {
   final Map<String, int> alertas;
   final int familiares;
   final int conexiones;
+
+  /// El umbral de encendido del gas (`GAS_ON_ADC`), en lecturas del ADC. Lo
+  /// manda `instantanea()` desde la configuración por entorno y es el número
+  /// que la tarjeta de gas enseña y contra el que compara: sin él no hay forma
+  /// de decir en el panel cuándo es «demasiado».
+  final num? gasOnAdc;
 
   /// Cuántas alertas no están resueltas ni descartadas. El servidor manda los
   /// cuatro conteos y el total se saca aquí, porque es una cuenta y no una regla.
@@ -289,6 +348,7 @@ class Estado {
         alertas: alertas,
         familiares: familiares,
         conexiones: conexiones,
+        gasOnAdc: gasOnAdc,
       );
 
   factory Estado.desde(Map<String, dynamic> json) => Estado(
@@ -314,6 +374,7 @@ class Estado {
             .map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0)),
         familiares: (json['familiares'] as num?)?.toInt() ?? 0,
         conexiones: (json['conexiones'] as num?)?.toInt() ?? 0,
+        gasOnAdc: json['gas_on_adc'] as num?,
       );
 }
 

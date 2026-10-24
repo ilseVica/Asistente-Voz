@@ -602,6 +602,17 @@ prueba("y `alertas` trae los cuatro estados en cero, no solo los que hay",
 prueba("con `conexiones` a 0 porque aún no hay ningún WebSocket abierto",
        inst["conexiones"] == 0, inst["conexiones"])
 
+# El umbral de la barra de gas (Fase 2, decisión 2): no viene de un tópico ni de
+# MQTT, sale de `config.py`, el MISMO archivo que usa el orquestador para mandárselo
+# al ESP32 por `nodo/config`.
+prueba("la instantánea trae el umbral del gas como enteros del ADC",
+       isinstance(inst["gas_on_adc"], int) and isinstance(inst["gas_off_adc"], int)
+       and 0 < inst["gas_off_adc"] < inst["gas_on_adc"] < 4096,
+       (inst["gas_on_adc"], inst["gas_off_adc"]))
+prueba("y los valores son los de `config`, no números inventados",
+       inst["gas_on_adc"] == config.GAS_ON_ADC
+       and inst["gas_off_adc"] == config.GAS_OFF_ADC, None)
+
 # El bloque de la inactividad sale de SQLite (la tabla `configuracion`), no de un
 # tópico: por eso se prueba aquí, guardando en la base y volviendo a pedir la
 # instantánea.
@@ -620,9 +631,53 @@ prueba("lo guardado por el orquestador y el ajuste del panel salen al instante",
 base4.cerrar()
 
 
+prueba("mensaje retenido deja recibido_en null y estado se aplica; luego en vivo vuelve con hora",
+       lambda: _prueba_retenido_luego_vivo())
+
+
+def _prueba_retenido_luego_vivo():
+    est = EstadoSala(modo="instalacion", plazo_visto_s=90)
+    est.recibir(TOPICO_LUZ_ESTADO, '{"estado":"on","origen":"panel"}', retain=True)
+    snap = est.instantanea(_BaseVacia())
+    assert snap["luz"]["recibido_en"] is None
+    assert snap["luz"]["encendida"] is True
+    est.recibir(TOPICO_LUZ_ESTADO, '{"estado":"on","origen":"panel"}', retain=False)
+    snap = est.instantanea(_BaseVacia())
+    assert isinstance(snap["luz"]["recibido_en"], int)
+
+
+prueba("retener nodo/estado deja recibido_en null y en vivo lo repone",
+       lambda: _prueba_retenido_nodo_vivo())
+
+
+def _prueba_retenido_nodo_vivo():
+    est = EstadoSala(modo="instalacion", plazo_visto_s=90)
+    est.recibir(config.TOPICO_NODO_ESTADO, '{"conectado":true,"ip":"1.2.3.4"}', retain=True)
+    snap = est.instantanea(_BaseVacia())
+    assert snap["nodo"]["recibido_en"] is None
+    est.recibir(config.TOPICO_NODO_ESTADO, '{"conectado":true,"ip":"1.2.3.4"}', retain=False)
+    snap = est.instantanea(_BaseVacia())
+    assert isinstance(snap["nodo"]["recibido_en"], int)
+
+
+prueba("retener satelite/estado deja recibido_en null y en vivo lo repone",
+       lambda: _prueba_retenido_satelite_vivo())
+
+
+def _prueba_retenido_satelite_vivo():
+    est = EstadoSala(modo="instalacion", plazo_visto_s=90)
+    est.recibir("casa/sala/satelite/s1/estado", '{"conectado":true}', retain=True)
+    snap = est.instantanea(_BaseVacia())
+    assert snap["satelite"]["recibido_en"] is None
+    est.recibir("casa/sala/satelite/s1/estado", '{"conectado":true}', retain=False)
+    snap = est.instantanea(_BaseVacia())
+    assert isinstance(snap["satelite"]["recibido_en"], int)
+
+
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))
 for nombre in FALLOS:
     print("  - " + nombre)
 sys.exit(1 if FALLOS else 0)
+

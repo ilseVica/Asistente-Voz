@@ -99,7 +99,15 @@ RUTA_ESQUEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # ya estaba en la 5 se crea vacia, y las dos claves que use el servicio se insertan
 # cuando hagan falta (el valor por defecto NO se escribe al migrar, lo devuelve
 # `db.tiempo_inactividad()` cuando la clave no esta). Tampoco tiene funcion propia.
-VERSION_ESQUEMA = 7
+#
+# La version 8 agrega `resuelto_por` a `alertas`: el nombre del familiar (NUNCA un
+# `chat_id`) que atendio la alerta, para que la linea de tiempo del panel pueda
+# decir «Atendida por Ana» en vez de solo «Atendida». Las filas que ya existen
+# quedan con `NULL`, que es la verdad historica: no se sabe quien atendio algo de
+# antes, y rellenarlo con un nombre inventado seria peor que dejarlo vacio. Otra
+# columna nueva en una tabla vieja, asi que otra vez el `ALTER TABLE` idempotente
+# de la 2->3 y de la 4.
+VERSION_ESQUEMA = 8
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -293,6 +301,15 @@ class BaseDatos:
                     ON codigos_acceso (chat_id)
             """)
 
+        # De la 7 a la 8: `alertas` gana `resuelto_por`, el nombre de quien
+        # atendio. Igual que en la 2->3 y la 4, la columna va DENTRO de una tabla
+        # que ya existe, asi que hace falta el `ALTER TABLE` idempotente con
+        # `PRAGMA table_info`: en una base nueva `esquema.sql` ya la trajo, y en
+        # una vieja esta funcion la agrega una sola vez. Las filas anteriores
+        # quedan `NULL` a proposito (no se sabe quien atendio lo de antes).
+        if version < 8:
+            self._migrar_alertas_resuelto_por()
+
         # El indice de las alertas que esperan a un familiar se crea AQUI y no en
         # `esquema.sql`, y el motivo es el orden: `esquema.sql` se ejecuta entero
         # ANTES de migrar, y sobre una base ya existente su `CREATE TABLE IF NOT
@@ -350,6 +367,25 @@ class BaseDatos:
         if "activo" not in columnas:
             self.conexion.execute(
                 "ALTER TABLE familiares ADD COLUMN activo INTEGER NOT NULL DEFAULT 1"
+            )
+
+    def _migrar_alertas_resuelto_por(self) -> None:
+        """La migración de la versión 7 a la 8: `resuelto_por` en `alertas`.
+
+        El nombre de quien atendio, para la linea de tiempo del panel («Atendida
+        por Ana, 07:32»). Sin `DEFAULT` y con las filas existentes en `NULL`: lo
+        de antes nadie lo guardo, y ponerle un nombre a algo que nadie registro
+        seria inventar historia.
+
+        El `PRAGMA table_info` la hace idempotente, igual que en las migraciones
+        de la 2 a la 3 y de la 4: en una base creada en limpio, `esquema.sql` ya
+        puso la columna al ejecutarse entero antes de llegar aqui.
+        """
+        columnas = {fila["name"] for fila in
+                    self.conexion.execute("PRAGMA table_info(alertas)").fetchall()}
+        if "resuelto_por" not in columnas:
+            self.conexion.execute(
+                "ALTER TABLE alertas ADD COLUMN resuelto_por TEXT"
             )
 
     def _migrar_a_familiares_multiples(self) -> None:
@@ -1293,7 +1329,8 @@ class BaseDatos:
             )
             self.conexion.commit()
 
-    def marcar_resuelta(self, id_alerta: str, ahora: int = None) -> bool:
+    def marcar_resuelta(self, id_alerta: str, ahora: int = None,
+                        quien: str = None) -> bool:
         """Marca la alerta como atendida por la familia (P17).
 
         Se llama desde el botón "Ya lo atendí". Devuelve `True` si la alerta
@@ -1309,14 +1346,19 @@ class BaseDatos:
         Importante: esto es lo que impide que la cola vuelva a mandar la alerta. Un
         envio ya enviado tiene `enviado_en` y no se toca; lo que se cancela es lo
         que nunca salió.
+
+        `quien` es el NOMBRE del familiar («Ana»), que es lo que queda en
+        `resuelto_por` para la linea de tiempo del panel. Nunca un `chat_id`: un
+        número de chat en una pantalla de familia no significa nada para nadie. El
+        nombre lo arma quien llama (`alertas.resolver`), con `db.nombre_de`.
         """
         if ahora is None:
             ahora = int(time.time())
         with _candado:
             cursor = self.conexion.execute(
-                "UPDATE alertas SET resuelto_en = ? "
+                "UPDATE alertas SET resuelto_en = ?, resuelto_por = ? "
                 "WHERE id = ? AND resuelto_en IS NULL",
-                (ahora, id_alerta),
+                (ahora, quien, id_alerta),
             )
             self.conexion.execute(
                 "DELETE FROM envios WHERE alerta_id = ? AND enviado_en IS NULL",
@@ -1350,6 +1392,28 @@ class BaseDatos:
                 "SELECT * FROM envios WHERE alerta_id = ? AND chat_id = ?",
                 (id_alerta, str(chat_id)),
             ).fetchone()
+
+    def envios_de_alerta(self, id_alerta: str) -> list:
+        """Los avisos de una alerta, con el NOMBRE del destino y sin `chat_id`.
+
+        Es lo que la linea de tiempo del panel («Qué pasó») enseña como eventos
+        reales: si un envio tiene `enviado_en`, salió; si no, sigue esperando.
+        El `chat_id` NO sale de aqui a proposito: un numero de chat en una
+        pantalla de familia no significa nada para nadie, y para el nombre ya
+        esta `familiares.nombre`.
+
+        El `LEFT JOIN` y no un `INNER`: si la fila de un familiar se borró (o
+        llega un envio con un chat que ya no está), el evento se enseña con el
+        nombre en blanco y no desaparece, porque el envio sí ocurrió.
+        """
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT e.creado_en, e.enviado_en, "
+                "COALESCE(f.nombre, '') AS nombre "
+                "FROM envios e LEFT JOIN familiares f ON f.chat_id = e.chat_id "
+                "WHERE e.alerta_id = ? ORDER BY e.creado_en, e.chat_id",
+                (id_alerta,),
+            ))
 
     def envios_sin_mandar_de(self, chat_id: str) -> int:
         """Cuantos avisos le quedan por llegar a este familiar."""

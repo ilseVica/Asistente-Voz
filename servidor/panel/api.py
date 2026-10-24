@@ -385,6 +385,25 @@ async def yo(sesion: dict = Depends(sesion_requerida)):
             "caduca_dias": config.DIAS_TOKEN_PANEL}
 
 
+@app.get("/api/familiares")
+async def familiares(sesion: dict = Depends(sesion_requerida)):
+    """Los nombres de la casa, para la pantalla «Familiares» (decisión A.5).
+
+    SOLO los activos, que son los que de verdad reciben alertas: enseñar a alguien
+    que ya se dio de baja sería mentirle sobre quién se entera de una emergencia.
+
+    El `chat_id` no sale de aquí, igual que en `/api/yo`: la pantalla de familia
+    enseña nombres, y un número de chat no le significa nada a nadie. El que no
+    tenga nombre guardado sale con cadena vacía y la interfaz lo pinta «Familiar»,
+    que es la verdad sin inventarle apodo a nadie.
+    """
+    del sesion
+    filas = base.familiares_activos()
+    nombres = [(fila["nombre"] or "").strip() for fila in filas]
+    return {"total": len(nombres),
+            "familiares": [{"nombre": nombre} for nombre in nombres]}
+
+
 @app.post("/api/salir")
 async def salir(sesion: dict = Depends(sesion_requerida)):
     """Revoca el token actual (apartado 3.4).
@@ -454,6 +473,14 @@ def _alerta_json(fila) -> dict:
     la base y su nombre no tiene por qué coincidir con el del JSON.
     """
     carga = json.loads(fila["carga_json"]) if fila["carga_json"] else {}
+    # `resuelto_por` puede faltar en la fila a medias de `_con_estado` (una alerta
+    # que no sale en las 100 más recientes), por eso se busca sin lanzar.
+    if isinstance(fila, dict):
+        resuelto_por = fila.get("resuelto_por")
+    elif "resuelto_por" in fila.keys():
+        resuelto_por = fila["resuelto_por"]
+    else:
+        resuelto_por = None
     return {
         "id": fila["id"],
         "tipo": fila["tipo"],
@@ -461,6 +488,7 @@ def _alerta_json(fila) -> dict:
         "creado_en": fila["creado_en"],
         "carga": carga,
         "resuelta_en": fila["resuelto_en"],
+        "resuelto_por": resuelto_por,
         "descartada_en": fila["descartada_en"],
         "enviados": fila["enviados"],
         "sin_mandar": fila["sin_mandar"],
@@ -503,6 +531,9 @@ async def atender(id_alerta: str, sesion: dict = Depends(sesion_requerida)):
         base, mqtt.publicar if mqtt else None, id_alerta,
         quien=_nombre_de(sesion) or db.enmascarar_chat(sesion["chat_id"]),
         origen="el panel",
+        # El NOMBRE («Ana») es lo que queda en `resuelto_por` para la linea de
+        # tiempo del panel; el chat_id solo se usa en el log de arriba.
+        nombre_quien=_nombre_de(sesion),
     )
     if fila is None:
         raise HTTPException(404, "No se encontró esa alerta.")
@@ -510,6 +541,51 @@ async def atender(id_alerta: str, sesion: dict = Depends(sesion_requerida)):
     respuesta = _alerta_json(_con_estado(fila))
     respuesta["fresca"] = fresca
     return respuesta
+
+
+@app.get("/api/alertas/{id_alerta}")
+async def detalle_alerta(id_alerta: str, sesion: dict = Depends(sesion_requerida)):
+    """Una alerta con su línea de tiempo «Qué pasó» (decisión B.3).
+
+    401 sin token (la dependencia) y 404 si la alerta no existe, igual que en
+    `atender`. El `chat_id` no aparece en ninguna parte de la respuesta: los
+    eventos llevan el NOMBRE del familiar (`familiares.nombre`), y si no hay
+    nombre, «Familiar».
+
+    **Los eventos son SOLO hechos reales de la base**, nada calculado ni
+    imaginado: cuándo se creó, qué avisos salieron de verdad (`enviado_en`),
+    qué avisos siguen esperando y cuándo quién la atendió. Una línea de tiempo
+    que rellena horas con «ahora más una» enseña cosas que no pasaron.
+    """
+    del sesion
+    if not alertas_modulo.id_valido(id_alerta):
+        raise HTTPException(404, "No se encontró esa alerta.")
+    fila = base.obtener_alerta(id_alerta)
+    if fila is None:
+        raise HTTPException(404, "No se encontró esa alerta.")
+
+    eventos = [{"tipo": "creada", "en": fila["creado_en"]}]
+    for envio in base.envios_de_alerta(id_alerta):
+        # Sin nombre guardado, «Familiar»: un `chat_id` no va a una pantalla
+        # de familia, y el envío sí ocurrió, así que el evento no se omite.
+        nombre = (envio["nombre"] or "").strip() or "Familiar"
+        if envio["enviado_en"]:
+            eventos.append({"tipo": "enviada", "en": envio["enviado_en"],
+                            "nombre": nombre})
+        else:
+            eventos.append({"tipo": "pendiente", "en": envio["creado_en"],
+                            "nombre": nombre})
+    if fila["resuelto_en"]:
+        eventos.append({"tipo": "atendida", "en": fila["resuelto_en"],
+                        "nombre": (fila["resuelto_por"] or "").strip() or None})
+    if fila["descartada_en"]:
+        eventos.append({"tipo": "descartada", "en": fila["descartada_en"]})
+    # Orden por hora; con horas iguales manda el orden en que se añadieron
+    # (`sorted` es estable), que es el en que pasaron las cosas.
+    eventos.sort(key=lambda evento: evento["en"])
+
+    return {"alerta": _alerta_json(_con_estado(fila)), "eventos": eventos,
+            "servidor_hora": int(time.time())}
 
 
 def _con_estado(fila) -> dict:
@@ -528,6 +604,8 @@ def _con_estado(fila) -> dict:
         return {"id": fila["id"], "tipo": fila["tipo"], "estado": "resuelta",
                 "creado_en": fila["creado_en"], "carga_json": fila["carga_json"],
                 "resuelto_en": fila["resuelto_en"],
+                "resuelto_por": (fila["resuelto_por"]
+                                 if "resuelto_por" in fila.keys() else None),
                 "descartada_en": fila["descartada_en"], "enviados": 0, "sin_mandar": 0}
     return dict(completas[0])
 

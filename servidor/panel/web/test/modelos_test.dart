@@ -316,4 +316,106 @@ void main() {
           'el 1/10/2026 a las 09:00');
     });
   });
+
+  group('Estado.gasOnAdc', () {
+    test('lee el umbral de gas cuando el servidor lo manda', () {
+      final Estado e = Estado.desde(<String, dynamic>{
+        'servidor_hora': 100,
+        'gas_on_adc': 1800,
+      });
+      expect(e.gasOnAdc, 1800);
+    });
+
+    test('sin el campo sigue leyendo el resto: es opcional, no un cero', () {
+      final Estado e = Estado.desde(<String, dynamic>{
+        'servidor_hora': 100,
+      });
+      expect(e.gasOnAdc, isNull);
+    });
+
+    test('conInactividad conserva el umbral', () {
+      final Estado e = Estado.desde(<String, dynamic>{
+        'servidor_hora': 100,
+        'gas_on_adc': 1550,
+      });
+      final Estado otra =
+          e.conInactividad(const Inactividad(
+              ultimoMovimiento: 5, tiempoMin: 120, minimo: 2, maximo: 720));
+      expect(otra.gasOnAdc, 1550);
+    });
+  });
+
+  group('Alerta.resueltoPor', () {
+    test('trae el NOMBRE de quien atendió, no el chat_id', () {
+      final Alerta a = Alerta.desde(<String, dynamic>{
+        'id': 'a1',
+        'tipo': 'gas',
+        'estado': 'atendida',
+        'creado_en': 100,
+        'carga': <String, dynamic>{'gas_adc': 1900},
+        'resuelta_en': 200,
+        'resuelto_por': 'Ana',
+      });
+      expect(a.resueltoPor, 'Ana');
+      expect(a.resueltaEn, 200);
+      expect(a.sinResolver, isFalse);
+    });
+
+    test('una alerta anterior al campo 8 lo trae null y no vacío', () {
+      final Alerta a = Alerta.desde(<String, dynamic>{
+        'id': 'a1',
+        'tipo': 'gas',
+        'estado': 'atendida',
+        'creado_en': 100,
+        'carga': <String, dynamic>{},
+        'resuelta_en': 200,
+      });
+      expect(a.resueltoPor, isNull);
+    });
+  });
+
+  group('AlertaDetalle.desde', () {
+    test('lee la alerta, sus eventos en orden y la hora del servidor', () {
+      final AlertaDetalle d = AlertaDetalle.desde(<String, dynamic>{
+        'alerta': <String, dynamic>{
+          'id': 'a1',
+          'tipo': 'gas',
+          'estado': 'pendiente',
+          'creado_en': 100,
+          'carga': <String, dynamic>{'gas_adc': 1900},
+        },
+        'eventos': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'en': 100,
+            'tipo': 'creada',
+          },
+          <String, dynamic>{
+            'en': 105,
+            'tipo': 'enviada',
+            'nombre': 'Ana',
+          },
+        ],
+        'servidor_hora': 120,
+      });
+      expect(d.alerta.id, 'a1');
+      expect(d.eventos.length, 2);
+      expect(d.eventos.first.tipo, 'creada');
+      expect(d.eventos[1].nombre, 'Ana');
+      expect(d.servidorHora, 120);
+    });
+
+    test('sin eventos o sin servidor_hora no revienta', () {
+      final AlertaDetalle d = AlertaDetalle.desde(<String, dynamic>{
+        'alerta': <String, dynamic>{
+          'id': 'a1',
+          'tipo': 'gas',
+          'estado': 'pendiente',
+          'creado_en': 100,
+          'carga': <String, dynamic>{},
+        },
+      });
+      expect(d.eventos, isEmpty);
+      expect(d.servidorHora, 0);
+    });
+  });
 }

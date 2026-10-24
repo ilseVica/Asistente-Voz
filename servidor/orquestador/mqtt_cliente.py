@@ -95,6 +95,19 @@ class ClienteMQTT:
                       config.MQTT_HOST, config.MQTT_PUERTO,
                       config.MQTT_USUARIO, config.MQTT_CLIENT_ID)
         self.suscribirse()
+        # La configuración del umbral de gas se publica en CADA conexión (arranque
+        # y reconexión), con retain y QoS 1. Retain para que el ESP32 y el panel
+        # la reciban aunque se conecten después, y en cada conexión para que el
+        # mensaje retenido siempre refleje lo que dice `config.py` de ESTE
+        # proceso (si alguien cambia el `.env` y reinicia, el broker no se queda
+        # con el valor viejo).
+        try:
+            self.publicar_config_nodo()
+        except Exception:  # noqa: BLE001
+            # Un fallo aquí no puede tumbar el hilo de red de paho: el resto
+            # (suscripciones y mensajes) sigue funcionando igual.
+            registro.exception("no se pudo publicar %s; se ignora",
+                               config.TOPICO_NODO_CONFIG)
         # El aviso de reconexión va DESPUÉS de suscribirse: si el gancho publicara
         # algo, ya tiene las suscripciones puestas. La primera vez no se llama (ver
         # el comentario de `_primera_conexion` en `__init__`).
@@ -237,6 +250,22 @@ class ClienteMQTT:
             motivo = ("encolado desde el hilo de red de paho"
                       if en_callback else "encolado sin esperar el PUBACK")
             registro.info("%s en %s: %s", motivo, topico, cuerpo)
+
+    def publicar_config_nodo(self) -> None:
+        """Publica la configuración del umbral de gas en `nodo/config`.
+
+        `{"gas_on_adc":1800,"gas_off_adc":1550}` con retain y QoS 1, que es el
+        formato que el firmware y el panel esperan. Retain para que cualquiera
+        que se suscriba después la reciba, y QoS 1 para que llegue aunque el
+        ACK se pierda.
+        """
+        self.publicar(
+            config.TOPICO_NODO_CONFIG,
+            {"gas_on_adc": config.GAS_ON_ADC,
+             "gas_off_adc": config.GAS_OFF_ADC},
+            qos=1,
+            retain=True,
+        )
 
     def publicar_luz(self, estado: str, origen: str = "panel") -> None:
         import time

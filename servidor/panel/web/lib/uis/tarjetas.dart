@@ -5,98 +5,7 @@ import '../modelos.dart';
 import '../tema.dart';
 import '../textos.dart';
 
-/// El encabezado: quién es y si la casa está viva.
-class Cabecera extends StatelessWidget {
-  const Cabecera({super.key});
-
-  @override
-  Widget build(BuildContext contexto) {
-    final EstadoPanel estado = PanelScope.de(contexto);
-    final Estado? e = estado.estado;
-    final TextTheme tipografia = Theme.of(contexto).textTheme;
-
-    final bool viva = e != null && estado.conectadoAlServidor &&
-        e.sitio.estado != desconectado;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: <Widget>[
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(Textos.asistenteDeVoz, style: tipografia.bodySmall),
-              Text(Textos.salaPrincipal, style: tipografia.headlineMedium),
-            ],
-          ),
-        ),
-        _Pastilla(
-          texto: !estado.conectadoAlServidor
-              ? Textos.sinConexion
-              : viva
-                  ? Textos.conectada
-                  : Textos.casaNoResponde,
-          color: !estado.conectadoAlServidor
-              ? Tema.peligro
-              : viva
-                  ? Tema.primario
-                  : Color(0xFF8A6D1D),
-          fondo: !estado.conectadoAlServidor
-              ? const Color(0xFFF6E9E9)
-              : viva
-                  ? Tema.suave
-                  : const Color(0xFFFBF3DE),
-          vivo: estado.conectadoAlServidor && viva,
-        ),
-      ],
-    );
-  }
-}
-
-class _Pastilla extends StatelessWidget {
-  const _Pastilla({
-    required this.texto,
-    required this.color,
-    required this.fondo,
-    required this.vivo,
-  });
-
-  final String texto;
-  final Color color;
-  final Color fondo;
-  final bool vivo;
-
-  @override
-  Widget build(BuildContext contexto) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-          color: fondo, borderRadius: BorderRadius.circular(999)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Container(
-            width: 8,
-            height: 8,
-            decoration:
-                BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 7),
-          Text(texto,
-              style: TextStyle(
-                  color: color, fontWeight: FontWeight.w700, fontSize: 14)),
-        ],
-      ),
-    );
-  }
-}
-
 /// La tarjeta de la luz, con su interruptor.
-///
-/// Es la única tarjeta que manda cosas. Un `FilledButton` que refleja lo que se
-/// sabe y no lo que se mando: mientras la orden está en vuelo, el botón sigue
-/// diciendo «Apagar la luz» con el estado actual de al lado, y el cambio llega por
-/// el WebSocket.
 class TarjetaLuz extends StatelessWidget {
   const TarjetaLuz({super.key});
 
@@ -104,8 +13,7 @@ class TarjetaLuz extends StatelessWidget {
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
     final Luz luz = estado.estado?.luz ??
-        const Luz(estado: sinDatos, encendida: null, origen: null,
-            recibidoEn: null);
+        const Luz(estado: sinDatos, encendida: null, origen: null, recibidoEn: null);
     final bool? encendida = luz.encendida;
     final String titulo = encendida == null
         ? Textos.sinDatos
@@ -113,10 +21,17 @@ class TarjetaLuz extends StatelessWidget {
             ? Textos.encendida
             : Textos.apagada;
 
-    final String detalle = luz.estado == sinDatos
-        ? Textos.todaviaNoHayLuz
-        : '${origenDeLuz(luz.origen)} · '
-            '${hace(luz.recibidoEn, ahora: estado.ahoraServidor())}';
+    String detalle;
+    if (luz.estado == sinDatos && encendida == null) {
+      detalle = Textos.todaviaNoHayLuz;
+    } else if (luz.recibidoEn == null && luz.origen != null) {
+      detalle = '${titulo.toLowerCase()} ${origenDeLuz(luz.origen).toLowerCase()}';
+    } else if (luz.origen != null) {
+      detalle =
+          '${origenDeLuz(luz.origen)} · ${hace(luz.recibidoEn, ahora: estado.ahoraServidor())}';
+    } else {
+      detalle = titulo;
+    }
 
     return Card(
       child: Padding(
@@ -134,28 +49,20 @@ class TarjetaLuz extends StatelessWidget {
                         .textTheme
                         .bodyMedium
                         ?.copyWith(
-                            color: Tema.secundario,
-                            fontWeight: FontWeight.w700)),
+                            color: Tema.secundario, fontWeight: FontWeight.w700)),
               ],
             ),
             const SizedBox(height: 12),
-            Text(titulo,
-                style: Theme.of(contexto).textTheme.headlineMedium),
+            Text(titulo, style: Theme.of(contexto).textTheme.headlineMedium),
             const SizedBox(height: 4),
             Text(detalle, style: Theme.of(contexto).textTheme.bodySmall),
             const SizedBox(height: 16),
             FilledButton(
-              // La luz se enciende con un botón ancho, como el interruptor del
-              // prototipo: el tema ya no fuerza ese ancho para no aplastar los
-              // botones que van en fila junto a un texto.
               style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(Tema.altoMinimo)),
-              // Sin datos no se manda nada: apagar una luz de la que no se sabe ni
-              // si existe es una orden a ciegas.
               onPressed: (encendida == null || estado.cargandoLuz)
                   ? null
-                  : () =>
-                      estado.encenderLuz(encender: !encendida),
+                  : () => estado.encenderLuz(encender: !encendida),
               child: estado.cargandoLuz
                   ? const SizedBox(
                       height: 20,
@@ -175,7 +82,7 @@ class TarjetaLuz extends StatelessWidget {
   }
 }
 
-/// Temperatura, humedad y movimiento, cada uno en su recuadro.
+/// Temperatura y humedad, como en el prototipo.
 class TarjetaAmbiente extends StatelessWidget {
   const TarjetaAmbiente({super.key});
 
@@ -183,81 +90,78 @@ class TarjetaAmbiente extends StatelessWidget {
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
     final Sensores s = estado.estado?.sensores ??
-        const Sensores(estado: sinDatos, temperaturaC: null,
-            humedadPct: null, movimiento: null, gasAdc: null,
+        const Sensores(
+            estado: sinDatos,
+            temperaturaC: null,
+            humedadPct: null,
+            movimiento: null,
+            gasAdc: null,
             recibidoEn: null);
     final int ahora = estado.ahoraServidor();
-    final String antiguedad = hace(s.recibidoEn, ahora: ahora);
-    // «Sin sensor» sólo tiene sentido si el nodo está conectado y aun así manda el
-    // campo en null; sin nodo, lo que falta es información, no el sensor.
     final bool nodoConectado = estado.estado?.nodo.estado == conectado;
 
-    final List<_Dato> datos = <_Dato>[
-      _Dato(
-        rotulo: Textos.temperatura,
-        valor: datoDeSensor(
-            nodoConectado: nodoConectado,
-            valor: s.temperaturaC,
-            conValor: () => '${_num(s.temperaturaC)} °C'),
-        tamano: 26,
-      ),
-      _Dato(
-        rotulo: Textos.humedad,
-        valor: datoDeSensor(
-            nodoConectado: nodoConectado,
-            valor: s.humedadPct,
-            conValor: () => '${_num(s.humedadPct)} %'),
-        tamano: 26,
-      ),
-      _Dato(
-        rotulo: Textos.gas,
-        valor: datoDeSensor(
-            nodoConectado: nodoConectado,
-            valor: s.gasAdc,
-            conValor: () => Textos.noSeDetectaGas),
-        tamano: 26,
-        color: s.gasAdc == null ? Tema.secundario : Tema.primario,
-      ),
-      _Dato(
-        rotulo: Textos.movimiento,
-        valor: s.movimiento == null
-            ? (nodoConectado ? Textos.sinSensor : Textos.sinDatos)
-            : s.movimiento!
-                ? Textos.ahoraMismo
-                : Textos.noSeDetectaNadie,
-        tamano: 18,
-        subtitulo: s.recibidoEn == null ? null : antiguedad,
-      ),
-    ];
+    final String temp = datoDeSensor(
+        nodoConectado: nodoConectado,
+        valor: s.temperaturaC,
+        conValor: () => '${_num(s.temperaturaC)} °C');
+    final String hum = datoDeSensor(
+        nodoConectado: nodoConectado,
+        valor: s.humedadPct,
+        conValor: () => '${_num(s.humedadPct)} %');
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(Textos.ambiente,
-                style: Theme.of(contexto)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(
-                        color: Tema.secundario,
-                        fontWeight: FontWeight.w700)),
+            Row(
+              children: <Widget>[
+                const Icon(Icons.thermostat, color: Tema.secundario, size: 20),
+                const SizedBox(width: 8),
+                Text(Textos.ambiente,
+                    style: Theme.of(contexto)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(
+                            color: Tema.secundario, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(temp,
+                          style: const TextStyle(
+                              fontSize: 34, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Text(Textos.temperatura,
+                          style: Theme.of(contexto).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(hum,
+                          style: const TextStyle(
+                              fontSize: 34, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Text(Textos.humedad,
+                          style: Theme.of(contexto).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
-            LayoutBuilder(builder: (BuildContext contexto, BoxConstraints c) {
-              final int columnas = c.maxWidth > 420 ? 4 : 2;
-              final double ancho = (c.maxWidth - 12 * (columnas - 1)) / columnas;
-              return Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: <Widget>[
-                  for (final _Dato d in datos) SizedBox(width: ancho, child: d),
-                ],
-              );
-            }),
-            const SizedBox(height: 12),
-            Text('${Textos.ultimaLectura}$antiguedad',
-                style: Theme.of(contexto).textTheme.bodySmall),
+            if (s.recibidoEn != null)
+              Text('Actualizado ${haceCorto(s.recibidoEn, ahora: ahora)}',
+                  style: Theme.of(contexto).textTheme.bodySmall),
           ],
         ),
       ),
@@ -265,67 +169,276 @@ class TarjetaAmbiente extends StatelessWidget {
   }
 }
 
-class _Dato extends StatelessWidget {
-  const _Dato({
-    required this.rotulo,
-    required this.valor,
-    required this.tamano,
-    this.color,
-    this.subtitulo,
-  });
+/// El nivel del gas en palabras, con su color.
+///
+/// Tres escalones contra `gas_on_adc` (el umbral que manda el servidor por
+/// entorno): por debajo de tres cuartas partes, «Normal»; de ahí al umbral,
+/// «Gas elevado» (el ámbar del aviso); en o por encima del umbral, «Gas
+/// detectado» (el rojo de la alerta). Con un umbral no se puede juzgar nada y
+/// se enseña sólo la lectura.
+///
+/// Funciones puras para poder probar la regla sin montar la tarjeta.
+String estadoDelGas({required num? gasAdc, required num? umbral}) {
+  if (gasAdc == null) return Textos.sinDatos;
+  if (umbral == null) return Textos.gasSinUmbral;
+  if (gasAdc >= umbral) return Textos.gasDetectado;
+  if (gasAdc >= umbral * 0.75) return Textos.gasElevado;
+  return Textos.gasNormal;
+}
 
-  final String rotulo;
-  final String valor;
-  final double tamano;
-  final Color? color;
-  final String? subtitulo;
+Color colorDelGas({required num? gasAdc, required num? umbral}) {
+  final String estado =
+      estadoDelGas(gasAdc: gasAdc, umbral: umbral);
+  if (estado == Textos.gasDetectado) return Tema.peligro;
+  if (estado == Textos.gasElevado) return Tema.ambarPildora;
+  if (estado == Textos.sinDatos || estado == Textos.gasSinUmbral) {
+    return Tema.secundario;
+  }
+  return Tema.primario;
+}
+
+/// La barra de gas: la lectura contra la escala completa del ADC de 12 bits,
+/// con el umbral marcado en su sitio (decisión A.3: el panel expone el umbral
+/// y se ve dónde está, no sólo un «Normal» sin explicación).
+class BarraGas extends StatelessWidget {
+  const BarraGas({super.key, required this.gasAdc, required this.umbral});
+
+  final num? gasAdc;
+  final num? umbral;
 
   @override
   Widget build(BuildContext contexto) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAFBF9),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Tema.borde),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Text(rotulo, style: Theme.of(contexto).textTheme.bodySmall),
-          const SizedBox(height: 4),
-          Text(valor,
-              style: TextStyle(
-                  fontSize: tamano,
-                  fontWeight: FontWeight.w700,
-                  color: color ?? Tema.texto,
-                  height: 1.15)),
-          if (subtitulo != null) ...<Widget>[
-            const SizedBox(height: 2),
-            Text(subtitulo!,
-                style: Theme.of(contexto).textTheme.bodySmall),
-          ],
-        ],
+    final double lectura =
+        gasAdc == null ? 0 : gasAdc!.toDouble() / Tema.escalaAdc;
+    final double anchoUmbral =
+        umbral == null ? 0 : umbral!.toDouble() / Tema.escalaAdc;
+
+    return SizedBox(
+      height: 10,
+      child: LayoutBuilder(
+        builder: (BuildContext contexto, BoxConstraints c) {
+          final double lleno = c.maxWidth * lectura.clamp(0.0, 1.0);
+          final double marca = c.maxWidth * anchoUmbral.clamp(0.0, 1.0);
+          return Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Container(
+                decoration: BoxDecoration(
+                    color: Tema.caja,
+                    borderRadius: BorderRadius.circular(6)),
+              ),
+              if (gasAdc != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    width: lleno < 10 ? 10 : lleno,
+                    decoration: BoxDecoration(
+                        color: colorDelGas(gasAdc: gasAdc, umbral: umbral),
+                        borderRadius: BorderRadius.circular(6)),
+                  ),
+                ),
+              if (umbral != null && anchoUmbral > 0 && anchoUmbral < 1)
+                Positioned(
+                  left: marca - 1,
+                  top: -3,
+                  bottom: -3,
+                  child: Container(
+                    width: 2,
+                    color: Tema.ambarTexto,
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-/// El aviso por inactividad: cuándo se movió alguien por última vez y el ajuste.
-///
-/// Es la única tarjeta que guarda un número (los minutos), y lo hace con un campo
-/// de texto y no con un deslizador: la franja va de 2 a 720 y 719 pasos no se
-/// afinan con el dedo. El error se enseña debajo del campo, en la misma pantalla,
-/// y la franja la manda el servidor, así que aquí no hay números escritos a mano.
-class TarjetaInactividad extends StatefulWidget {
-  const TarjetaInactividad({super.key});
+/// La tarjeta de gas, que es la pieza con más cuidado del panel: dice el estado
+/// con color, enseña la lectura contra el umbral del servidor y la barra con la
+/// marca donde está ese umbral.
+class TarjetaGas extends StatelessWidget {
+  const TarjetaGas({super.key});
 
   @override
-  State<TarjetaInactividad> createState() => _TarjetaInactividadState();
+  Widget build(BuildContext contexto) {
+    final EstadoPanel estado = PanelScope.de(contexto);
+    final Sensores s = estado.estado?.sensores ??
+        const Sensores(
+            estado: sinDatos,
+            temperaturaC: null,
+            humedadPct: null,
+            movimiento: null,
+            gasAdc: null,
+            recibidoEn: null);
+    final bool nodoConectado = estado.estado?.nodo.estado == conectado;
+    final num? umbral = estado.estado?.gasOnAdc;
+    final num? gasAdc = s.gasAdc;
+
+    String valor;
+    if (!nodoConectado) {
+      valor = Textos.sinDatos;
+    } else if (gasAdc == null) {
+      valor = Textos.sinSensor;
+    } else {
+      valor = estadoDelGas(gasAdc: gasAdc, umbral: umbral);
+    }
+    final bool hayDatoNum = nodoConectado && gasAdc != null;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Icon(Icons.local_gas_station,
+                    color: Tema.secundario, size: 20),
+                const SizedBox(width: 8),
+                Text(Textos.gas,
+                    style: Theme.of(contexto)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(
+                            color: Tema.secundario, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(valor,
+                style: Theme.of(contexto).textTheme.headlineMedium?.copyWith(
+                    color: hayDatoNum
+                        ? colorDelGas(gasAdc: gasAdc, umbral: umbral)
+                        : Tema.secundario)),
+            if (hayDatoNum) ...<Widget>[
+              const SizedBox(height: 12),
+              BarraGas(gasAdc: gasAdc, umbral: umbral),
+              const SizedBox(height: 12),
+              Text(
+                  '${Textos.lectura}${_num(gasAdc)}'
+                  '${umbral == null ? '' : ' · ${Textos.umbral}${_num(umbral)}'}',
+                  style: Theme.of(contexto).textTheme.bodySmall),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _TarjetaInactividadState extends State<TarjetaInactividad> {
+/// La tarjeta de movimiento: si hay alguien ahora, cuándo fue la última vez que
+/// lo hubo, y el aviso por inactividad con su acceso al diálogo.
+class TarjetaMovimiento extends StatelessWidget {
+  const TarjetaMovimiento({super.key});
+
+  @override
+  Widget build(BuildContext contexto) {
+    final EstadoPanel estado = PanelScope.de(contexto);
+    final Estado? e = estado.estado;
+    final Sensores s = e?.sensores ??
+        const Sensores(
+            estado: sinDatos,
+            temperaturaC: null,
+            humedadPct: null,
+            movimiento: null,
+            gasAdc: null,
+            recibidoEn: null);
+    final bool nodoConectado = e?.nodo.estado == conectado;
+
+    String valor;
+    if (!nodoConectado) {
+      valor = Textos.sinDatos;
+    } else if (s.movimiento == null) {
+      valor = Textos.sinSensor;
+    } else if (s.movimiento!) {
+      valor = Textos.movimientoDetectado;
+    } else {
+      valor = Textos.sinMovimiento;
+    }
+
+    final Inactividad? inact = e?.inactividad;
+    final bool sinReloj = inact == null ||
+        inact.ultimoMovimiento == null ||
+        !nodoConectado ||
+        e?.nodo.estado == desconectado;
+    final String? ultimoLinea = sinReloj
+        ? null
+        : '${Textos.ultimoMovimiento} ${hace(inact.ultimoMovimiento!, ahora: estado.ahoraServidor())}';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Icon(Icons.directions_walk,
+                    color: Tema.secundario, size: 20),
+                const SizedBox(width: 8),
+                Text(Textos.movimiento,
+                    style: Theme.of(contexto)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(
+                            color: Tema.secundario, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(valor, style: Theme.of(contexto).textTheme.headlineMedium),
+            if (ultimoLinea != null) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(ultimoLinea, style: Theme.of(contexto).textTheme.bodySmall),
+            ],
+            const SizedBox(height: 16),
+            if (inact != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => mostrarDialogoInactividad(contexto),
+                  style: TextButton.styleFrom(
+                      foregroundColor: Tema.primario,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 48)),
+                  child: Text(avisoInactividadAlos(inact.tiempoMin),
+                      style: Theme.of(contexto)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Abre el diálogo del aviso por inactividad desde cualquier pantalla.
+Future<void> mostrarDialogoInactividad(BuildContext contexto) {
+  return showDialog<void>(
+    context: contexto,
+    builder: (BuildContext contexto) => const DialogoInactividad(),
+  );
+}
+
+/// El aviso por inactividad: cuándo se movió alguien por última vez y el ajuste.
+///
+/// Es el único número que guarda el panel, y lo guarda con un campo de texto y no
+/// con un deslizador: la franja va de 2 a 720 y 719 pasos no se afinan con el
+/// dedo. El error se enseña debajo del campo, en la misma pantalla, y la franja
+/// la manda el servidor, así que aquí no hay números escritos a mano. Antes era
+/// una tarjeta de la fila de escritorio; ahora se abre con «Cambiar», que es
+/// donde de verdad se toca (decisión B y E).
+class DialogoInactividad extends StatefulWidget {
+  const DialogoInactividad({super.key});
+
+  @override
+  State<DialogoInactividad> createState() => _DialogoInactividadState();
+}
+
+class _DialogoInactividadState extends State<DialogoInactividad> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   int? _editado;
 
@@ -345,6 +458,7 @@ class _TarjetaInactividadState extends State<TarjetaInactividad> {
     _formKey.currentState!.save();
     if (_editado == null) return;
     await estado.guardarInactividad(_editado!);
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -354,90 +468,67 @@ class _TarjetaInactividadState extends State<TarjetaInactividad> {
     if (e == null) return const SizedBox.shrink();
     final Inactividad inact = e.inactividad;
 
-    // Sin reloj (el orquestador aún no ha visto nada) o con el nodo caído, no se
-    // sabe cuándo fue el último movimiento: se dice «sin datos del sensor» y no una
-    // hora que podría ser de hace días.
-    final bool sinDatos =
-        inact.ultimoMovimiento == null || e.nodo.estado == desconectado;
-    final String movimiento = sinDatos
-        ? Textos.sinDatosDelSensor
-        : hace(inact.ultimoMovimiento, ahora: estado.ahoraServidor());
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                const Icon(Icons.hourglass_empty, color: Tema.secundario, size: 20),
-                const SizedBox(width: 8),
-                Text(Textos.avisoInactividad,
-                    style: Theme.of(contexto).textTheme.bodyMedium?.copyWith(
-                        color: Tema.secundario, fontWeight: FontWeight.w700)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(Textos.ultimoMovimiento,
-                style: Theme.of(contexto).textTheme.bodySmall),
-            const SizedBox(height: 4),
-            Text(movimiento,
-                style: Theme.of(contexto).textTheme.headlineMedium),
-            const SizedBox(height: 16),
-            Form(
-              key: _formKey,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Expanded(
-                    child: TextFormField(
-                      // La clave lleva el valor del servidor: cuando se guarda (o
-                      // cambia en otro dispositivo), el campo se reinicia con el
-                      // número que confirmó el servidor en vez de quedarse con lo
-                      // que se había teclado.
-                      key: ValueKey<int>(inact.tiempoMin),
-                      initialValue: '${inact.tiempoMin}',
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: Textos.avisarSiNoHayMovimiento,
-                        suffixText: Textos.minutosUnidad,
-                      ),
-                      validator: (String? valor) => _validar(valor, inact),
-                      onSaved: (String? valor) =>
-                          _editado = int.tryParse((valor ?? '').trim()),
-                      onFieldSubmitted: (_) => _guardar(estado),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    height: 56,
-                    child: FilledButton(
-                      onPressed: estado.cargandoInactividad
-                          ? null
-                          : () => _guardar(estado),
-                      child: estado.cargandoInactividad
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2.5, color: Tema.tarjeta))
-                          : const Text(Textos.guardarInactividad),
-                    ),
-                  ),
-                ],
+    return AlertDialog(
+      title: const Text(Textos.dialogoInactividad),
+      content: SizedBox(
+        width: 420,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                  '${avisoInactividadAlos(inact.tiempoMin)} '
+                  '(${inact.minimo}–${inact.maximo} ${Textos.minutosUnidad})',
+                  style: Theme.of(contexto).textTheme.bodySmall),
+              const SizedBox(height: 16),
+              TextFormField(
+                // La clave lleva el valor del servidor: cuando se guarda (o
+                // cambia en otro dispositivo), el campo se reinicia con el
+                // número que confirmó el servidor en vez de quedarse con lo
+                // que se había teclado.
+                key: ValueKey<int>(inact.tiempoMin),
+                initialValue: '${inact.tiempoMin}',
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: Textos.avisarSiNoHayMovimiento,
+                  suffixText: Textos.minutosUnidad,
+                ),
+                validator: (String? valor) => _validar(valor, inact),
+                onSaved: (String? valor) =>
+                    _editado = int.tryParse((valor ?? '').trim()),
+                onFieldSubmitted: (_) => _guardar(estado),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+      actions: <Widget>[
+        TextButton(
+            onPressed: () => Navigator.of(contexto).pop(),
+            child: const Text(Textos.cancelar)),
+        FilledButton(
+          onPressed:
+              estado.cargandoInactividad ? null : () => _guardar(estado),
+          child: estado.cargandoInactividad
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: Tema.tarjeta))
+              : const Text(Textos.guardarInactividad),
+        ),
+      ],
     );
   }
 }
 
-/// Los enlaces: nodo, sitio y satélite, cada uno con su última lectura.
-class TarjetaEnlaces extends StatelessWidget {
-  const TarjetaEnlaces({super.key});
+/// Los equipos de la casa: nodo, asistente y servidor, cada uno con su estado y
+/// su última lectura. Antes se llamaba «Enlaces» y se le había caído el servidor
+/// de la lista, que es justo lo que un familiar quiere ver cuando nada responde.
+class TarjetaEquipos extends StatelessWidget {
+  const TarjetaEquipos({super.key});
 
   @override
   Widget build(BuildContext contexto) {
@@ -448,14 +539,13 @@ class TarjetaEnlaces extends StatelessWidget {
     final int ahora = estado.ahoraServidor();
 
     final List<_Enlace> enlaces = <_Enlace>[
-      _Enlace(Textos.sensoresYLuz, e.nodo),
-      _Enlace(Textos.conexionConLaCasa, e.sitio),
+      _Enlace(Textos.nodoDeLaSala, e.nodo),
       _Enlace(Textos.asistenteDeVoz, e.satelite),
     ];
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         child: Column(
           children: <Widget>[
             for (final _Enlace enlace in enlaces)
@@ -464,7 +554,7 @@ class TarjetaEnlaces extends StatelessWidget {
                 child: Row(
                   children: <Widget>[
                     SizedBox(
-                        width: 84,
+                        width: 110,
                         child: Text(enlace.nombre,
                             style: Theme.of(contexto)
                                 .textTheme
@@ -476,6 +566,33 @@ class TarjetaEnlaces extends StatelessWidget {
                   ],
                 ),
               ),
+            // El servidor no es un `Componente` del sitio: se sabe con el
+            // WebSocket. Igual que en la cabecera, su aviso es ámbar y no rojo.
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: <Widget>[
+                  SizedBox(
+                      width: 110,
+                      child: Text(Textos.servidor,
+                          style: Theme.of(contexto)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w700))),
+                  Expanded(
+                      child: Text(
+                          estado.conectadoAlServidor
+                              ? Textos.enLinea
+                              : Textos.sinConexion,
+                          style:
+                              Theme.of(contexto).textTheme.bodyMedium)),
+                  _EstadoPunto(
+                      estado: estado.conectadoAlServidor
+                          ? conectado
+                          : desconectado),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -514,7 +631,7 @@ class _EstadoPunto extends StatelessWidget {
     } else if (estado == noInstalado) {
       color = const Color(0xFFB7BCB8);
     } else if (estado == desconectado) {
-      color = Tema.peligro;
+      color = Tema.ambarPildora;
     } else {
       color = const Color(0xFF8A6D1D);
     }
@@ -526,7 +643,6 @@ class _EstadoPunto extends StatelessWidget {
   }
 }
 
-/// El pie, con el enlace permanente al aviso de privacidad.
 class PiePanel extends StatelessWidget {
   const PiePanel({super.key});
 
@@ -544,31 +660,39 @@ class PiePanel extends StatelessWidget {
             style: tipografia.bodySmall,
           ),
           const SizedBox(height: 4),
-          Row(
-            children: <Widget>[
-              TextButton(
-                onPressed: estado.aceptarAviso,
-                style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 32),
-                    foregroundColor: Tema.primario),
-                child: Text(Textos.verAviso,
-                    style: tipografia.bodySmall?.copyWith(
-                        color: Tema.primario,
-                        decoration: TextDecoration.underline)),
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: () => _salir(contexto, estado),
-                style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 32)),
-                child: Text(Textos.cerrarSesion,
-                    style: tipografia.bodySmall
-                        ?.copyWith(color: Tema.secundario)),
-              ),
-            ],
-          ),
+          LayoutBuilder(builder: (BuildContext context, BoxConstraints c) {
+            return Row(
+              children: <Widget>[
+                Flexible(
+                  child: TextButton(
+                    onPressed: estado.aceptarAviso,
+                    style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 32),
+                        foregroundColor: Tema.primario),
+                    child: Text(Textos.verAviso,
+                        overflow: TextOverflow.ellipsis,
+                        style: tipografia.bodySmall?.copyWith(
+                            color: Tema.primario,
+                            decoration: TextDecoration.underline)),
+                  ),
+                ),
+                Flexible(
+                  child: TextButton(
+                    onPressed: () => _salir(contexto, estado),
+                    style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 32),
+                        foregroundColor: Tema.secundario),
+                    child: Text(Textos.cerrarSesion,
+                        overflow: TextOverflow.ellipsis,
+                        style: tipografia.bodySmall
+                            ?.copyWith(color: Tema.secundario)),
+                  ),
+                ),
+              ],
+            );
+          }),
         ],
       ),
     );

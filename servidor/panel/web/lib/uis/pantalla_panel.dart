@@ -4,16 +4,12 @@ import '../main.dart';
 import '../modelos.dart';
 import '../tema.dart';
 import '../textos.dart';
+import 'navegacion.dart';
 import 'banner_sin_conexion.dart';
+import 'pantalla_recordatorios.dart';
 import 'tarjetas.dart';
 
-/// Inicio: las tarjetas, con la barra de abajo en móvil y lateral en escritorio.
-///
-/// El corte son 1024 px (apartado 5.4): por encima, barra lateral y el contenido
-/// centrado, con ambiente e inactividad en dos columnas; por debajo, una columna
-/// con barra inferior. No hay dos pantallas, hay una que se ordena distinto, y
-/// eso es lo que evita que el panel de escritorio diga una cosa y el del móvil
-/// otra.
+/// Inicio: las tarjetas, dentro del molde de navegación (`EstructuraPanel`).
 class PantallaPanel extends StatelessWidget {
   const PantallaPanel({super.key});
 
@@ -23,83 +19,255 @@ class PantallaPanel extends StatelessWidget {
     final bool escritorio =
         MediaQuery.sizeOf(contexto).width >= Tema.anchoEscritorio;
 
-    final Widget contenido = SingleChildScrollView(
-      padding: EdgeInsets.only(
-          left: escritorio ? 0 : 20,
-          right: escritorio ? 0 : 20,
-          top: 24,
-          bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          const BannerSinConexion(),
-          if (estado.aviso != null) ...<Widget>[
-            _AvisoPanel(texto: estado.aviso!, alCerrar: estado.limpiarAviso),
-            const SizedBox(height: 16),
-          ],
-          const Cabecera(),
-          const SizedBox(height: 20),
-          if (estado.estado?.luz.estado == noInstalado)
-            const LineaLuzNoInstalada()
-          else
-            const TarjetaLuz(),
+    final Widget luz = estado.estado?.luz.estado == noInstalado
+        ? const Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: LineaLuzNoInstalada(),
+            ),
+          )
+        : const TarjetaLuz();
+
+    final Widget cuerpo = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (escritorio) ...<Widget>[
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    SizedBox(width: 240, child: luz),
+                    const SizedBox(width: 12),
+                    const SizedBox(width: 240, child: TarjetaAmbiente()),
+                    const SizedBox(width: 12),
+                    const SizedBox(width: 240, child: TarjetaGas()),
+                    const SizedBox(width: 12),
+                    const SizedBox(width: 240, child: TarjetaMovimiento()),
+                  ],
+                ),
+              ),
           const SizedBox(height: 16),
-          if (escritorio)
-            const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          LayoutBuilder(builder: (BuildContext contexto, BoxConstraints c) {
+            final Widget alertas = const _AlertasRecientes();
+            final Widget recordatorios = const _RecordatoriosProximos();
+            final Widget mensajes = const _TarjetaMensajes();
+            if (c.maxWidth > 980) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(child: alertas),
+                  const SizedBox(width: 16),
+                  Expanded(child: recordatorios),
+                  const SizedBox(width: 16),
+                  Expanded(child: mensajes),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Expanded(child: TarjetaAmbiente()),
-                SizedBox(width: 16),
-                Expanded(child: TarjetaInactividad()),
+                alertas,
+                const SizedBox(height: 16),
+                recordatorios,
+                const SizedBox(height: 16),
+                mensajes,
               ],
-            )
-          else ...<Widget>[
-            const TarjetaAmbiente(),
-            const SizedBox(height: 16),
-            const TarjetaInactividad(),
-          ],
+            );
+          }),
+        ] else ...<Widget>[
+          luz,
+          const SizedBox(height: 16),
+          const _RejillaMovil(),
           const SizedBox(height: 16),
           const _AlertasRecientes(),
           const SizedBox(height: 16),
-          const TarjetaEnlaces(),
-          const SizedBox(height: 8),
-          const PiePanel(),
+          const _RecordatoriosProximos(),
+          const SizedBox(height: 16),
+          const _TarjetaMensajes(),
         ],
-      ),
+        const SizedBox(height: 16),
+        const TarjetaEquipos(),
+        const SizedBox(height: 8),
+        const PiePanel(),
+      ],
     );
 
-    if (!escritorio) {
-      return Scaffold(
-        body: SafeArea(child: contenido),
-        bottomNavigationBar: const _BarraInferior(),
-      );
+    return EstructuraPanel(contenido: cuerpo);
+  }
+}
+
+/// La rejilla de 2×2 del móvil: temperatura, humedad, gas y movimiento.
+class _RejillaMovil extends StatelessWidget {
+  const _RejillaMovil();
+
+  @override
+  Widget build(BuildContext contexto) {
+    final EstadoPanel estado = PanelScope.de(contexto);
+    final Estado? e = estado.estado;
+    final Sensores s = e?.sensores ??
+        const Sensores(
+            estado: sinDatos,
+            temperaturaC: null,
+            humedadPct: null,
+            movimiento: null,
+            gasAdc: null,
+            recibidoEn: null);
+    final bool nodoConectado = e?.nodo.estado == conectado;
+    final int ahora = estado.ahoraServidor();
+    final String antiguedad = hace(s.recibidoEn, ahora: ahora);
+
+    final num? umbral = e?.gasOnAdc;
+    String gas;
+    if (!nodoConectado) {
+      gas = Textos.sinDatos;
+    } else if (s.gasAdc == null) {
+      gas = Textos.sinSensor;
+    } else {
+      gas = estadoDelGas(gasAdc: s.gasAdc, umbral: umbral);
     }
 
-    return Scaffold(
-      body: Row(
-        children: <Widget>[
-          const _BarraLateral(),
-          Expanded(
-            child: Container(
-              color: Tema.fondo,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(32),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1120),
-                    child: contenido,
-                  ),
-                ),
+    String movimiento;
+    if (!nodoConectado) {
+      movimiento = Textos.sinDatos;
+    } else if (s.movimiento == null) {
+      movimiento = Textos.sinSensor;
+    } else if (s.movimiento!) {
+      movimiento = Textos.movimientoDetectado;
+    } else {
+      movimiento = Textos.sinMovimiento;
+    }
+    final Inactividad? inact = e?.inactividad;
+    final bool sinReloj = inact == null ||
+        inact.ultimoMovimiento == null ||
+        !nodoConectado ||
+        e?.nodo.estado == desconectado;
+    final String ultimo = sinReloj
+        ? Textos.sinDatosDelSensor
+        : hace(inact.ultimoMovimiento!, ahora: ahora);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: _Celda(
+                rotulo: Textos.temperatura,
+                valor: datoDeSensor(
+                    nodoConectado: nodoConectado,
+                    valor: s.temperaturaC,
+                    conValor: () => '${_num(s.temperaturaC)} °C'),
+                subtitulo: s.recibidoEn == null ? null : antiguedad,
               ),
             ),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _Celda(
+                rotulo: Textos.humedad,
+                valor: datoDeSensor(
+                    nodoConectado: nodoConectado,
+                    valor: s.humedadPct,
+                    conValor: () => '${_num(s.humedadPct)} %'),
+                subtitulo: s.recibidoEn == null ? null : antiguedad,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: _Celda(
+                rotulo: Textos.gas,
+                valor: gas,
+                color: nodoConectado && s.gasAdc != null
+                    ? colorDelGas(gasAdc: s.gasAdc, umbral: umbral)
+                    : Tema.secundario,
+                subtitulo: (nodoConectado && s.gasAdc != null)
+                    ? (umbral == null
+                        ? Textos.gasSinUmbral
+                        : '${Textos.lectura}${_num(s.gasAdc)} · ${Textos.umbral}${_num(umbral)}')
+                    : null,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _Celda(
+                rotulo: Textos.movimiento,
+                valor: movimiento,
+                subtitulo: (!nodoConectado || sinReloj)
+                    ? null
+                    : '${Textos.ultimoMovimiento} $ultimo',
+                pie: inact == null ? null : avisoInactividadAlos(inact.tiempoMin),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Una celda de la rejilla: rótulo, cifra grande y, si la hay, su letra chica.
+class _Celda extends StatelessWidget {
+  const _Celda({
+    required this.rotulo,
+    required this.valor,
+    this.color,
+    this.subtitulo,
+    this.pie,
+  });
+
+  final String rotulo;
+  final String valor;
+  final Color? color;
+  final String? subtitulo;
+  final String? pie;
+
+  @override
+  Widget build(BuildContext contexto) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Tema.tarjeta,
+        borderRadius: BorderRadius.circular(Tema.radio),
+        border: Border.all(color: Tema.borde),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(rotulo, style: Theme.of(contexto).textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Text(valor,
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  height: 1.15,
+                  color: color ?? Tema.texto)),
+          if (subtitulo != null) ...<Widget>[
+            const SizedBox(height: 4),
+            Text(subtitulo!, style: Theme.of(contexto).textTheme.bodySmall),
+          ],
+          if (pie != null) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(pie!,
+                style: Theme.of(contexto)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+          ],
         ],
       ),
     );
   }
 }
 
-/// Las cuatro últimas alertas, con su estado y su hora.
+/// Las alertas más recientes: cinco, con su estado y su hora, y cada fila
+/// abriendo el detalle.
 class _AlertasRecientes extends StatelessWidget {
   const _AlertasRecientes();
 
@@ -107,7 +275,7 @@ class _AlertasRecientes extends StatelessWidget {
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
     final List<Alerta> recientes =
-        estado.alertas.length > 4 ? estado.alertas.sublist(0, 4) : estado.alertas;
+        estado.alertas.length > 5 ? estado.alertas.sublist(0, 5) : estado.alertas;
 
     return Card(
       child: Padding(
@@ -156,48 +324,226 @@ class _FilaAlerta extends StatelessWidget {
 
   @override
   Widget build(BuildContext contexto) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final IconData icono = _iconoAlerta(alerta.tipo);
+    final Color iconoColor =
+        (alerta.sinResolver && alerta.tipo == 'gas') ? Tema.peligro : Tema.primario;
+    final Color iconoFondo = (alerta.sinResolver && alerta.tipo == 'gas')
+        ? Tema.peligro.withValues(alpha: 0.12)
+        : Tema.suave;
+
+    String subtitulo = fechaAlerta(alerta.creadoEn);
+    final String? origen = _origenFila(alerta);
+    if (origen != null && origen.isNotEmpty) {
+      subtitulo = '$origen · $subtitulo';
+    }
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => estado.abrirAlerta(alerta.id),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: Row(
+          children: <Widget>[
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                  color: iconoFondo, borderRadius: BorderRadius.circular(12)),
+              child: Icon(icono, color: iconoColor, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(tituloAlerta(alerta.tipo),
+                      style: Theme.of(contexto)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(subtitulo, style: Theme.of(contexto).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            PastillaEstado(estado: alerta.estado),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _iconoAlerta(String tipo) {
+    switch (tipo) {
+      case 'gas':
+        return Icons.local_gas_station;
+      case 'inactividad':
+        return Icons.hourglass_empty;
+      case 'miedo':
+        return Icons.favorite_border;
+      case 'ayuda':
+      default:
+        return Icons.warning_amber_rounded;
+    }
+  }
+
+  String? _origenFila(Alerta alerta) {
+    final Map<String, dynamic> c = alerta.carga;
+    if (alerta.tipo == 'inactividad') {
+      final Object? m = c['minutos'];
+      if (m is num) return '${m.toInt()} min sin movimiento';
+    }
+    final Object? origen = c['origen'];
+    if (origen == null) return null;
+    final String o = origen.toString();
+    if (o == 'voz') return 'Por voz';
+    if (o == 'alexa') return 'Por voz con Alexa';
+    if (o == 'boton') return 'Con el botón';
+    if (o == 'panel') return 'Desde el panel';
+    return null;
+  }
+}
+
+/// Los próximos recordatorios: tres, con su texto y su hora.
+class _RecordatoriosProximos extends StatelessWidget {
+  const _RecordatoriosProximos();
+
+  @override
+  Widget build(BuildContext contexto) {
+    final EstadoPanel estado = PanelScope.de(contexto);
+    final List<Recordatorio> proximos = estado.recordatorios.length > 3
+        ? estado.recordatorios.sublist(0, 3)
+        : estado.recordatorios;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
               children: <Widget>[
-                Text(tituloAlerta(alerta.tipo),
-                    style: Theme.of(contexto)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                Text(fechaAlerta(alerta.creadoEn),
-                    style: Theme.of(contexto).textTheme.bodySmall),
+                Expanded(
+                  child: Text(Textos.recordatorios,
+                      style: Theme.of(contexto).textTheme.titleLarge),
+                ),
+                OutlinedButton(
+                  onPressed: () => abrirNuevoRecordatorio(contexto, estado),
+                  style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(48, 44), padding: const EdgeInsets.symmetric(horizontal: 14)),
+                  child: const Text(Textos.nuevo),
+                ),
               ],
             ),
-          ),
-          PastillaEstado(estado: alerta.estado),
-        ],
+            const SizedBox(height: 4),
+            if (proximos.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  Textos.recordatoriosVacio,
+                  style: Theme.of(contexto).textTheme.bodySmall,
+                ),
+              )
+            else
+              for (final Recordatorio r in proximos)
+                InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => estado.irA(Destino.recordatorios),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(r.texto,
+                                  style: Theme.of(contexto)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(fontWeight: FontWeight.w700)),
+                              Text(Textos.proximaVez + fechaProxima(r.proximoEn),
+                                  style:
+                                      Theme.of(contexto).textTheme.bodySmall),
+                            ],
+                          ),
+                        ),
+                        if (!r.activo)
+                          const Text(Textos.pausado,
+                              style: TextStyle(
+                                  color: Tema.secundario, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// El nombre de la alerta en pantalla. El servidor manda `gas`, `ayuda`,
-/// `inactividad` y `miedo`; se traducen aquí y no en cada pantalla.
-String tituloAlerta(String tipo) {
-  switch (tipo) {
-    case 'gas':
-      return Textos.alertaDeGas;
-    case 'ayuda':
-      return Textos.peticionDeAyuda;
-    case 'inactividad':
-      return Textos.sinMovimientoEnLaCasa;
-    case 'miedo':
-      return Textos.haDichoTenerMiedo;
-    default:
-      return tipo;
+/// La tercera tarjeta de la fila: mensajes, que todavía no existe.
+///
+/// No hay datos de mensajes en la casa y aquí no se inventan: se dice que viene,
+/// con el pastón «Próximamente» del prototipo, y nada más.
+class _TarjetaMensajes extends StatelessWidget {
+  const _TarjetaMensajes();
+
+  @override
+  Widget build(BuildContext contexto) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Icon(Icons.chat_bubble_outline,
+                    color: Tema.secundario, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(Textos.mensajeParaLaSala,
+                      style: Theme.of(contexto)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(
+                              color: Tema.secundario,
+                              fontWeight: FontWeight.w700)),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Tema.suave,
+                      borderRadius: BorderRadius.circular(999)),
+                  child: const Text(Textos.proximamente,
+                      style: TextStyle(
+                          color: Tema.primario,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(Textos.mensajesVacio,
+                style: Theme.of(contexto).textTheme.bodySmall),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
   }
 }
 
+String _num(num? valor) {
+  if (valor == null) return '—';
+  final double d = valor.toDouble();
+  if (d == d.roundToDouble()) return d.toStringAsFixed(0);
+  return d.toStringAsFixed(1);
+}
+
+/// La pastilla de estado de una alerta en una lista.
 class PastillaEstado extends StatelessWidget {
   const PastillaEstado({super.key, required this.estado});
 
@@ -207,20 +553,21 @@ class PastillaEstado extends StatelessWidget {
   Widget build(BuildContext contexto) {
     final Color color;
     final String texto;
-    switch (estado) {
-      case 'resuelta':
-        color = Tema.primario;
-        texto = Textos.atendida;
-      case 'descartada':
-        color = Tema.secundario;
-        texto = Textos.descartada;
-      case 'enviada':
-        color = Tema.primario;
-        texto = Textos.enviada;
-      default:
-        color = const Color(0xFF8A6D1D);
-        texto = Textos.pendiente;
+
+    if (estado == 'resuelta' || estado == 'atendida') {
+      color = Tema.primario;
+      texto = Textos.atendida;
+    } else if (estado == 'pendiente' || estado == 'enviada') {
+      color = Tema.peligro;
+      texto = Textos.pendiente;
+    } else if (estado == 'descartada') {
+      color = Tema.secundario;
+      texto = Textos.descartada;
+    } else {
+      color = Tema.secundario;
+      texto = estado;
     }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -229,336 +576,6 @@ class PastillaEstado extends StatelessWidget {
       child: Text(texto,
           style: TextStyle(
               color: color, fontWeight: FontWeight.w700, fontSize: 13)),
-    );
-  }
-}
-
-class _AvisoPanel extends StatelessWidget {
-  const _AvisoPanel({required this.texto, required this.alCerrar});
-
-  final String texto;
-  final VoidCallback alCerrar;
-
-  @override
-  Widget build(BuildContext contexto) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      decoration: BoxDecoration(
-        color: Tema.suave,
-        borderRadius: BorderRadius.circular(Tema.radio),
-        border: Border.all(color: Tema.primario.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: <Widget>[
-          const Icon(Icons.info_outline, color: Tema.primario, size: 22),
-          const SizedBox(width: 10),
-          Expanded(
-              child: Text(texto,
-                  style: const TextStyle(color: Tema.primario, fontSize: 15))),
-          IconButton(
-              onPressed: alCerrar,
-              icon: const Icon(Icons.close,
-                  color: Tema.primario, size: 20),
-              tooltip: 'Cerrar'),
-        ],
-      ),
-    );
-  }
-}
-
-class _BarraInferior extends StatelessWidget {
-  const _BarraInferior();
-
-  @override
-  Widget build(BuildContext contexto) {
-    final EstadoPanel estado = PanelScope.de(contexto);
-    final int pendientes = estado.estado?.alertasSinResolver ?? 0;
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Tema.tarjeta,
-        border: Border(top: BorderSide(color: Tema.borde)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: Tema.altoNavegacion + 16,
-          child: Row(
-            children: <Widget>[
-              _DestinoBarra(
-                icono: Icons.home_outlined,
-                activo: Icons.home,
-                rotulo: Textos.inicio,
-                seleccionado: estado.destino == Destino.inicio,
-                cuenta: 0,
-                alPulsar: () => estado.irA(Destino.inicio),
-              ),
-              _DestinoBarra(
-                icono: Icons.notifications_outlined,
-                activo: Icons.notifications,
-                rotulo: Textos.alertas,
-                seleccionado: estado.destino == Destino.alertas,
-                cuenta: pendientes,
-                alPulsar: () => estado.irA(Destino.alertas),
-              ),
-              _DestinoBarra(
-                icono: Icons.schedule_outlined,
-                activo: Icons.schedule,
-                rotulo: Textos.recordatorios,
-                seleccionado: estado.destino == Destino.recordatorios,
-                cuenta: 0,
-                alPulsar: () => estado.irA(Destino.recordatorios),
-              ),
-              _DestinoBarra(
-                icono: Icons.chat_bubble_outline,
-                activo: Icons.chat_bubble,
-                rotulo: Textos.mensajes,
-                seleccionado: estado.destino == Destino.mensajes,
-                cuenta: 0,
-                alPulsar: () => estado.irA(Destino.mensajes),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DestinoBarra extends StatelessWidget {
-  const _DestinoBarra({
-    required this.icono,
-    required this.activo,
-    required this.rotulo,
-    required this.seleccionado,
-    required this.cuenta,
-    required this.alPulsar,
-  });
-
-  final IconData icono;
-  final IconData activo;
-  final String rotulo;
-  final bool seleccionado;
-  final int cuenta;
-  final VoidCallback alPulsar;
-
-  @override
-  Widget build(BuildContext contexto) {
-    final Color color = seleccionado ? Tema.primario : Tema.secundario;
-    return Expanded(
-      child: InkWell(
-        onTap: alPulsar,
-        child: Container(
-          height: Tema.altoNavegacion + 16,
-          padding: const EdgeInsets.only(top: 8, bottom: 12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Stack(
-                clipBehavior: Clip.none,
-                children: <Widget>[
-                  Icon(seleccionado ? activo : icono, color: color, size: 26),
-                  if (cuenta > 0)
-                    Positioned(
-                      right: -8,
-                      top: -4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1),
-                        decoration: const BoxDecoration(
-                            color: Tema.peligro, shape: BoxShape.circle),
-                        child: Text('$cuenta',
-                            style: const TextStyle(
-                                color: Tema.tarjeta,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700)),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 3),
-              Text(rotulo,
-                  style: TextStyle(
-                      color: color,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BarraLateral extends StatelessWidget {
-  const _BarraLateral();
-
-  Future<void> _salir(BuildContext contexto, EstadoPanel estado) async {
-    final bool? seguro = await showDialog<bool>(
-      context: contexto,
-      builder: (BuildContext contexto) => AlertDialog(
-        title: const Text(Textos.cerrarSesionTitulo),
-        content: const Text(Textos.cerrarSesionTexto),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.of(contexto).pop(false),
-              child: const Text(Textos.cancelar)),
-          FilledButton(
-              onPressed: () => Navigator.of(contexto).pop(true),
-              child: const Text(Textos.cerrarSesion)),
-        ],
-      ),
-    );
-    if (seguro == true) await estado.cerrarSesion();
-  }
-
-  @override
-  Widget build(BuildContext contexto) {
-    final EstadoPanel estado = PanelScope.de(contexto);
-    final int pendientes = estado.estado?.alertasSinResolver ?? 0;
-
-    return Container(
-      width: 230,
-      decoration: const BoxDecoration(color: Tema.tarjeta),
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(Textos.asistenteDeVoz,
-                      style: TextStyle(
-                          fontSize: 14, color: Tema.secundario)),
-                  SizedBox(height: 2),
-                  Text(Textos.salaPrincipal,
-                      style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Tema.texto)),
-                ],
-              ),
-            ),
-            const Divider(),
-            const SizedBox(height: 8),
-            _DestinoLateral(
-              icono: Icons.home_outlined,
-              activo: Icons.home,
-              rotulo: Textos.inicio,
-              seleccionado: estado.destino == Destino.inicio,
-              cuenta: 0,
-              alPulsar: () => estado.irA(Destino.inicio),
-            ),
-            _DestinoLateral(
-              icono: Icons.notifications_outlined,
-              activo: Icons.notifications,
-              rotulo: Textos.alertas,
-              seleccionado: estado.destino == Destino.alertas,
-              cuenta: pendientes,
-              alPulsar: () => estado.irA(Destino.alertas),
-            ),
-            _DestinoLateral(
-              icono: Icons.schedule_outlined,
-              activo: Icons.schedule,
-              rotulo: Textos.recordatorios,
-              seleccionado: estado.destino == Destino.recordatorios,
-              cuenta: 0,
-              alPulsar: () => estado.irA(Destino.recordatorios),
-            ),
-            _DestinoLateral(
-              icono: Icons.chat_bubble_outline,
-              activo: Icons.chat_bubble,
-              rotulo: Textos.mensajes,
-              seleccionado: estado.destino == Destino.mensajes,
-              cuenta: 0,
-              alPulsar: () => estado.irA(Destino.mensajes),
-            ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                familiares(estado.estado?.familiares ?? 0),
-                style: Theme.of(contexto).textTheme.bodySmall,
-              ),
-            ),
-            const Divider(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextButton(
-                onPressed: () => _salir(contexto, estado),
-                style: TextButton.styleFrom(
-                    alignment: Alignment.centerLeft,
-                    foregroundColor: Tema.secundario),
-                child: const Text(Textos.cerrarSesion),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DestinoLateral extends StatelessWidget {
-  const _DestinoLateral({
-    required this.icono,
-    required this.activo,
-    required this.rotulo,
-    required this.seleccionado,
-    required this.cuenta,
-    required this.alPulsar,
-  });
-
-  final IconData icono;
-  final IconData activo;
-  final String rotulo;
-  final bool seleccionado;
-  final int cuenta;
-  final VoidCallback alPulsar;
-
-  @override
-  Widget build(BuildContext contexto) {
-    final Color color = seleccionado ? Tema.primario : Tema.secundario;
-    return InkWell(
-      onTap: alPulsar,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
-        decoration: BoxDecoration(
-          color: seleccionado ? Tema.suave : Colors.transparent,
-          border: Border(
-              left: BorderSide(
-                  color: seleccionado ? Tema.primario : Colors.transparent,
-                  width: 3)),
-        ),
-        child: Row(
-          children: <Widget>[
-            Icon(seleccionado ? activo : icono, color: color, size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(rotulo,
-                  style: TextStyle(
-                      color: color,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700)),
-            ),
-            if (cuenta > 0)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: const BoxDecoration(
-                    color: Tema.peligro, shape: BoxShape.circle),
-                child: Text('$cuenta',
-                    style: const TextStyle(
-                        color: Tema.tarjeta,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700)),
-              ),
-          ],
-        ),
-      ),
     );
   }
 }

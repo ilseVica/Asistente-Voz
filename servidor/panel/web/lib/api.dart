@@ -153,6 +153,34 @@ class ClienteApi {
     return Alerta.desde((await _json(respuesta) as Map).cast<String, dynamic>());
   }
 
+  /// `GET /api/alertas/{id}`: la alerta con su línea de tiempo «Qué pasó».
+  ///
+  /// 401 llega como `ErrorApi` con `sinSesion` (como todo lo demás) y 404 con el
+  /// mensaje del servidor, que es el que se enseña: «No se encontró esa alerta».
+  Future<AlertaDetalle> alertaDetalle(String id) async {
+    final http.Response respuesta = await _cliente
+        .get(_ruta('/api/alertas/$id'), headers: _cabeceras)
+        .timeout(const Duration(seconds: 15));
+    return AlertaDetalle.desde(
+        (await _json(respuesta) as Map).cast<String, dynamic>());
+  }
+
+  /// `GET /api/familiares`: sólo los nombres de los activos, sin chat_id.
+  ///
+  /// Devuelve la lista de nombres tal cual; un nombre vacío (alguien sin apodo
+  /// guardado) lo deja vacío aquí y la pantalla lo pinta «Familiar».
+  Future<List<String>> familiares() async {
+    final http.Response respuesta = await _cliente
+        .get(_ruta('/api/familiares'), headers: _cabeceras)
+        .timeout(const Duration(seconds: 15));
+    final Map<String, dynamic> datos =
+        (await _json(respuesta) as Map).cast<String, dynamic>();
+    return (datos['familiares'] as List)
+        .map((dynamic f) =>
+            ((f as Map)['nombre'] as String? ?? '').trim())
+        .toList();
+  }
+
   Future<void> luz({required bool encender}) async {
     final http.Response respuesta = await _cliente
         .post(_ruta('/api/luz'),

@@ -409,9 +409,15 @@ r = cliente.get("/api/estado", headers=cab(token_marta))
 inst = r.json()
 claves = set(inst)
 esperadas = {"servidor_hora", "luz", "sensores", "nodo", "satelite", "satelites",
-             "sitio", "inactividad", "modo", "alertas", "familiares", "conexiones"}
-prueba("/api/estado trae los doce campos de la instantánea (Fase 4: `inactividad`)",
+             "sitio", "inactividad", "modo", "alertas", "familiares", "conexiones",
+             "gas_on_adc", "gas_off_adc"}
+prueba("/api/estado trae los catorce campos de la instantánea (Fase 4: "
+       "`inactividad`, Fase 2: `gas_on_adc`)",
        claves == esperadas, claves.symmetric_difference(esperadas))
+prueba("el umbral del gas entra como entero del ADC (Fase 2)",
+       isinstance(inst["gas_on_adc"], int)
+       and 0 < inst["gas_off_adc"] < inst["gas_on_adc"] < 4096,
+       (inst["gas_on_adc"], inst["gas_off_adc"]))
 prueba("cada bloque de la casa lleva `recibido_en`, aunque sea null",
        all("recibido_en" in inst[c] for c in ("luz", "sensores", "nodo", "satelite",
                                               "sitio")),
@@ -652,6 +658,115 @@ prueba("un id con basura da 404 y la tabla sigue ahí",
        r.status_code == 404
        and len(cliente.get("/api/alertas", headers=cab(token_marta)).json()["alertas"])
        >= 1, r.status_code)
+
+
+# =============================================================================
+# 6c. Los familiares y el detalle de una alerta (Fase 2, decisiones A.5 y B.3)
+# =============================================================================
+
+titulo("6c. Los familiares y el detalle de la alerta")
+
+CHATS_DE_PRUEBA = ("111", "222", "333")
+
+
+def sin_chat_ids(datos) -> bool:
+    """¿Ningún `chat_id` de los de las pruebas aparece en la respuesta?
+
+    Se busca por ESTRUCTURA y no en el texto: los `epoch` de las horas son
+    números con 10 cifras y un `r.text` que contuviera «111» sería un acierto
+    falso a mitad de una fecha.
+    """
+    if isinstance(datos, dict):
+        return all("chat_id" not in str(clave) and sin_chat_ids(valor)
+                   for clave, valor in datos.items())
+    if isinstance(datos, list):
+        return all(sin_chat_ids(item) for item in datos)
+    if isinstance(datos, str):
+        return datos not in CHATS_DE_PRUEBA
+    return True
+
+
+# --- `GET /api/familiares`: solo activos, solo nombres, sin chat_id -----------
+base.registrar_familiar("333", nombre="Baja")
+base.marcar_familiar_inactivo("333")
+
+r = cliente.get("/api/familiares")
+prueba("GET /api/familiares sin token es 401",
+       r.status_code == 401, r.status_code)
+r = cliente.get("/api/familiares", headers=cab(token_marta))
+nombres = sorted(f["nombre"] for f in r.json().get("familiares", []))
+prueba("y con token devuelve SOLO los familiares activos, con sus nombres",
+       r.status_code == 200 and nombres == ["Luis", "Marta"]
+       and r.json()["total"] == 2, r.json())
+prueba("sin ningún chat_id ni familiar dado de baja en la respuesta",
+       sin_chat_ids(r.json()) and "Baja" not in r.text, r.json())
+
+# --- `GET /api/alertas/{id}`: los eventos REALES, sin chat_id -----------------
+id_detalle = "000000-b0002-0001"
+base.insertar_alerta(id_detalle, "gas", json.dumps({"gas_adc": 2500}),
+                     chat_ids=["111", "222"])
+
+r = cliente.get("/api/alertas/%s" % id_detalle)
+prueba("el detalle de una alerta sin token es 401",
+       r.status_code == 401, r.status_code)
+r = cliente.get("/api/alertas/%s" % id_detalle, headers=cab(token_marta))
+detalle = r.json()
+eventos = detalle.get("eventos", [])
+prueba("el detalle trae la alerta y su línea de tiempo",
+       r.status_code == 200 and detalle["alerta"]["id"] == id_detalle
+       and isinstance(eventos, list), r.text[:200])
+prueba("con la hora de creación y un evento por aviso PENDIENTE (hechos reales)",
+       eventos[0] == {"tipo": "creada", "en": detalle["alerta"]["creado_en"]}
+       and sorted(e["nombre"] for e in eventos[1:]) == ["Luis", "Marta"]
+       and all(e["tipo"] == "pendiente" for e in eventos[1:]), eventos)
+prueba("y sin ningún chat_id en toda la respuesta",
+       sin_chat_ids(detalle), detalle)
+
+# Un aviso que YA salió es «enviada», con su hora real.
+base.marcar_enviado(id_detalle, "111")
+r = cliente.get("/api/alertas/%s" % id_detalle, headers=cab(token_marta))
+eventos = r.json()["eventos"]
+# Se busca por tipo y no por posición: la «creada» y la «pendiente» llevan la
+# MISMA hora (la del reparto), y con horas iguales el orden depende de cómo
+# caigan los segundos, que es una prueba que pasaría un lunes y fallaría otro.
+por_tipo = {e["tipo"]: e for e in eventos}
+prueba("un envío con `enviado_en` sale como evento «enviada» con su hora",
+       set(por_tipo) == {"creada", "enviada", "pendiente"}
+       and por_tipo["enviada"]["nombre"] == "Marta"
+       and por_tipo["pendiente"]["nombre"] == "Luis"
+       and isinstance(por_tipo["enviada"]["en"], int)
+       and por_tipo["enviada"]["en"] >= por_tipo["creada"]["en"], eventos)
+
+# Atender desde el panel: queda «Atendida por Marta», con el NOMBRE de la sesión.
+r = cliente.post("/api/alertas/%s/atender" % id_detalle, headers=cab(token_marta))
+prueba("al atender, la respuesta lleva el NOMBRE en `resuelto_por`",
+       r.status_code == 200 and r.json()["resuelto_por"] == "Marta", r.json())
+r = cliente.get("/api/alertas/%s" % id_detalle, headers=cab(token_marta))
+detalle = r.json()
+eventos = detalle["eventos"]
+por_tipo = {e["tipo"]: e for e in eventos}
+prueba("y el detalle lo enseña como «atendida» con ese nombre",
+       set(por_tipo) == {"creada", "enviada", "atendida"}
+       and por_tipo["atendida"]["nombre"] == "Marta", eventos)
+prueba("el aviso que estaba pendiente se canceló, así que ya no es un evento",
+       all(e.get("nombre") != "Luis" for e in eventos), eventos)
+prueba("y sigue sin haber ningún chat_id en la respuesta",
+       sin_chat_ids(detalle), detalle)
+
+r = cliente.get("/api/alertas/no-existe")
+prueba("el detalle de una alerta que no existe es 401 sin token",
+       r.status_code == 401, r.status_code)
+r = cliente.get("/api/alertas/no-existe", headers=cab(token_marta))
+prueba("y 404 con token si la alerta no existe",
+       r.status_code == 404, r.status_code)
+r = cliente.get("/api/alertas/; DROP TABLE alertas; /", headers=cab(token_marta))
+prueba("un id con basura da 404 y la tabla sigue ahí",
+       r.status_code == 404
+       and len(cliente.get("/api/alertas", headers=cab(token_marta))
+               .json()["alertas"]) >= 1, r.status_code)
+
+# (El familiar «Baja» se queda inactivo a propósito: así lo que sigue en este
+# fichero ve exactamente los mismos dos activos de antes de esta sección.)
 
 
 # =============================================================================

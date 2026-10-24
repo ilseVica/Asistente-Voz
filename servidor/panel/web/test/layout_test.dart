@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:asistente_panel/main.dart';
 import 'package:asistente_panel/tema.dart';
+import 'package:asistente_panel/uis/navegacion.dart';
 
 /// Las pruebas de rejilla que se quedan para siempre.
 ///
@@ -13,7 +15,8 @@ import 'package:asistente_panel/tema.dart';
 /// diseño: el móvil, la tableta, el escritorio y el muy ancho.
 ///
 /// Los anchos son los de las capturas que se revisaron: 390 (teléfono), 768
-/// (tableta), 1024 (el umbral de escritorio), 1280, 1440 y 1920.
+/// (tableta), 1024, 1280, 1440 y 1920. El corte de escritorio está en 900 px y
+/// se prueba aparte, con la cabecera.
 const List<double> anchosDelDiseno = <double>[390, 768, 1024, 1280, 1440, 1920];
 
 void main() {
@@ -31,8 +34,64 @@ void main() {
   });
 
   testWidgets('el umbral de escritorio es el del diseño', (tester) async {
-    expect(Tema.anchoEscritorio, 1024);
+    expect(Tema.anchoEscritorio, 900);
     expect(Tema.altoMinimo, 52);
+  });
+
+  testWidgets('en escritorio la cabecera enseña las cuatro pestañas', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: Tema.construir(),
+        home: PanelScope(
+          estado: EstadoPanel(),
+          child: const Scaffold(
+            body: EstructuraPanel(contenido: SizedBox.shrink()),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Panel'), findsOneWidget);
+    expect(find.text('Historial de alertas'), findsOneWidget);
+    expect(find.text('Recordatorios'), findsOneWidget);
+    expect(find.text('Familiares'), findsOneWidget);
+    expect(find.text('Mensajes'), findsNothing);
+    expect(find.byType(BottomNavigationBar), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('en el móvil la barra tiene cuatro con Familiares', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: Tema.construir(),
+        home: PanelScope(
+          estado: EstadoPanel(),
+          child: const Scaffold(
+            body: EstructuraPanel(contenido: SizedBox.shrink()),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Inicio'), findsOneWidget);
+    expect(find.text('Alertas'), findsOneWidget);
+    expect(find.text('Recordatorios'), findsOneWidget);
+    expect(find.text('Familiares'), findsWidgets);
+    expect(find.text('Mensajes'), findsNothing);
+    expect(find.byTooltip('Familiares'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   for (final double ancho in anchosDelDiseno) {

@@ -285,7 +285,8 @@ def texto_atendido(tipo: str, cuando: int, id_alerta: str) -> str:
 
 
 def resolver(base, publicar, id_alerta: str, ahora: int = None,
-             quien: str = "desconocido", origen: str = "") -> tuple:
+             quien: str = "desconocido", origen: str = "",
+             nombre_quien: str = None) -> tuple:
     """Atiende una alerta. Devuelve `(fila, fresca)`.
 
     Esta función es la ÚNICA que resuelve una alerta, y la usan dos llamadores: el
@@ -324,11 +325,18 @@ def resolver(base, publicar, id_alerta: str, ahora: int = None,
     `quien` y `origen` van solo al log, para poder decir quién atendió y desde
     dónde. `quien` debe venir ya enmascarado (`db.enmascarar_chat`) si es un
     `chat_id`.
+
+    `nombre_quien` es distinto de `quien`: es el NOMBRE del familiar que se
+    guarda en `alertas.resuelto_por` («Ana»), que es lo que la linea de tiempo
+    del panel enseña como «Atendida por Ana». Nunca un `chat_id`. Sin nombre (o
+    en blanco) se guarda «Familiar»: algo honesto y corto en vez de inventar un
+    nombre o dejar un número que nadie entiende.
     """
     if ahora is None:
         ahora = int(time.time())
 
-    fresca = base.marcar_resuelta(id_alerta, ahora)
+    nombre_resuelto = (nombre_quien or "").strip() or "Familiar"
+    fresca = base.marcar_resuelta(id_alerta, ahora, quien=nombre_resuelto)
     fila = base.obtener_alerta(id_alerta)
     tipo = fila["tipo"] if fila is not None else "alerta"
 

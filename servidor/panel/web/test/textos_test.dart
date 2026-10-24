@@ -103,4 +103,84 @@ void main() {
           'Escriba un número entre 5 y 60 minutos.');
     });
   });
+
+  group('parrafoDeGas', () {
+    test('con umbral enseña la lectura y contra qué saltó', () {
+      expect(parrafoDeGas(1900, 1800), 'Lectura: 1900 · Umbral: 1800');
+    });
+
+    test('sin umbral sólo la lectura: no se inventa un número', () {
+      expect(parrafoDeGas(1900, null), 'Lectura: 1900');
+    });
+  });
+
+  group('quePasoDe', () {
+    test('gas con su lectura real', () {
+      expect(
+          quePasoDe('gas', <String, dynamic>{'gas_adc': 1900}, umbralGas: 1800),
+          'Lectura: 1900 · Umbral: 1800');
+    });
+
+    test('inactividad con sus minutos bien contados', () {
+      expect(quePasoDe('inactividad', <String, dynamic>{'minutos': 1}),
+          'Sin movimiento durante 1 minuto');
+      expect(quePasoDe('inactividad', <String, dynamic>{'minutos': 120}),
+          'Sin movimiento durante 120 minutos');
+    });
+
+    test('ayuda con su origen, como lo cuenta el bot', () {
+      expect(quePasoDe('ayuda', <String, dynamic>{'origen': 'boton'}),
+          'Se pidió por medio del botón de ayuda');
+    });
+
+    test('sin nada que contar devuelve null y no una línea vacía', () {
+      expect(quePasoDe('gas', <String, dynamic>{}), isNull);
+      expect(quePasoDe('miedo', <String, dynamic>{}), isNull);
+    });
+  });
+
+  group('atendidaCuando', () {
+    test('con nombre: «Atendida … por Ana»', () {
+      expect(atendidaCuando('hoy, 09:12', 'Ana'),
+          'Atendida hoy, 09:12 por Ana');
+    });
+
+    test('sin nombre sólo la hora: no se le pone nombre a nadie', () {
+      expect(atendidaCuando('hoy, 09:12', null), 'Atendida hoy, 09:12');
+      expect(atendidaCuando('hoy, 09:12', '   '), 'Atendida hoy, 09:12');
+    });
+  });
+
+  group('eventoAlerta', () {
+    test('los cinco hechos que el servidor manda, con su nombre cuando lo hay',
+        () {
+      expect(eventoAlerta('creada', null), Textos.seCreoLaAlerta);
+      expect(eventoAlerta('enviada', 'Ana'),
+          'Se envió el aviso por Telegram a Ana.');
+      expect(eventoAlerta('enviada', null),
+          'Se envió el aviso por Telegram.');
+      expect(eventoAlerta('atendida', 'Luis'), 'Luis la atendió.');
+      expect(eventoAlerta('descartada', null), Textos.seDescartoLaAlerta);
+    });
+
+    test('un tipo desconocido se enseña tal cual, sin inventarle hechos', () {
+      expect(eventoAlerta('algo_nuevo', null), 'algo_nuevo');
+    });
+  });
+
+  group('tituloAlerta', () {
+    test('traduce los cuatro tipos del servidor', () {
+      expect(tituloAlerta('gas'), Textos.alertaDeGas);
+      expect(tituloAlerta('ayuda'), Textos.peticionDeAyuda);
+      expect(tituloAlerta('inactividad'), Textos.sinMovimientoEnLaCasa);
+      expect(tituloAlerta('miedo'), Textos.haDichoTenerMiedo);
+    });
+  });
+
+  group('avisoInactividadAlos', () {
+    test('con minutos en formato corto', () {
+      expect(avisoInactividadAlos(1), 'Aviso de inactividad a los 1 min');
+      expect(avisoInactividadAlos(120), 'Aviso de inactividad a los 120 min');
+    });
+  });
 }

@@ -1,8 +1,10 @@
 class Textos {
   Textos._();
 
-  static const String asistenteDeVoz = 'Asistente de voz';
+  static const String asistenteDeVoz = 'Asistente de Voz';
   static const String salaPrincipal = 'Sala principal';
+  static const String panel = 'Panel';
+  static const String historialDeAlertas = 'Historial de alertas';
 
   static const String inicio = 'Inicio';
   static const String alertas = 'Alertas';
@@ -48,6 +50,8 @@ class Textos {
       'voz. El panel no tiene micrófono ni cámara.';
 
   static const String sinConexion = 'Sin conexión';
+  static const String sinConexionSala = 'Sin conexión con la sala';
+  static const String salaConectada = 'Sala conectada';
   static const String conectada = 'Conectada';
   static const String casaNoResponde = 'La casa no responde';
 
@@ -56,6 +60,9 @@ class Textos {
       'información. Se muestra la última información recibida.';
   static const String casaNoRespondeTexto = 'El panel sigue conectado, pero la '
       'casa no ha dado señales desde hace un rato.';
+  static const String sinConexionSalaTexto = 'Los datos de abajo son los últimos '
+      'recibidos. La alarma local de gas y el botón de luz siguen funcionando en '
+      'la sala.';
 
   static const String luzDeLaSala = 'Luz de la sala';
   static const String encendida = 'Encendida';
@@ -75,7 +82,9 @@ class Textos {
   static const String movimiento = 'Movimiento';
   static const String noSeDetectaGas = 'No se detecta gas';
   static const String ahoraMismo = 'Ahora mismo';
-  static const String noSeDetectaNadie = 'No se detecta a nadie';
+  static const String movimientoDetectado = 'Movimiento detectado';
+  static const String sinMovimiento = 'Sin movimiento';
+  static const String noSeDetectaNadie = 'Sin movimiento';
   static const String ultimaLectura = 'Última lectura: ';
 
   static const String avisoInactividad = 'Aviso por inactividad';
@@ -104,6 +113,7 @@ class Textos {
 
   static const String alertasRecientes = 'Alertas recientes';
   static const String verTodas = 'Ver todas';
+  static const String nuevo = 'Nuevo';
   static const String sinAlertas =
       'Todavía no ha habido ninguna alerta en esta casa.';
   static const String alertasSubtitulo = 'Lo más reciente arriba. Si alguien '
@@ -113,6 +123,7 @@ class Textos {
   static const String descartada = 'Descartada';
   static const String enviada = 'Enviada';
   static const String pendiente = 'Pendiente';
+  static const String alertaActivaPildora = 'Alerta activa';
   static const String alertaDeGas = 'Alerta de gas';
   static const String peticionDeAyuda = 'Petición de ayuda';
   static const String sinMovimientoEnLaCasa = 'Sin movimiento en la casa';
@@ -187,8 +198,8 @@ class Textos {
     'Noviembre',
     'Diciembre',
   ];
-  static const String mensajesVacio = 'Todavía no hay mensajes en esta casa. '
-      'Cuando existan, aparecerán aquí.';
+  static const String mensajesVacio =
+      'Esta función estará disponible próximamente.';
   static const String proximamente = 'Próximamente';
   static const String volverAlInicio = 'Volver al inicio';
 
@@ -196,6 +207,62 @@ class Textos {
       'luz. El estado se actualizará en unos segundos.';
   static const String luzEnviadaApagar = 'Se envió la orden de apagar la luz. '
       'El estado se actualizará en unos segundos.';
+
+  // --- La cabecera y la navegación -------------------------------------------
+
+  static const String familiares = 'Familiares';
+
+  // --- La tarjeta de gas -----------------------------------------------------
+
+  static const String gasNormal = 'Normal';
+  static const String gasElevado = 'Gas elevado';
+  static const String gasDetectado = 'Gas detectado';
+  static const String lectura = 'Lectura: ';
+  static const String umbral = 'Umbral: ';
+  static const String gasSinUmbral = 'Sin umbral configurado';
+
+  // --- La tarjeta de movimiento ---------------------------------------------
+
+  static const String cambiar = 'Cambiar';
+  static const String pausado = 'Pausado';
+  static const String avisoDeInactividad = 'Aviso de inactividad a los ';
+  static const String dialogoInactividad = 'Aviso por inactividad';
+
+  // --- Equipos y mensaje -----------------------------------------------------
+
+  static const String equipos = 'Equipos';
+  static const String nodoDeLaSala = 'Nodo de la sala';
+  static const String servidor = 'Servidor';
+  static const String enLinea = 'En línea';
+  static const String mensajeParaLaSala = 'Mensaje para la sala';
+
+  // --- La alerta activa y su detalle -----------------------------------------
+
+  static const String alertaActiva = 'Alerta activa en la sala';
+  static const String ver = 'Ver';
+  static const String quePaso = 'Qué pasó';
+  static const String alertaEnLaSala = 'Alerta · Sala principal';
+  static const String verEstadoDeLaSala = 'Ver el estado de la sala';
+  static const String avisoEmergencia = 'Si nadie responde en la sala, '
+      'considera llamar a alguien cercano o a los servicios de emergencia.';
+  static const String seCreoLaAlerta = 'Se creó esta alerta.';
+  static const String seDescartoLaAlerta = 'Se descartó esta alerta.';
+  static const String seAtendioLaAlerta = 'Se atendió esta alerta.';
+  static const String volver = 'Volver';
+  static const String noSePudoCargarLaAlerta = 'No se pudo cargar la alerta.';
+
+  // --- Familiares ------------------------------------------------------------
+
+  static const String familiaresSubtitulo =
+      'Estas personas reciben los avisos de esta casa.';
+  static const String sinFamiliares =
+      'Todavía no hay ningún familiar registrado en esta casa.';
+  static const String sinFamiliaresAyuda = 'Para añadir a alguien, escriba '
+      '/panel al bot de la casa en Telegram.';
+  static const String nombreSinDefinir = 'Familiar';
+  static const String avisoFamiliares = 'La lista sale de Telegram y sólo '
+      'incluye a los familiares activos: los que de verdad reciben los avisos.';
+  static const String reintentar = 'Reintentar';
 }
 
 String familiares(int n) =>
@@ -209,6 +276,37 @@ String horas(int n) => n == 1 ? '1 hora' : '$n horas';
 /// es quien la hace cumplir; aquí sólo se dice con esas cifras.
 String minutosFueraDeRango(int minimo, int maximo) =>
     'Escriba un número entre $minimo y $maximo minutos.';
+
+/// La línea del sensor de gas en el detalle de una alerta: la lectura que saltó
+/// y, si el servidor la tiene, contra qué umbral saltó (decisión A.2: el panel
+/// expone `gas_on_adc`).
+String parrafoDeGas(num gasAdc, num? umbral) => umbral == null
+    ? '${Textos.lectura}$gasAdc'
+    : '${Textos.lectura}$gasAdc · ${Textos.umbral}$umbral';
+
+/// La línea de inactividad, con sus minutos siempre en plural bien dicho.
+String parrafoDeInactividad(int min) =>
+    'Sin movimiento durante ${minutos(min)}';
+
+/// Qué ocurrió en una alerta, sólo con lo que la alerta trae de verdad.
+///
+/// Se manda la `carga` tal cual de la base y el umbral de gas actual del
+/// servidor; si algo no viene, no se pinta (decisión B.3). Devuelve `null` cuando
+/// no hay nada que contar con honestidad.
+String? quePasoDe(String tipo, Map<String, dynamic> carga,
+    {num? umbralGas}) {
+  if (tipo == 'gas') {
+    final Object? g = carga['gas_adc'];
+    if (g is num) return parrafoDeGas(g, umbralGas);
+  }
+  if (tipo == 'inactividad') {
+    final Object? m = carga['minutos'];
+    if (m is num) return parrafoDeInactividad(m.toInt());
+  }
+  final Object? origen = carga['origen'];
+  if (origen == null) return null;
+  return detalleOrigen(origen.toString());
+}
 
 /// El detalle del origen de una alerta de ayuda, como lo dice el bot.
 /// Devuelve null para lo que no se sabe decir, y entonces no se pinta la línea.
@@ -244,6 +342,25 @@ String origenDeLuz(String? origen) {
   }
 }
 
+/// Frase corta para la cabecera: "hace X s", "hace X min", "hace X h".
+String haceCorto(int? epoch, {int? ahora}) {
+  if (epoch == null) return '';
+  final int base = ahora ?? (DateTime.now().millisecondsSinceEpoch ~/ 1000);
+  int seg = base - epoch;
+  if (seg < 0) seg = 0;
+  if (seg < 5) return 'ahora mismo';
+  if (seg < 60) return 'hace $seg s';
+  if (seg < 3600) {
+    final int m = seg ~/ 60;
+    return 'hace $m min';
+  }
+  final int h = seg ~/ 3600;
+  return 'hace $h h';
+}
+
+/// Para el banner sin conexión si se quiere sin tiempo.
+String ultimoDatoSinTiempo() => Textos.sinConexionSala;
+
 /// El nombre de una repetición, como se elige en el formulario.
 String repeticionDe(String repeticion) {
   switch (repeticion) {
@@ -276,3 +393,69 @@ String diasDe(List<int> dias) {
 /// La frase de la última entrega cuando sí se dijo. `cuando` ya viene formateado
 /// por `cuandoSeDijo`, porque la frase vive aquí y el formato de fechas allí.
 String ultimaVezSeDijo(String cuando) => 'La última vez se dijo $cuando.';
+
+/// El aviso de inactividad con sus minutos, como se pinta en la tarjeta de
+/// movimiento: «Aviso de inactividad a los 120 min».
+String avisoInactividadAlos(int minutosMin) =>
+    'Aviso de inactividad a los ${minutosMin.toString()} min';
+
+/// Quién atendió una alerta, con su hora. Si el nombre falta (una alerta muy
+/// antigua, anterior al campo), sólo se dice cuándo: inventar «Familiar» aquí
+/// sería dar un nombre a alguien que no lo tiene.
+String atendidaCuando(String cuando, String? quien) {
+  final String nombre = (quien ?? '').trim();
+  return nombre.isEmpty
+      ? '${Textos.atendida} $cuando'
+      : '${Textos.atendida} $cuando por $nombre';
+}
+
+String etiquetaEstadoAlerta(String estado) {
+  if (estado == 'resuelta' || estado == 'atendida') return Textos.atendida;
+  if (estado == 'pendiente' || estado == 'enviada') return Textos.pendiente;
+  if (estado == 'descartada') return Textos.descartada;
+  return estado;
+}
+
+/// Un evento de «Qué pasó» en una frase, tal como lo cuenta el servidor.
+///
+/// Sólo se llama con los tipos que `GET /api/alertas/{id}` devuelve de verdad
+/// (`creada`, `enviada`, `pendiente`, `atendida`, `descartada`); lo demás se
+/// enseña tal cual, sin inventarle hechos a una línea de tiempo.
+String eventoAlerta(String tipo, String? nombre) {
+  final String quien = (nombre ?? '').trim();
+  switch (tipo) {
+    case 'creada':
+      return Textos.seCreoLaAlerta;
+    case 'enviada':
+      return quien.isEmpty
+          ? 'Se envió el aviso por Telegram.'
+          : 'Se envió el aviso por Telegram a $quien.';
+    case 'pendiente':
+      return quien.isEmpty
+          ? 'El aviso por Telegram sigue pendiente de envío.'
+          : 'El aviso para $quien sigue pendiente de envío.';
+    case 'atendida':
+      return quien.isEmpty ? Textos.seAtendioLaAlerta : '$quien la atendió.';
+    case 'descartada':
+      return Textos.seDescartoLaAlerta;
+    default:
+      return tipo;
+  }
+}
+
+/// El nombre de la alerta en pantalla. El servidor manda `gas`, `ayuda`,
+/// `inactividad` y `miedo`; se traducen aquí y no en cada pantalla.
+String tituloAlerta(String tipo) {
+  switch (tipo) {
+    case 'gas':
+      return Textos.alertaDeGas;
+    case 'ayuda':
+      return Textos.peticionDeAyuda;
+    case 'inactividad':
+      return Textos.sinMovimientoEnLaCasa;
+    case 'miedo':
+      return Textos.haDichoTenerMiedo;
+    default:
+      return tipo;
+  }
+}

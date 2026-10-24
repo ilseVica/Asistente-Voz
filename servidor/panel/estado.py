@@ -176,7 +176,7 @@ class EstadoSala:
 
     # --- Entrada ------------------------------------------------------------
 
-    def recibir(self, topico: str, cuerpo: str) -> None:
+    def recibir(self, topico: str, cuerpo: str, retain: bool = False) -> None:
         """Llega un mensaje: se guarda y se avisa a quien esté escuchando.
 
         La carga se guarda como viene. Si es JSON, se interpreta; si no, se guarda el
@@ -188,7 +188,8 @@ class EstadoSala:
         if componente is None:
             return
         ahora = int(self.reloj())
-        entrada = {"carga": _cargar(cuerpo), "recibido_en": ahora, "topico": topico}
+        recibido_en = None if retain else ahora
+        entrada = {"carga": _cargar(cuerpo), "recibido_en": recibido_en, "topico": topico}
         with self._candado:
             if componente == "satelite":
                 # Uno por satelite (Fase 2C), con su client id. Un retenido vacio
@@ -250,6 +251,12 @@ class EstadoSala:
             "alertas": _conteo(base.contar_por_estado()),
             "familiares": base.contar_familiares_activos(),
             "conexiones": oyentes,
+            # El umbral del gas en cuenta del ADC. No viene de MQTT: lo decide
+            # `config.py` (el mismo archivo que usa el orquestador) y el ESP32 lo
+            # recibe por `nodo/config`. Va aquí para que la barra de la tarjeta
+            # pueda decir «Lectura: 312 / Umbral: 1800» sin inventarlo.
+            "gas_on_adc": config.GAS_ON_ADC,
+            "gas_off_adc": config.GAS_OFF_ADC,
         }
 
     def bloque_luz(self, datos, ahora) -> dict:
@@ -259,6 +266,14 @@ class EstadoSala:
                     "estado": SIN_DATOS}
         carga = entrada["carga"] if isinstance(entrada["carga"], dict) else {}
         estado_recibido = carga.get("estado")
+        if entrada.get("recibido_en") is None:
+            return {
+                "encendida": (True if estado_recibido == "on"
+                              else False if estado_recibido == "off" else None),
+                "origen": carga.get("origen"),
+                "recibido_en": None,
+                "estado": SIN_DATOS,
+            }
         # El retenido no lleva hora (el ESP32 publica `{"estado":..,"origen":..}`), así
         # que la que se mira es la de la recepción. Si el ESP32 lleva más de 90 s sin
         # mandar nada, lo que se sabe de la luz deja de ser actual, y el panel lo dice
@@ -277,6 +292,15 @@ class EstadoSala:
             return {"temperatura_c": None, "humedad_pct": None, "movimiento": None,
                     "gas_adc": None, "recibido_en": None, "estado": SIN_DATOS}
         carga = entrada["carga"] if isinstance(entrada["carga"], dict) else {}
+        if entrada.get("recibido_en") is None:
+            return {
+                "temperatura_c": carga.get("temp_c"),
+                "humedad_pct": carga.get("hum_pct"),
+                "movimiento": carga.get("presencia"),
+                "gas_adc": carga.get("gas_adc"),
+                "recibido_en": None,
+                "estado": SIN_DATOS,
+            }
         # Los nombres del contrato son `temp_c`, `hum_pct` y `presencia`. Aquí se
         # renombran a los que usa la interfaz, y el renombrado está en un solo sitio.
         return {
@@ -293,6 +317,13 @@ class EstadoSala:
         if entrada is None:
             return {"estado": SIN_DATOS, "recibido_en": None, "ip": None, "fw": None}
         carga = entrada["carga"] if isinstance(entrada["carga"], dict) else {}
+        if entrada.get("recibido_en") is None:
+            if carga.get("conectado") is False:
+                estado = DESCONECTADO
+            else:
+                estado = SIN_DATOS
+            return {"estado": estado, "recibido_en": None,
+                    "ip": carga.get("ip"), "fw": carga.get("fw")}
         if carga.get("conectado") is False:
             # El Last Will retenido es `{"conectado": false}` y eso es una caída YA
             # pasada: no hay que esperar los 90 s para contarla (P27).
@@ -320,12 +351,19 @@ class EstadoSala:
             # nadie a quien esperar, así que no es un fallo y no lleva cartel.
             return {"estado": NO_INSTALADO, "recibido_en": None, "satelites": {}}
         por_satelite = {}
+        recibidos = []
         for client_id, entrada in satelites.items():
             carga = entrada["carga"] if isinstance(entrada["carga"], dict) else {}
             por_satelite[client_id] = carga.get("conectado") is True
+            r = entrada.get("recibido_en")
+            if r is not None:
+                recibidos.append(r)
+        if not recibidos:
+            return {"estado": CONECTADO if any(por_satelite.values()) else SIN_DATOS,
+                    "recibido_en": None, "satelites": por_satelite}
         return {
             "estado": CONECTADO if any(por_satelite.values()) else DESCONECTADO,
-            "recibido_en": max(e["recibido_en"] for e in satelites.values()),
+            "recibido_en": max(recibidos),
             "satelites": por_satelite,
         }
 
@@ -369,7 +407,10 @@ class EstadoSala:
                 "fuente": "nodo"}
 
     def _estado_por_antiguedad(self, entrada, ahora) -> str:
-        return CONECTADO if ahora - entrada["recibido_en"] <= self.plazo_visto_s \
+        recibido = entrada.get("recibido_en") if entrada else None
+        if recibido is None:
+            return SIN_DATOS
+        return CONECTADO if ahora - recibido <= self.plazo_visto_s \
             else DESCONECTADO
 
     # --- Eventos ------------------------------------------------------------
@@ -524,7 +565,7 @@ class ClienteEstado:
             return
         registro.debug("mensaje del panel en %s: %s", mensaje.topic, cuerpo)
         try:
-            self.estado.recibir(mensaje.topic, cuerpo)
+            self.estado.recibir(mensaje.topic, cuerpo, bool(getattr(mensaje, "retain", False)))
         except Exception:  # noqa: BLE001
             registro.exception("fallo al procesar %s; el resto de los mensajes se "
                                "sigue recibiendo", mensaje.topic)

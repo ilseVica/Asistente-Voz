@@ -8,8 +8,10 @@ import 'sesion.dart';
 import 'tema.dart';
 import 'textos.dart';
 import 'uis/pantalla_acceso.dart';
+import 'uis/pantalla_alerta_detalle.dart';
 import 'uis/pantalla_alertas.dart';
 import 'uis/pantalla_aviso.dart';
+import 'uis/pantalla_familiares.dart';
 import 'uis/pantalla_panel.dart';
 import 'uis/pantalla_proximamente.dart';
 import 'uis/pantalla_recordatorios.dart';
@@ -18,10 +20,10 @@ void main() {
   runApp(const AsistentePanel());
 }
 
-/// A dónde se está mirando. Los cuatro destinos son navegación de verdad y los dos
-/// últimos dicen «próximamente» con texto propio: no se inventan datos de ejemplo
-/// en una pantalla que todavía no existe.
-enum Destino { inicio, alertas, recordatorios, mensajes }
+/// A dónde se está mirando. Los cinco destinos son navegación de verdad; el de
+/// «Mensajes» todavía no tiene pantalla propia y dice «próximamente» con texto
+/// propio, sin inventar datos de ejemplo en una pantalla que no existe.
+enum Destino { inicio, alertas, recordatorios, mensajes, familiares }
 
 /// El estado compartido del panel.
 ///
@@ -30,7 +32,7 @@ enum Destino { inicio, alertas, recordatorios, mensajes }
 /// capa que hay que entender antes de entender el panel; aquí lo que hay que
 /// entender es esto, que es corto.
 class EstadoPanel extends ChangeNotifier {
-  EstadoPanel({ClienteApi? api, Sesion? sesion})
+  EstadoPanel({ClienteApi? api, Sesion? sesion, this._ultimoMensajeVivo})
       : api = api ?? ClienteApi(),
         sesion = sesion ?? Sesion();
 
@@ -47,6 +49,32 @@ class EstadoPanel extends ChangeNotifier {
   List<Alerta> alertas = const <Alerta>[];
   List<Recordatorio> recordatorios = const <Recordatorio>[];
   String nombre = '';
+
+  /// Los nombres de los familiares activos, para la pantalla «Familiares».
+  List<String> nombresFamiliares = const <String>[];
+  bool cargandoFamiliares = false;
+  String? errorFamiliares;
+
+  /// El detalle de una alerta abierta. Mientras `alertaAbierta` tenga valor, la
+  /// raíz enseña el detalle en vez de la pantalla de `destino`: «volver» es
+  /// borrarlo y se vuelve a donde se estaba, sin perder el sitio.
+  String? alertaAbierta;
+  AlertaDetalle? detalleAlerta;
+  bool cargandoDetalle = false;
+  String? errorDetalle;
+
+  /// La alerta activa más reciente, o `null` si no queda ninguna sin atender.
+  ///
+  /// Es lo que decide el banner rojo de arriba de todo el panel. Si hay varias
+  /// a la vez se queda con la más nueva, que es la que acaba de pasar y la que
+  /// alguien que no estaba mirando todavía no habrá visto.
+  Alerta? get alertaMasUrgente {
+    final List<Alerta> vivas =
+        alertas.where((Alerta a) => a.sinResolver).toList();
+    if (vivas.isEmpty) return null;
+    vivas.sort((Alerta a, Alerta b) => b.creadoEn.compareTo(a.creadoEn));
+    return vivas.first;
+  }
 
   bool conectadoAlServidor = false;
   bool conectadoAlSitio = false;
@@ -71,12 +99,26 @@ class EstadoPanel extends ChangeNotifier {
     final Estado? e = estado;
     if (e == null) return DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final int base = e.servidorHora;
-    final int transcurrido =
-        DateTime.now().millisecondsSinceEpoch ~/ 1000 - _momentoLocal!;
+    final int? momentoLocal = _momentoLocal;
+    final int transcurrido = momentoLocal == null
+        ? 0
+        : DateTime.now().millisecondsSinceEpoch ~/ 1000 - momentoLocal;
     return base + transcurrido;
   }
 
+  int ahoraLocal() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
   int? _momentoLocal;
+  int? _ultimoMensajeVivo;
+
+  /// Último momento en el que llegó un mensaje vivo (WebSocket).
+  int? get ultimoMensajeVivo => _ultimoMensajeVivo;
+
+  /// Anota que llegó un mensaje vivo del servidor.
+  void anotarMensajeVivo([int? cuando]) {
+    _ultimoMensajeVivo = cuando ?? ahoraLocal();
+    notifyListeners();
+  }
 
   Future<void> arrancar() async {
     preparando = true;
@@ -126,10 +168,17 @@ class EstadoPanel extends ChangeNotifier {
     estado = null;
     alertas = const <Alerta>[];
     recordatorios = const <Recordatorio>[];
+    nombresFamiliares = const <String>[];
+    errorFamiliares = null;
+    alertaAbierta = null;
+    detalleAlerta = null;
+    cargandoDetalle = false;
+    errorDetalle = null;
     _vivo?.desconectar();
     _vivo = null;
     _reloj?.cancel();
     _refrescoAlertas?.cancel();
+    _ultimoMensajeVivo = null;
   }
 
   /// Vuelve a pedir la instantánea sin hacer ruido, para el «último movimiento».
@@ -163,14 +212,21 @@ class EstadoPanel extends ChangeNotifier {
     _vivo = Vivo(url: _urlVivo());
     _vivo!.conectado.listen((bool ok) {
       conectadoAlServidor = ok;
+      if (ok) {
+        _ultimoMensajeVivo = ahoraLocal();
+      }
       notifyListeners();
     });
     _vivo!.instantanea.listen((Estado e) {
       estado = e;
-      _momentoLocal = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      _momentoLocal = ahoraLocal();
+      _ultimoMensajeVivo = ahoraLocal();
       notifyListeners();
     });
-    _vivo!.bloques.listen(_aplicar);
+    _vivo!.bloques.listen((Map<String, dynamic> m) {
+      _ultimoMensajeVivo = ahoraLocal();
+      _aplicar(m);
+    });
     _vivo!.conectar();
 
     _reloj = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -186,6 +242,7 @@ class EstadoPanel extends ChangeNotifier {
     cargarEstado();
     cargarAlertas();
     cargarRecordatorios();
+    cargarFamiliares();
   }
 
   Uri _urlVivo() {
@@ -256,6 +313,10 @@ class EstadoPanel extends ChangeNotifier {
       alertas: actual.alertas,
       familiares: actual.familiares,
       conexiones: actual.conexiones,
+      // El umbral de gas no cambia nunca en caliente: se configura por
+      // entorno y se publica al arrancar, así que aquí sólo se conserva el que
+      // ya traía la instantánea.
+      gasOnAdc: actual.gasOnAdc,
     );
     notifyListeners();
   }
@@ -296,6 +357,79 @@ class EstadoPanel extends ChangeNotifier {
       conectadoAlServidor = false;
     } catch (_) {
       conectadoAlServidor = false;
+    }
+    notifyListeners();
+  }
+
+  /// Los nombres de los familiares activos para «Familiares».
+  ///
+  /// Un fallo aquí SÍ levanta cartel en su pantalla (no parpadea cada 5 s como
+  /// las alertas): sólo se pide al entrar y al reintentar. El 401, como en todo,
+  /// cierra la sesión y vuelve al código de acceso.
+  Future<void> cargarFamiliares() async {
+    cargandoFamiliares = true;
+    errorFamiliares = null;
+    notifyListeners();
+    try {
+      nombresFamiliares = await api.familiares();
+      conectadoAlServidor = true;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        cargandoFamiliares = false;
+        await cerrarSesion();
+        return;
+      }
+      errorFamiliares = error.mensaje;
+      conectadoAlServidor = false;
+    } catch (_) {
+      errorFamiliares = Textos.errorDeRed;
+      conectadoAlServidor = false;
+    }
+    cargandoFamiliares = false;
+    notifyListeners();
+  }
+
+  /// Abre el detalle de una alerta (la raíz cambia a `PantallaAlertaDetalle`).
+  void abrirAlerta(String id) {
+    alertaAbierta = id;
+    detalleAlerta = null;
+    errorDetalle = null;
+    cargandoDetalle = true;
+    notifyListeners();
+    unawaited(_cargarDetalle(id));
+  }
+
+  /// Vuelve a la pantalla de `destino`, que es de donde se abrió el detalle.
+  void cerrarAlerta() {
+    alertaAbierta = null;
+    detalleAlerta = null;
+    errorDetalle = null;
+    cargandoDetalle = false;
+    notifyListeners();
+  }
+
+  Future<void> _cargarDetalle(String id) async {
+    try {
+      final AlertaDetalle detalle = await api.alertaDetalle(id);
+      // Si mientras cargaba se cerró el detalle (o se abrió otro), esta
+      // respuesta ya no le corresponde y se tira en vez de pisarla.
+      if (alertaAbierta != id) return;
+      detalleAlerta = detalle;
+      cargandoDetalle = false;
+      errorDetalle = null;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        cargandoDetalle = false;
+        await cerrarSesion();
+        return;
+      }
+      if (alertaAbierta != id) return;
+      errorDetalle = error.mensaje;
+      cargandoDetalle = false;
+    } catch (_) {
+      if (alertaAbierta != id) return;
+      errorDetalle = Textos.errorDeRed;
+      cargandoDetalle = false;
     }
     notifyListeners();
   }
@@ -342,6 +476,11 @@ class EstadoPanel extends ChangeNotifier {
       }
       if (!resuelta.estado.startsWith('resuelta')) {
         aviso = Textos.otraPersonaAtendio;
+      }
+      // Si el detalle está abierto, su «Qué pasó» tiene que reflejar la
+      // atención: se recarga sin esperar a que la interfaz lo pida.
+      if (alertaAbierta == id) {
+        unawaited(_cargarDetalle(id));
       }
     } on ErrorApi catch (error) {
       if (error.sinSesion) {
@@ -568,6 +707,11 @@ class EstadoPanel extends ChangeNotifier {
   void irA(Destino nuevo) {
     if (destino == nuevo) return;
     destino = nuevo;
+    // Al entrar a «Familiares» se vuelve a pedir la lista: es la única que
+    // cambia por fuera (alta o baja en Telegram) y no llega por WebSocket.
+    if (nuevo == Destino.familiares) {
+      unawaited(cargarFamiliares());
+    }
     notifyListeners();
   }
 
@@ -613,24 +757,32 @@ class PanelScope extends InheritedNotifier<EstadoPanel> {
 }
 
 class AsistentePanel extends StatefulWidget {
-  const AsistentePanel({super.key});
+  const AsistentePanel({super.key, this.estado, this.arrancar = true});
+
+  final EstadoPanel? estado;
+  final bool arrancar;
 
   @override
   State<AsistentePanel> createState() => _AsistentePanelState();
 }
 
 class _AsistentePanelState extends State<AsistentePanel> {
-  final EstadoPanel _estado = EstadoPanel();
+  late final EstadoPanel _estado;
 
   @override
   void initState() {
     super.initState();
-    _estado.arrancar();
+    _estado = widget.estado ?? EstadoPanel();
+    if (widget.arrancar) {
+      _estado.arrancar();
+    }
   }
 
   @override
   void dispose() {
-    _estado.dispose();
+    if (widget.estado == null) {
+      _estado.dispose();
+    }
     super.dispose();
   }
 
@@ -668,6 +820,13 @@ class _AsistentePanelState extends State<AsistentePanel> {
       return PantallaErrorArranque(mensaje: estado.errorArranque!);
     }
 
+    // El detalle de una alerta tapa la pantalla de `destino` y «volver» lo
+    // borra: así se abre desde Inicio o desde Alertas y se vuelve al sitio de
+    // donde se vino, sin perder la navegación de abajo ni la de arriba.
+    if (estado.alertaAbierta != null) {
+      return PantallaAlertaDetalle(id: estado.alertaAbierta!);
+    }
+
     switch (estado.destino) {
       case Destino.inicio:
         return const PantallaPanel();
@@ -679,6 +838,8 @@ class _AsistentePanelState extends State<AsistentePanel> {
         return const PantallaProximamente(
             titulo: Textos.mensajes,
             texto: Textos.mensajesVacio);
+      case Destino.familiares:
+        return const PantallaFamiliares();
     }
   }
 }

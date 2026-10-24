@@ -21,6 +21,19 @@ class Tema {
   static const Color suave = Color(0xFFE3F0EE);
   static const Color peligro = Color(0xFF9F1D1D);
 
+  /// El ámbar del aviso de conexión del prototipo
+  /// (`panel-escritorio-sin-conexion.html`): fondo, texto, borde y píldora. Es
+  /// la paleta de «sin conexión» que Ilse aprobó; el rojo queda SOLO para la
+  /// alerta activa, que es la única cosa que no es un aviso sino una emergencia.
+  static const Color ambarFondo = Color(0xFFFBEFD9);
+  static const Color ambarTexto = Color(0xFF5C3204);
+  static const Color ambarBorde = Color(0xFFE8C98F);
+  static const Color ambarPildora = Color(0xFF7A4205);
+
+  /// El fondo de las cajas de los datos (`#E7EAE8`), el mismo que la barra de
+  /// gas y los separadores de las filas del prototipo.
+  static const Color caja = Color(0xFFE7EAE8);
+
   /// La escala de aviso del gas. `0` es la normalidad y `2` el pico, y cada
   /// escalón tiene su color y su texto: es el único dato de la casa que cambia de
   /// aspecto según el valor, porque no es «cuánto», es «cuánta prisa hay».
@@ -62,9 +75,15 @@ class Tema {
   static const double altoMinimo = 52;
   static const double altoNavegacion = 56;
 
-  /// A partir de 1024 px el panel pasa a barra lateral; por debajo, una columna
-  /// con barra inferior. El número está en el diseño y aquí es donde se decide.
-  static const double anchoEscritorio = 1024;
+  /// A partir de 900 px el panel pasa a la cabecera con pestañas de escritorio;
+  /// por debajo, una columna con barra inferior. Es el corte del diseño (A.1):
+  /// por encima las cuatro tarjetas caben en fila, por debajo no.
+  static const double anchoEscritorio = 900;
+
+  /// La escala completa del ADC de 12 bits del ESP32. La barra de gas mide
+  /// `gas_adc` contra esta escala y marca el umbral en su sitio: no es un número
+  /// que se configura, es el rango del sensor.
+  static const double escalaAdc = 4095;
 
   static ThemeData construir() {
     final TextTheme base = textoTema.apply(

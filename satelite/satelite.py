@@ -394,6 +394,31 @@ def cargar_config(ruta: str) -> Config:
     return cfg
 
 
+def cargar_config_publica(ruta: str) -> Config:
+    with open(_expandir(ruta), "rb") as archivo:
+        doc = __import__("tomllib").load(archivo)
+
+    audio = doc.get("audio", {})
+    voz = doc.get("voz", {})
+    rutas = doc.get("rutas", {})
+    tecla = doc.get("tecla", {})
+
+    cfg = Config()
+    cfg.entrada_nodo = audio.get("entrada_nodo", cfg.entrada_nodo)
+    cfg.salida_nodo = audio.get("salida_nodo", cfg.salida_nodo)
+    cfg.latencia_captura = audio.get("latencia_captura", cfg.latencia_captura)
+    cfg.altura_max_s = float(audio.get("altura_max_s", cfg.altura_max_s))
+    cfg.piper = rutas.get("piper", cfg.piper)
+    cfg.voz = voz.get("modelo", rutas.get("voz", cfg.voz))
+    cfg.length_scale = _opcional_float(voz.get("length_scale"))
+    cfg.sentence_silence = _opcional_float(voz.get("sentence_silence"))
+    cfg.noise_scale = _opcional_float(voz.get("noise_scale"))
+    cfg.noise_w = _opcional_float(voz.get("noise_w"))
+    cfg.precargar_piper = bool(rutas.get("precargar_piper", cfg.precargar_piper))
+    cfg.socket_ruta = tecla.get("socket", _ruta_socket_defecto())
+    return cfg
+
+
 # --- Registro de latencias ---------------------------------------------------
 
 class RegistroLatencias:

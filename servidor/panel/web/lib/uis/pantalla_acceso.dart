@@ -34,7 +34,6 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
   @override
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
-    final TextTheme tipografia = Theme.of(contexto).textTheme;
 
     final Widget campos = estado.preparando
         ? const Padding(
@@ -52,7 +51,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
                 enableSuggestions: false,
                 maxLength: 6,
                 inputFormatters: <TextInputFormatter>[_SoloCodigo()],
-                style: const TextStyle(fontSize: 22, letterSpacing: 6),
+                style: const TextStyle(fontSize: 28, letterSpacing: 8, fontWeight: FontWeight.w700),
                 textAlign: TextAlign.center,
                 decoration: const InputDecoration(
                   hintText: Textos.pistaCodigo,
@@ -70,43 +69,73 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
             ],
           );
 
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
+              constraints: const BoxConstraints(maxWidth: 480),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Text(Textos.panelDeLaSala,
-                      style: tipografia.headlineMedium),
-                  const SizedBox(height: 6),
                   Text(Textos.asistenteDeVoz,
-                      style: tipografia.bodySmall),
-                  const SizedBox(height: 28),
-                  const _Paso(numero: '1', texto: Textos.pasoUno),
-                  const _Paso(numero: '2', texto: Textos.pasoDos),
-                  const _Paso(numero: '3', texto: Textos.pasoTres),
+                      style: TextStyle(
+                          fontSize: movil ? 20 : 22,
+                          fontWeight: FontWeight.w700,
+                          color: Tema.primario,
+                          fontFamily: Tema.familia),
+                      textAlign: TextAlign.center),
                   const SizedBox(height: 24),
-                  Text(Textos.yaLoTiene,
-                      style: tipografia.titleMedium),
-                  const SizedBox(height: 4),
-                  Text(
-                    Textos.ayudaCodigo,
-                    style: tipografia.bodySmall,
+                  Container(
+                    padding: const EdgeInsets.all(36),
+                    decoration: BoxDecoration(
+                      color: Tema.tarjeta,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Tema.borde),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        Text(Textos.panelDeLaSala,
+                            style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                                color: Tema.texto,
+                                fontFamily: Tema.familia)),
+                        const SizedBox(height: 8),
+                        Text(
+                          Textos.ayudaCodigo,
+                          style: TextStyle(
+                              fontSize: 17,
+                              color: Tema.secundario,
+                              height: 1.5,
+                              fontFamily: Tema.familia),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(Textos.yaLoTiene,
+                            style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: Tema.texto,
+                                fontFamily: Tema.familia)),
+                        const SizedBox(height: 12),
+                        campos,
+                        if (estado.aviso != null) ...<Widget>[
+                          const SizedBox(height: 16),
+                          _Aviso(texto: estado.aviso!),
+                        ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  campos,
-                  if (estado.aviso != null) ...<Widget>[
-                    const SizedBox(height: 16),
-                    _Aviso(texto: estado.aviso!),
-                  ],
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
                   Text(
                     Textos.piePrivacidad,
-                    style: tipografia.bodySmall,
+                    style: TextStyle(
+                        fontSize: 15,
+                        color: Tema.secundario,
+                        fontFamily: Tema.familia),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -150,45 +179,6 @@ class _SoloCodigo extends TextInputFormatter {
   }
 }
 
-class _Paso extends StatelessWidget {
-  const _Paso({required this.numero, required this.texto});
-
-  final String numero;
-  final String texto;
-
-  @override
-  Widget build(BuildContext contexto) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Container(
-            width: 30,
-            height: 30,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-                color: Tema.suave, shape: BoxShape.circle),
-            child: Text(numero,
-                style: const TextStyle(
-                    color: Tema.primario,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(texto,
-                style: Theme.of(contexto)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(height: 1.4)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _Aviso extends StatelessWidget {
   const _Aviso({required this.texto});
 
@@ -199,12 +189,14 @@ class _Aviso extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Tema.suave,
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFFF7E1E1),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         texto,
-        style: Theme.of(contexto).textTheme.bodySmall,
+        style: const TextStyle(
+            color: Color(0xFF7A1616), fontSize: 16, height: 1.45,
+            fontFamily: Tema.familia),
       ),
     );
   }

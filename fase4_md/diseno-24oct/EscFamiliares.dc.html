@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Familiares (escritorio)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F4F5F2; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; box-sizing: border-box; padding: 32px 24px 48px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px">
+<div style="display: flex; align-items: center; gap: 14px">
+<div style="width: 48px; height: 48px; border-radius: 14px; background: #0E5E5A; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 12v0M8 8v8M12 5v14M16 8v8M20 12v0"></path></svg></div>
+<div>
+<div style="font-size: 15px; color: #4A524F">Asistente de Voz</div>
+<div style="font-size: 30px; font-weight: 700; line-height: 1.15">Sala principal</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px">
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-weight: 700; font-size: 16px"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0E5E5A"></span>Sala conectada</span>
+<span style="font-size: 15px; color: #4A524F">Actualizado hace 5 s</span>
+</div>
+</header>
+
+<nav aria-label="Secciones" style="display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #DADFDB; padding-bottom: 12px">
+<a href="EscPanel.dc.html" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Panel</a>
+<a href="EscHistorial.dc.html" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Historial de alertas</a>
+<a href="EscRecordatorios.dc.html" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Recordatorios</a>
+<a href="EscFamiliares.dc.html" aria-current="page" style="padding: 10px 16px; border-radius: 10px; background: #1B1F1E; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 16px">Familiares</a>
+</nav>
+
+<div>
+<h1 style="margin: 0; font-size: 28px">Familiares</h1>
+<p style="margin: 6px 0 0; font-size: 17px; color: #4A524F">1 familiar activo recibe las alertas por Telegram.</p>
+</div>
+
+<section style="max-width: 760px; background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 8px 24px">
+<div style="display: flex; align-items: center; gap: 16px; padding: 18px 0">
+<span style="width: 52px; height: 52px; border-radius: 50%; background: #E3F0EE; color: #0E5E5A; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; flex: none">I</span>
+<span style="font-size: 19px; font-weight: 700">Ilse</span>
+</div>
+</section>
+
+<p style="margin: 0; font-size: 16px; color: #4A524F">Para añadir a alguien, escriba /panel al bot de la casa en Telegram.</p>
+
+<footer style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px; font-size: 15px; color: #4A524F">
+<span>El asistente no guarda grabaciones de voz. El panel no tiene micrófono ni cámara.</span>
+<span style="display: flex; gap: 24px"><a href="EscPrivacidad.dc.html">Ver el aviso de privacidad</a><a href="EscAcceso.dc.html" style="color: #4A524F">Cerrar sesión</a></span>
+</footer>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":780}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

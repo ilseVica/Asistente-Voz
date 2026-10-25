@@ -87,7 +87,7 @@ class Textos {
   static const String noSeDetectaNadie = 'Sin movimiento';
   static const String ultimaLectura = 'Última lectura: ';
 
-  static const String avisoInactividad = 'Aviso por inactividad';
+  static const String avisoInactividad = 'Aviso de inactividad · ';
   static const String ultimoMovimiento = 'Último movimiento';
   static const String sinDatosDelSensor = 'Sin datos del sensor';
   static const String avisarSiNoHayMovimiento =
@@ -118,6 +118,8 @@ class Textos {
       'Todavía no ha habido ninguna alerta en esta casa.';
   static const String alertasSubtitulo = 'Lo más reciente arriba. Si alguien '
       'la atendió desde Telegram, aquí se refleja.';
+  static const String alertasBorradoAuto =
+      'Las alertas se borran automáticamente después de 30 días.';
   static const String yaLoAtendi = 'Ya lo atendí';
   static const String atendida = 'Atendida';
   static const String descartada = 'Descartada';
@@ -139,9 +141,13 @@ class Textos {
 
   static const String recordatoriosVacio = 'Todavía no hay recordatorios en '
       'esta casa. Cuando existan, aparecerán aquí con la hora de cada uno.';
+  static const String proximoRecordatorio = 'Próximo recordatorio';
+  static const String ultimaAlerta = 'Última alerta';
   static const String recordatoriosSubtitulo = 'Lo que el asistente dice en '
       'voz alta a su hora.';
   static const String nuevoRecordatorio = 'Nuevo recordatorio';
+  static const String nuevoRecordatorioSubtitulo =
+      'El asistente lo dirá en voz alta a la hora que elija.';
   static const String queTieneQueDecir = 'Qué tiene que decir';
   static const String pistaTextoRecordatorio =
       'Por ejemplo: tomar la medicina';
@@ -397,7 +403,7 @@ String ultimaVezSeDijo(String cuando) => 'La última vez se dijo $cuando.';
 /// El aviso de inactividad con sus minutos, como se pinta en la tarjeta de
 /// movimiento: «Aviso de inactividad a los 120 min».
 String avisoInactividadAlos(int minutosMin) =>
-    'Aviso de inactividad a los ${minutosMin.toString()} min';
+    'Aviso de inactividad a los ${minutosMin.toString()} min · ';
 
 /// Quién atendió una alerta, con su hora. Si el nombre falta (una alerta muy
 /// antigua, anterior al campo), sólo se dice cuándo: inventar «Familiar» aquí

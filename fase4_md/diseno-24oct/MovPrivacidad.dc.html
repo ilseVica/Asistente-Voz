@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Aviso de privacidad (móvil)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="width: 390px; height: 1100px; box-sizing: border-box; background: #FFFFFF; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; display: flex; flex-direction: column; overflow: hidden">
+
+<header style="display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 8px; border-bottom: 1px solid #DADFDB">
+<a href="MovPanel.dc.html" aria-label="Volver" style="width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #1B1F1E; flex: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+<h1 style="margin: 0; font-size: 21px; flex: 1">Sus datos</h1>
+</header>
+
+<article style="padding: 20px; display: flex; flex-direction: column; gap: 18px">
+<p style="margin: 0; font-size: 17px; line-height: 1.6">Este panel muestra el estado de la casa: la luz, la temperatura, el gas y las alertas. La información se guarda en el servidor de la casa. Solo sale de ella para mostrarse en este panel y para enviar las alertas por Telegram.</p>
+<p style="margin: 0; font-size: 17px; line-height: 1.6">Solo pueden entrar los familiares registrados en el bot de Telegram. Cada código sirve una sola vez y la sesión vence a los 30 días.</p>
+<p style="margin: 0; font-size: 17px; line-height: 1.6">El asistente no guarda grabaciones de lo que se dice en la casa. El panel no tiene micrófono ni cámara y no pide su ubicación.</p>
+<p style="margin: 0; font-size: 17px; line-height: 1.6">Si algo de esto cambia, se le avisará por Telegram antes del cambio.</p>
+</article>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

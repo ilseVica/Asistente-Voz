@@ -80,6 +80,10 @@ class Tema {
   /// por encima las cuatro tarjetas caben en fila, por debajo no.
   static const double anchoEscritorio = 900;
 
+  /// Tableta: 600–899 px. Barra inferior y tarjetas grandes en 2×2 (misma
+  /// altura). Por debajo de 600 px es celular.
+  static const double anchoTableta = 600;
+
   /// La escala completa del ADC de 12 bits del ESP32. La barra de gas mide
   /// `gas_adc` contra esta escala y marca el umbral en su sitio: no es un número
   /// que se configura, es el rango del sensor.

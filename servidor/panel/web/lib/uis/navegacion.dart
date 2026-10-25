@@ -85,7 +85,9 @@ class EstructuraPanel extends StatelessWidget {
             const CabeceraMovil(),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                padding: MediaQuery.sizeOf(contexto).width >= Tema.anchoTableta
+                    ? const EdgeInsets.fromLTRB(32, 24, 32, 24)
+                    : const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 child: cuerpo,
               ),
             ),
@@ -202,24 +204,28 @@ class CabeceraEscritorio extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(Textos.asistenteDeVoz, style: tipografia.bodyMedium),
-                        Text(Textos.salaPrincipal, style: tipografia.headlineMedium),
+                        Text(Textos.salaPrincipal,
+                            style: const TextStyle(
+                                fontSize: 30, fontWeight: FontWeight.w700,
+                                color: Tema.texto, height: 1.15,
+                                fontFamily: Tema.familia)),
                       ],
                     ),
                   ),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    const PastillaConexion(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  const PastillaConexion(),
                     if (actualizado.isNotEmpty) ...<Widget>[
                       const SizedBox(height: 4),
                       Text('Actualizado $actualizado',
                           overflow: TextOverflow.ellipsis,
-                          style: tipografia.bodySmall),
+                          style: const TextStyle(
+                              fontSize: 15, color: Tema.secundario,
+                              fontFamily: Tema.familia)),
                     ],
                   ],
                 ),
-              ),
                 ],
               ),
               const SizedBox(height: 20),
@@ -328,21 +334,31 @@ class CabeceraMovil extends StatelessWidget {
   Widget build(BuildContext contexto) {
     final TextTheme tipografia = Theme.of(contexto).textTheme;
 
+    final bool tableta = MediaQuery.sizeOf(contexto).width >= Tema.anchoTableta;
     return Container(
       color: Tema.fondo,
-      padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
+      padding: tableta
+          ? const EdgeInsets.fromLTRB(32, 24, 24, 16)
+          : const EdgeInsets.fromLTRB(20, 14, 12, 12),
       child: Row(
         children: <Widget>[
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(Textos.asistenteDeVoz, style: tipografia.bodySmall),
-                Text(Textos.salaPrincipal, style: tipografia.headlineMedium),
+                Text(Textos.asistenteDeVoz,
+                    style: tableta ? tipografia.bodyMedium : tipografia.bodySmall),
+                Text(Textos.salaPrincipal,
+                    style: tableta
+                        ? const TextStyle(
+                            fontSize: 30, fontWeight: FontWeight.w700,
+                            color: Tema.texto, height: 1.15,
+                            fontFamily: Tema.familia)
+                        : tipografia.headlineMedium),
               ],
             ),
           ),
-          const PastillaConexion(compacta: true),
+          PastillaConexion(compacta: !tableta),
         ],
       ),
     );

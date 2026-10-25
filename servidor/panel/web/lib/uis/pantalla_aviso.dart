@@ -17,19 +17,38 @@ class PantallaAviso extends StatelessWidget {
   @override
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
+            constraints: BoxConstraints(maxWidth: movil ? double.infinity : 760),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(movil ? 20 : 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Text(Textos.susDatos,
-                      style: Theme.of(contexto).textTheme.headlineMedium),
-                  const SizedBox(height: 16),
+                  Row(
+                    children: <Widget>[
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                            color: Tema.suave,
+                            borderRadius: BorderRadius.circular(14)),
+                        child: const Icon(Icons.shield_outlined,
+                            color: Tema.primario, size: 26),
+                      ),
+                      const SizedBox(width: 14),
+                      Text(Textos.susDatos,
+                          style: TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.w700,
+                              color: Tema.texto,
+                              fontFamily: Tema.familia)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
                   const _Parrafo(Textos.avisoUno),
                   const _Parrafo(Textos.avisoDos),
                   const _Parrafo(Textos.avisoTres),
@@ -59,10 +78,9 @@ class _Parrafo extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Text(texto,
-          style: Theme.of(contexto)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(color: Tema.secundario, height: 1.5)),
+          style: const TextStyle(
+              fontSize: 18, color: Tema.secundario, height: 1.6,
+              fontFamily: Tema.familia)),
     );
   }
 }

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Detalle de alerta (tableta)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="width: 820px; height: 1180px; box-sizing: border-box; background: #F4F5F2; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; display: flex; flex-direction: column; overflow: hidden">
+
+<div style="flex: 1; padding: 24px 32px 24px; display: flex; flex-direction: column; gap: 20px; overflow: hidden">
+
+<a href="TabHistorial.dc.html" style="display: inline-flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; text-decoration: none; min-height: 44px; align-self: flex-start"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>Volver a alertas</a>
+
+<section style="background: #9F1D1D; color: #FFFFFF; border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 16px">
+<div style="width: 60px; height: 60px; border-radius: 16px; background: #FFFFFF; color: #9F1D1D; display: flex; align-items: center; justify-content: center; flex: none"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M12 3c1 3 4 4.5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"></path></svg></div>
+<div>
+<div style="font-size: 15px; font-weight: 700; letter-spacing: 0.04em">ALERTA · SALA PRINCIPAL · PENDIENTE</div>
+<h1 style="margin: 2px 0 0; font-size: 34px; line-height: 1.1">Gas detectado</h1>
+</div>
+</div>
+<p style="margin: 0; font-size: 18px; line-height: 1.45">La lectura es de 2100, por encima del umbral de 1800. La alarma local está sonando en la sala.</p>
+<div style="font-size: 16px">Hoy, 18:42 · hace 20 s</div>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<button type="button" style="min-height: 60px; border-radius: 14px; border: none; background: #9F1D1D; color: #FFFFFF; font-family: inherit; font-size: 20px; font-weight: 700; cursor: pointer">Ya lo atendí</button>
+<button type="button" style="min-height: 60px; border-radius: 14px; border: 2px solid #DADFDB; background: #FFFFFF; color: #1B1F1E; font-family: inherit; font-size: 18px; font-weight: 700; cursor: pointer">Descartar</button>
+</div>
+<a href="TabPanelAlerta.dc.html" style="min-height: 52px; border-radius: 14px; border: 2px solid #1B1F1E; color: #1B1F1E; text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; box-sizing: border-box">Ver el estado de la sala</a>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 2px">
+<h2 style="margin: 0 0 10px; font-size: 20px">Qué pasó</h2>
+<div style="display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px solid #E7EAE8"><span style="width: 12px; height: 12px; margin-top: 6px; border-radius: 50%; background: #9F1D1D; flex: none"></span><span style="width: 84px; flex: none; font-weight: 700; font-size: 16px">18:42:10</span><span style="font-size: 17px; line-height: 1.45">Se creó la alerta: el sensor de gas superó el umbral.</span></div>
+<div style="display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px solid #E7EAE8"><span style="width: 12px; height: 12px; margin-top: 6px; border-radius: 50%; background: #0E5E5A; flex: none"></span><span style="width: 84px; flex: none; font-weight: 700; font-size: 16px">18:42:12</span><span style="font-size: 17px; line-height: 1.45">Se envió el aviso por Telegram a 1 familiar: Ilse.</span></div>
+<div style="display: flex; gap: 14px; padding: 12px 0"><span style="width: 12px; height: 12px; margin-top: 6px; border-radius: 50%; border: 2px solid #4A524F; box-sizing: border-box; flex: none"></span><span style="width: 84px; flex: none; font-weight: 700; font-size: 16px; color: #4A524F">—</span><span style="font-size: 17px; line-height: 1.45; color: #4A524F">Todavía nadie la ha atendido.</span></div>
+</section>
+
+<section style="background: #FBEFD9; border: 1px solid #E8C98F; border-radius: 16px; padding: 18px 22px; color: #5C3204; font-size: 17px; line-height: 1.45">
+Si nadie responde en la sala, considere llamar a alguien cercano o a los servicios de emergencia.
+</section>
+
+</div>
+
+<nav aria-label="Secciones" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #DADFDB; padding: 10px 24px 18px">
+<a href="TabPanel.dc.html" style="min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 15px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"></path></svg>Inicio</a>
+<a href="TabHistorial.dc.html" aria-current="page" style="min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #0E5E5A; font-size: 15px; font-weight: 700"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0"></path></svg>Alertas</a>
+<a href="TabRecordatorios.dc.html" style="min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 15px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Recordatorios</a>
+<a href="TabFamiliares.dc.html" style="min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 15px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20v-1a5 5 0 0 1 5-5h3a5 5 0 0 1 5 5v1M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a5 5 0 0 1 3 4.6V20"></path></svg>Familiares</a>
+</nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":820,"height":1180}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

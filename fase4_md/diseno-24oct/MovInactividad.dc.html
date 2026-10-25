@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Cambiar aviso de inactividad (móvil)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F5F2; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; position: relative; overflow: hidden">
+
+<div style="padding: 24px 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="font-size: 26px; font-weight: 700">Sala principal</div>
+<div style="height: 200px; background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 18px"></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="height: 90px; background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px"></div>
+<div style="height: 90px; background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px"></div>
+</div>
+</div>
+
+<div style="position: absolute; inset: 0; background: rgba(27, 31, 30, 0.55); display: flex; flex-direction: column; justify-content: center; padding: 20px; box-sizing: border-box">
+<section role="dialog" aria-labelledby="titulo-inact-m" style="background: #FFFFFF; border-radius: 20px; padding: 24px 20px; display: flex; flex-direction: column; gap: 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25)">
+<h1 id="titulo-inact-m" style="margin: 0; font-size: 24px">Aviso por inactividad</h1>
+<p style="margin: 0; font-size: 16px; line-height: 1.5; color: #4A524F">Si no se detecta movimiento en la sala durante este tiempo, se avisa a la familia por Telegram. El asistente no dice nada en voz alta.</p>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="minutos-m" style="font-size: 17px; font-weight: 700">Minutos sin movimiento</label>
+<div style="display: flex; align-items: center; gap: 12px">
+<input id="minutos-m" type="number" inputmode="numeric" min="2" max="720" value="120" style="font-family: inherit; font-size: 22px; font-weight: 700; padding: 10px 14px; min-height: 56px; box-sizing: border-box; border-radius: 12px; border: 2px solid #0E5E5A; width: 130px">
+<span style="font-size: 16px; color: #4A524F">minutos (2 horas)</span>
+</div>
+<span style="font-size: 14px; color: #4A524F">Entre 2 y 720 minutos.</span>
+</div>
+<a href="MovPanel.dc.html" style="min-height: 56px; border-radius: 14px; background: #0E5E5A; color: #FFFFFF; text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700">Guardar</a>
+<a href="MovPanel.dc.html" style="min-height: 48px; border-radius: 14px; color: #1B1F1E; text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700">Cancelar</a>
+</section>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

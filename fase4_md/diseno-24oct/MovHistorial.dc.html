@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Historial de alertas (móvil)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F5F2; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; display: flex; flex-direction: column; overflow: hidden">
+
+<div style="flex: 1; padding: 24px 20px 20px; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+
+<header style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+<div>
+<div style="font-size: 14px; color: #4A524F">Asistente de Voz</div>
+<div style="font-size: 26px; font-weight: 700">Sala principal</div>
+</div>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-weight: 700; font-size: 14px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #0E5E5A"></span>Conectada</span>
+</header>
+
+<div>
+<h1 style="margin: 0; font-size: 24px">Historial de alertas</h1>
+<p style="margin: 4px 0 0; font-size: 15px; color: #4A524F">Últimos 30 días. Toque una para ver qué pasó.</p>
+</div>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 2px 16px">
+<a href="MovAlerta.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #E7EAE8; text-decoration: none; color: #1B1F1E">
+<span style="width: 38px; height: 38px; border-radius: 12px; background: #F7E1E1; color: #9F1D1D; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M12 3c1 3 4 4.5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"></path></svg></span>
+<span style="flex: 1; min-width: 0"><span style="display: block; font-size: 16px; font-weight: 700">Gas detectado</span><span style="display: block; font-size: 14px; color: #4A524F">Hoy, 18:42 · sensor de gas</span></span>
+<span style="padding: 5px 10px; border-radius: 999px; background: #9F1D1D; color: #FFFFFF; font-size: 13px; font-weight: 700">Pendiente</span>
+</a>
+<a href="MovAlerta.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #E7EAE8; text-decoration: none; color: #1B1F1E">
+<span style="width: 38px; height: 38px; border-radius: 12px; background: #E3F0EE; color: #0E5E5A; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0"></path></svg></span>
+<span style="flex: 1; min-width: 0"><span style="display: block; font-size: 16px; font-weight: 700">Ayuda solicitada</span><span style="display: block; font-size: 14px; color: #4A524F">Ayer, 18:42 · por voz</span></span>
+<span style="padding: 5px 10px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-size: 13px; font-weight: 700">Atendida</span>
+</a>
+<a href="MovAlerta.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #E7EAE8; text-decoration: none; color: #1B1F1E">
+<span style="width: 38px; height: 38px; border-radius: 12px; background: #E3F0EE; color: #0E5E5A; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M7 3h10M7 21h10M8 3c0 4 8 5 8 9s-8 5-8 9M16 3c0 4-8 5-8 9s8 5 8 9"></path></svg></span>
+<span style="flex: 1; min-width: 0"><span style="display: block; font-size: 16px; font-weight: 700">Sin movimiento</span><span style="display: block; font-size: 14px; color: #4A524F">21 oct, 15:10 · 120 min</span></span>
+<span style="padding: 5px 10px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-size: 13px; font-weight: 700">Atendida</span>
+</a>
+<a href="MovAlerta.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #E7EAE8; text-decoration: none; color: #1B1F1E">
+<span style="width: 38px; height: 38px; border-radius: 12px; background: #E3F0EE; color: #0E5E5A; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0"></path></svg></span>
+<span style="flex: 1; min-width: 0"><span style="display: block; font-size: 16px; font-weight: 700">Ayuda solicitada</span><span style="display: block; font-size: 14px; color: #4A524F">20 oct, 11:01 · con Alexa</span></span>
+<span style="padding: 5px 10px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-size: 13px; font-weight: 700">Atendida</span>
+</a>
+<a href="MovAlerta.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 14px 0; text-decoration: none; color: #1B1F1E">
+<span style="width: 38px; height: 38px; border-radius: 12px; background: #ECEEEC; color: #4A524F; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M12 3c1 3 4 4.5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"></path></svg></span>
+<span style="flex: 1; min-width: 0"><span style="display: block; font-size: 16px; font-weight: 700">Gas detectado</span><span style="display: block; font-size: 14px; color: #4A524F">18 oct, 20:05 · prueba</span></span>
+<span style="padding: 5px 10px; border-radius: 999px; background: #ECEEEC; color: #4A524F; font-size: 13px; font-weight: 700">Descartada</span>
+</a>
+</section>
+
+<p style="margin: 0; font-size: 14px; color: #4A524F">Las alertas se borran después de 30 días.</p>
+
+</div>
+
+<nav aria-label="Secciones" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #DADFDB; padding: 8px 6px 14px">
+<a href="MovPanel.dc.html" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 13px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"></path></svg>Inicio</a>
+<a href="MovHistorial.dc.html" aria-current="page" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #0E5E5A; font-size: 13px; font-weight: 700"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0"></path></svg>Alertas</a>
+<a href="MovRecordatorios.dc.html" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 13px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Recordatorios</a>
+<a href="MovFamiliares.dc.html" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 13px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20v-1a5 5 0 0 1 5-5h3a5 5 0 0 1 5 5v1M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a5 5 0 0 1 3 4.6V20"></path></svg>Familiares</a>
+</nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

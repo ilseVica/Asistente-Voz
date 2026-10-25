@@ -26,29 +26,50 @@ class PantallaRecordatorios extends StatelessWidget {
   @override
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
 
     return EstructuraPanel(
       contenido: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(Textos.recordatorios,
-                    style: Theme.of(contexto).textTheme.headlineMedium),
-              ),
-              FilledButton.icon(
-                onPressed: estado.cargandoRecordatorio
-                    ? null
-                    : () => _abrirNuevo(contexto, estado),
-                icon: const Icon(Icons.add),
-                label: const Text(Textos.nuevoRecordatorio),
-              ),
-            ],
-          ),
+          LayoutBuilder(builder: (BuildContext contexto, BoxConstraints c) {
+            final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
+            final Widget titulo = Text(Textos.recordatorios,
+                style: TextStyle(
+                    fontSize: movil ? 24 : 28,
+                    fontWeight: FontWeight.w700,
+                    color: Tema.texto,
+                    fontFamily: Tema.familia));
+            final Widget boton = FilledButton.icon(
+              onPressed: estado.cargandoRecordatorio
+                  ? null
+                  : () => _abrirNuevo(contexto, estado),
+              icon: const Icon(Icons.add),
+              label: const Text(Textos.nuevoRecordatorio),
+            );
+            if (c.maxWidth < 600) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  titulo,
+                  const SizedBox(height: 12),
+                  boton,
+                ],
+              );
+            }
+            return Row(
+              children: <Widget>[
+                Expanded(child: titulo),
+                boton,
+              ],
+            );
+          }),
           const SizedBox(height: 6),
           Text(Textos.recordatoriosSubtitulo,
-              style: Theme.of(contexto).textTheme.bodySmall),
+              style: TextStyle(
+                  fontSize: movil ? 15 : 17,
+                  color: Tema.secundario,
+                  fontFamily: Tema.familia)),
           const SizedBox(height: 20),
           if (estado.recordatorios.isEmpty)
             Card(
@@ -86,48 +107,103 @@ class _TarjetaRecordatorio extends StatelessWidget {
 
   @override
   Widget build(BuildContext contexto) {
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
     final TextTheme tipografia = Theme.of(contexto).textTheme;
     final Widget? ultima = _lineaUltima(tipografia);
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        padding: EdgeInsets.all(movil ? 14 : 18),
+        child: movil
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
                     children: <Widget>[
-                      Text(recordatorio.texto, style: tipografia.titleMedium),
-                      const SizedBox(height: 4),
-                      Text('${recordatorio.hora} · ${_repeticion()}',
-                          style: tipografia.bodySmall),
+                      Text(recordatorio.hora,
+                          style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: Tema.familia)),
+                      const SizedBox(width: 12),
+                      Text(_repeticionCorta(),
+                          style: const TextStyle(
+                              fontSize: 14,
+                              color: Tema.secundario,
+                              fontFamily: Tema.familia)),
                     ],
                   ),
-                ),
-                IconButton(
-                  onPressed: estado.cargandoRecordatorio
-                      ? null
-                      : () => _confirmarCancelar(contexto),
-                  icon: const Icon(Icons.delete_outline, color: Tema.peligro),
-                  tooltip: Textos.cancelarRecordatorio,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('${Textos.proximaVez}${fechaProxima(recordatorio.proximoEn)}',
-                style: tipografia.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            if (ultima != null) ...<Widget>[
-              const SizedBox(height: 4),
-              ultima,
-            ],
-          ],
-        ),
+                  const SizedBox(height: 4),
+                  Text(recordatorio.texto,
+                      style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: Tema.familia)),
+                  if (ultima != null) ...<Widget>[
+                    const SizedBox(height: 4),
+                    ultima,
+                  ],
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton(
+                      onPressed: estado.cargandoRecordatorio
+                          ? null
+                          : () => _confirmarCancelar(contexto),
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(48, 44)),
+                      child: Text(Textos.cancelarRecordatorio,
+                          style: const TextStyle(fontSize: 16)),
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  SizedBox(
+                    width: movil ? 60 : 80,
+                    child: Text(recordatorio.hora,
+                        style: TextStyle(
+                            fontSize: movil ? 18 : 24,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: Tema.familia)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(recordatorio.texto,
+                            style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: Tema.familia)),
+                        const SizedBox(height: 4),
+                        Text(_repeticion(),
+                            style: const TextStyle(
+                                fontSize: 15,
+                                color: Tema.secundario,
+                                fontFamily: Tema.familia)),
+                        if (ultima != null) ...<Widget>[
+                          const SizedBox(height: 4),
+                          ultima,
+                        ],
+                      ],
+                    ),
+                  ),
+                  OutlinedButton(
+                    onPressed: estado.cargandoRecordatorio
+                        ? null
+                        : () => _confirmarCancelar(contexto),
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(48, 44)),
+                    child: Text(Textos.cancelar,
+                        style: const TextStyle(
+                            color: Tema.peligro, fontSize: 16)),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -137,6 +213,12 @@ class _TarjetaRecordatorio extends StatelessWidget {
       return '${Textos.unaSolaVez} · ${_fechaCorta(recordatorio.fecha)}';
     }
     if (recordatorio.repeticion == 'diario') return Textos.todosLosDias;
+    return diasDe(recordatorio.dias);
+  }
+
+  String _repeticionCorta() {
+    if (recordatorio.repeticion == 'diario') return Textos.todosLosDias;
+    if (recordatorio.deUnaSolaVez) return Textos.unaSolaVez;
     return diasDe(recordatorio.dias);
   }
 
@@ -152,7 +234,9 @@ class _TarjetaRecordatorio extends StatelessWidget {
     } else {
       texto = Textos.noSePudoDecir;
     }
-    return Text(texto, style: tipografia.bodySmall);
+    return Text(texto,
+        style: const TextStyle(
+            fontSize: 15, color: Tema.ambarPildora, fontFamily: Tema.familia));
   }
 
   Future<void> _confirmarCancelar(BuildContext contexto) async {
@@ -250,9 +334,16 @@ class _DialogoNuevoRecordatorioState extends State<_DialogoNuevoRecordatorio> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
+                  Text(Textos.nuevoRecordatorioSubtitulo,
+                      style: const TextStyle(
+                          fontSize: 16, color: Tema.secundario,
+                          fontFamily: Tema.familia)),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _texto,
                     maxLength: 120,
+                    minLines: 2,
+                    maxLines: 2,
                     textCapitalization: TextCapitalization.sentences,
                     decoration: const InputDecoration(
                       labelText: Textos.queTieneQueDecir,

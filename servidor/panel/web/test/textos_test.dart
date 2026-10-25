@@ -179,8 +179,8 @@ void main() {
 
   group('avisoInactividadAlos', () {
     test('con minutos en formato corto', () {
-      expect(avisoInactividadAlos(1), 'Aviso de inactividad a los 1 min');
-      expect(avisoInactividadAlos(120), 'Aviso de inactividad a los 120 min');
+      expect(avisoInactividadAlos(1), 'Aviso de inactividad a los 1 min · ');
+      expect(avisoInactividadAlos(120), 'Aviso de inactividad a los 120 min · ');
     });
   });
 }

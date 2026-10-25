@@ -16,8 +16,9 @@ class PantallaPanel extends StatelessWidget {
   @override
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
-    final bool escritorio =
-        MediaQuery.sizeOf(contexto).width >= Tema.anchoEscritorio;
+    final double ancho = MediaQuery.sizeOf(contexto).width;
+    final bool escritorio = ancho >= Tema.anchoEscritorio;
+    final bool tableta = ancho >= Tema.anchoTableta && ancho < Tema.anchoEscritorio;
 
     final Widget luz = estado.estado?.luz.estado == noInstalado
         ? const Card(
@@ -28,73 +29,225 @@ class PantallaPanel extends StatelessWidget {
           )
         : const TarjetaLuz();
 
-    final Widget cuerpo = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        if (escritorio) ...<Widget>[
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    SizedBox(width: 240, child: luz),
-                    const SizedBox(width: 12),
-                    const SizedBox(width: 240, child: TarjetaAmbiente()),
-                    const SizedBox(width: 12),
-                    const SizedBox(width: 240, child: TarjetaGas()),
-                    const SizedBox(width: 12),
-                    const SizedBox(width: 240, child: TarjetaMovimiento()),
-                  ],
-                ),
-              ),
-          const SizedBox(height: 16),
-          LayoutBuilder(builder: (BuildContext contexto, BoxConstraints c) {
-            final Widget alertas = const _AlertasRecientes();
-            final Widget recordatorios = const _RecordatoriosProximos();
-            final Widget mensajes = const _TarjetaMensajes();
-            if (c.maxWidth > 980) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Expanded(child: alertas),
-                  const SizedBox(width: 16),
-                  Expanded(child: recordatorios),
-                  const SizedBox(width: 16),
-                  Expanded(child: mensajes),
-                ],
-              );
-            }
-            return Column(
+    final Widget cuerpo;
+    if (escritorio) {
+      cuerpo = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          IntrinsicHeight(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                alertas,
-                const SizedBox(height: 16),
-                recordatorios,
-                const SizedBox(height: 16),
-                mensajes,
+                Expanded(child: luz),
+                const SizedBox(width: 20),
+                const Expanded(child: TarjetaAmbiente()),
+                const SizedBox(width: 20),
+                const Expanded(child: TarjetaGas()),
+                const SizedBox(width: 20),
+                const Expanded(child: TarjetaMovimiento()),
               ],
-            );
-          }),
-        ] else ...<Widget>[
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Expanded(child: _AlertasRecientes()),
+              const SizedBox(width: 20),
+              const Expanded(child: _RecordatoriosProximos()),
+              const SizedBox(width: 20),
+              const Expanded(child: _TarjetaMensajes()),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const TarjetaEquipos(),
+          const SizedBox(height: 8),
+          const PiePanel(),
+        ],
+      );
+    } else if (tableta) {
+      cuerpo = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(child: luz),
+              const SizedBox(width: 16),
+              const Expanded(child: TarjetaAmbiente()),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Expanded(child: TarjetaGas()),
+              const SizedBox(width: 16),
+              const Expanded(child: TarjetaMovimiento()),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Expanded(child: _AlertasRecientes()),
+              const SizedBox(width: 16),
+              const Expanded(child: _RecordatoriosProximos()),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const _TarjetaMensajes(),
+          const SizedBox(height: 16),
+          const TarjetaEquipos(),
+          const SizedBox(height: 8),
+          const PiePanel(),
+        ],
+      );
+    } else {
+      cuerpo = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
           luz,
           const SizedBox(height: 16),
           const _RejillaMovil(),
           const SizedBox(height: 16),
-          const _AlertasRecientes(),
+          const _ProximoRecordatorioCompacto(),
           const SizedBox(height: 16),
-          const _RecordatoriosProximos(),
+          const _UltimaAlertaCompacta(),
           const SizedBox(height: 16),
           const _TarjetaMensajes(),
+          const SizedBox(height: 16),
+          const TarjetaEquipos(),
+          const SizedBox(height: 8),
+          const PiePanel(),
         ],
-        const SizedBox(height: 16),
-        const TarjetaEquipos(),
-        const SizedBox(height: 8),
-        const PiePanel(),
-      ],
-    );
+      );
+    }
 
     return EstructuraPanel(contenido: cuerpo);
+  }
+}
+
+/// Próximo recordatorio compacto del móvil.
+class _ProximoRecordatorioCompacto extends StatelessWidget {
+  const _ProximoRecordatorioCompacto();
+
+  @override
+  Widget build(BuildContext contexto) {
+    final EstadoPanel estado = PanelScope.de(contexto);
+    final List<Recordatorio> proximos = estado.recordatorios;
+    final Recordatorio? r = proximos.isEmpty ? null : proximos.first;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: r == null
+            ? Text(Textos.recordatoriosVacio,
+                style: Theme.of(contexto).textTheme.bodySmall)
+            : Row(
+                children: <Widget>[
+                  SizedBox(
+                    width: 56,
+                    child: Text(r.hora,
+                        style: const TextStyle(
+                            fontSize: 19, fontWeight: FontWeight.w700,
+                            fontFamily: Tema.familia)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(Textos.proximoRecordatorio,
+                            style: const TextStyle(
+                                fontSize: 14, color: Tema.secundario,
+                                fontFamily: Tema.familia)),
+                        Text(r.texto,
+                            style: const TextStyle(
+                                fontSize: 17, fontWeight: FontWeight.w700,
+                                fontFamily: Tema.familia)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+/// Última alerta compacta del móvil.
+class _UltimaAlertaCompacta extends StatelessWidget {
+  const _UltimaAlertaCompacta();
+
+  @override
+  Widget build(BuildContext contexto) {
+    final EstadoPanel estado = PanelScope.de(contexto);
+    final List<Alerta> recientes = estado.alertas;
+    final Alerta? a = recientes.isEmpty ? null : recientes.first;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(Textos.ultimaAlerta,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700,
+                          fontFamily: Tema.familia)),
+                ),
+                TextButton(
+                  onPressed: () => estado.irA(Destino.alertas),
+                  style: TextButton.styleFrom(
+                      foregroundColor: Tema.primario, padding: EdgeInsets.zero),
+                  child: Text(Textos.verTodas,
+                      style: const TextStyle(fontSize: 15)),
+                ),
+              ],
+            ),
+            if (a != null)
+              InkWell(
+                onTap: () => estado.abrirAlerta(a.id),
+                child: Row(
+                  children: <Widget>[
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                          color: Tema.suave,
+                          borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.notifications,
+                          color: Tema.primario, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(tituloAlerta(a.tipo),
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w700,
+                                  fontFamily: Tema.familia)),
+                          Text(fechaAlerta(a.creadoEn),
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 14, color: Tema.secundario,
+                                  fontFamily: Tema.familia)),
+                        ],
+                      ),
+                    ),
+                    PastillaEstado(estado: a.estado),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -155,6 +308,7 @@ class _RejillaMovil extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: _Celda(
+                tamanoValor: 26,
                 rotulo: Textos.temperatura,
                 valor: datoDeSensor(
                     nodoConectado: nodoConectado,
@@ -166,6 +320,7 @@ class _RejillaMovil extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: _Celda(
+                tamanoValor: 26,
                 rotulo: Textos.humedad,
                 valor: datoDeSensor(
                     nodoConectado: nodoConectado,
@@ -182,6 +337,7 @@ class _RejillaMovil extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: _Celda(
+                tamanoValor: 26,
                 rotulo: Textos.gas,
                 valor: gas,
                 color: nodoConectado && s.gasAdc != null
@@ -197,6 +353,7 @@ class _RejillaMovil extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: _Celda(
+                tamanoValor: 19,
                 rotulo: Textos.movimiento,
                 valor: movimiento,
                 subtitulo: (!nodoConectado || sinReloj)
@@ -220,6 +377,7 @@ class _Celda extends StatelessWidget {
     this.color,
     this.subtitulo,
     this.pie,
+    this.tamanoValor = 20,
   });
 
   final String rotulo;
@@ -227,6 +385,7 @@ class _Celda extends StatelessWidget {
   final Color? color;
   final String? subtitulo;
   final String? pie;
+  final double tamanoValor;
 
   @override
   Widget build(BuildContext contexto) {
@@ -244,10 +403,11 @@ class _Celda extends StatelessWidget {
           const SizedBox(height: 4),
           Text(valor,
               style: TextStyle(
-                  fontSize: 20,
+                  fontSize: tamanoValor,
                   fontWeight: FontWeight.w700,
                   height: 1.15,
-                  color: color ?? Tema.texto)),
+                  color: color ?? Tema.texto,
+                  fontFamily: Tema.familia)),
           if (subtitulo != null) ...<Widget>[
             const SizedBox(height: 4),
             Text(subtitulo!, style: Theme.of(contexto).textTheme.bodySmall),
@@ -259,6 +419,22 @@ class _Celda extends StatelessWidget {
                     .textTheme
                     .bodySmall
                     ?.copyWith(fontWeight: FontWeight.w700)),
+            TextButton(
+              onPressed: () => mostrarDialogoInactividad(contexto),
+              style: TextButton.styleFrom(
+                  foregroundColor: Tema.primario,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              child: Text(Textos.cambiar,
+                  style: Theme.of(contexto)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(
+                          color: Tema.primario,
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.underline)),
+            ),
           ],
         ],
       ),
@@ -287,7 +463,9 @@ class _AlertasRecientes extends StatelessWidget {
               children: <Widget>[
                 Expanded(
                   child: Text(Textos.alertasRecientes,
-                      style: Theme.of(contexto).textTheme.titleLarge),
+                      style: const TextStyle(
+                          fontSize: 21, fontWeight: FontWeight.w700,
+                          color: Tema.texto, fontFamily: Tema.familia)),
                 ),
                 TextButton(
                   onPressed: () => estado.irA(Destino.alertas),
@@ -424,7 +602,9 @@ class _RecordatoriosProximos extends StatelessWidget {
               children: <Widget>[
                 Expanded(
                   child: Text(Textos.recordatorios,
-                      style: Theme.of(contexto).textTheme.titleLarge),
+                      style: const TextStyle(
+                          fontSize: 21, fontWeight: FontWeight.w700,
+                          color: Tema.texto, fontFamily: Tema.familia)),
                 ),
                 OutlinedButton(
                   onPressed: () => abrirNuevoRecordatorio(contexto, estado),
@@ -504,12 +684,11 @@ class _TarjetaMensajes extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(Textos.mensajeParaLaSala,
-                      style: Theme.of(contexto)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(
-                              color: Tema.secundario,
-                              fontWeight: FontWeight.w700)),
+                      style: TextStyle(
+                          fontSize: MediaQuery.sizeOf(contexto).width >= Tema.anchoTableta ? 21 : 16,
+                          fontWeight: FontWeight.w700,
+                          color: Tema.secundario,
+                          fontFamily: Tema.familia)),
                 ),
                 Container(
                   padding:
@@ -569,13 +748,13 @@ class PastillaEstado extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
           color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(999)),
       child: Text(texto,
           style: TextStyle(
-              color: color, fontWeight: FontWeight.w700, fontSize: 13)),
+              color: color, fontWeight: FontWeight.w700, fontSize: 14)),
     );
   }
 }

@@ -85,7 +85,7 @@ class PantallaAlertaDetalle extends StatelessWidget {
               style: FilledButton.styleFrom(
                 backgroundColor: Tema.peligro,
                 foregroundColor: Tema.tarjeta,
-                minimumSize: const Size.fromHeight(Tema.altoMinimo),
+                minimumSize: const Size.fromHeight(56),
               ),
               child: estado.cargandoAlerta
                   ? const SizedBox(
@@ -241,11 +241,12 @@ class _Hero extends StatelessWidget {
     final String? quePaso =
         quePasoDe(alerta.tipo, alerta.carga, umbralGas: e?.gasOnAdc);
 
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(movil ? 20 : 32),
       decoration: BoxDecoration(
         color: Tema.peligro,
-        borderRadius: BorderRadius.circular(Tema.radio),
+        borderRadius: BorderRadius.circular(movil ? Tema.radio : 18),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -254,11 +255,11 @@ class _Hero extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Container(
-                width: 56,
-                height: 56,
+                width: movil ? 56 : 64,
+                height: movil ? 56 : 64,
                 decoration: BoxDecoration(
                   color: Tema.peligro,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(movil ? 16 : 18),
                   border: Border.all(
                       color: Tema.tarjeta.withValues(alpha: 0.6), width: 2),
                 ),
@@ -277,15 +278,17 @@ class _Hero extends StatelessWidget {
                     Text(Textos.alertaEnLaSala,
                         style: TextStyle(
                             color: Tema.tarjeta.withValues(alpha: 0.85),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700)),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: Tema.familia)),
                     const SizedBox(height: 4),
                     Text(tituloAlerta(alerta.tipo),
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: Tema.tarjeta,
-                            fontSize: 26,
-                            height: 1.15,
-                            fontWeight: FontWeight.w800)),
+                            fontSize: movil ? 32 : 36,
+                            height: 1.1,
+                            fontWeight: FontWeight.w800,
+                            fontFamily: Tema.familia)),
                   ],
                 ),
               ),
@@ -296,13 +299,16 @@ class _Hero extends StatelessWidget {
             Text(quePaso,
                 style: TextStyle(
                     color: Tema.tarjeta.withValues(alpha: 0.95),
-                    fontSize: 16,
-                    height: 1.4)),
+                    fontSize: movil ? 17 : 18,
+                    height: 1.45,
+                    fontFamily: Tema.familia)),
           ],
           const SizedBox(height: 10),
           Text(fecha,
               style: TextStyle(
-                  color: Tema.tarjeta.withValues(alpha: 0.8), fontSize: 14)),
+                  color: Tema.tarjeta.withValues(alpha: 0.8),
+                  fontSize: movil ? 15 : 16,
+                  fontFamily: Tema.familia)),
         ],
       ),
     );
@@ -380,6 +386,7 @@ class _LineaTiempo extends StatelessWidget {
   @override
   Widget build(BuildContext contexto) {
     if (eventos.isEmpty) return const SizedBox.shrink();
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
 
     return Card(
       child: Padding(
@@ -399,19 +406,22 @@ class _LineaTiempo extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     SizedBox(
-                      width: 66,
+                      width: movil ? 72 : 90,
                       child: Text(
                         horaDelDia(DateTime.fromMillisecondsSinceEpoch(
                             evento.en * 1000)),
-                        style: Theme.of(contexto)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: Tema.secundario),
+                        style: TextStyle(
+                            fontSize: movil ? 15 : 16,
+                            color: Tema.secundario,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: Tema.familia),
                       ),
                     ),
                     Expanded(
                       child: Text(eventoAlerta(evento.tipo, evento.nombre),
-                          style: Theme.of(contexto).textTheme.bodyMedium),
+                          style: TextStyle(
+                              fontSize: movil ? 16 : 17,
+                              fontFamily: Tema.familia)),
                     ),
                   ],
                 ),

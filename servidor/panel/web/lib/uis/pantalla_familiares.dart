@@ -20,6 +20,7 @@ class PantallaFamiliares extends StatelessWidget {
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
     final TextTheme tipografia = Theme.of(contexto).textTheme;
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
 
     final Widget cuerpo;
     if (estado.cargandoFamiliares) {
@@ -58,12 +59,19 @@ class PantallaFamiliares extends StatelessWidget {
               child: Row(
                 children: <Widget>[
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: movil ? 46 : 52,
+                    height: movil ? 46 : 52,
                     decoration: const BoxDecoration(
                         color: Tema.suave, shape: BoxShape.circle),
-                    child: const Icon(Icons.person,
-                        color: Tema.primario, size: 22),
+                    alignment: Alignment.center,
+                    child: Text(
+                      nombre.isEmpty ? '?' : nombre[0].toUpperCase(),
+                      style: TextStyle(
+                          fontSize: movil ? 20 : 22,
+                          fontWeight: FontWeight.w700,
+                          color: Tema.primario,
+                          fontFamily: Tema.familia),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -71,8 +79,10 @@ class PantallaFamiliares extends StatelessWidget {
                       nombre.isEmpty
                           ? Textos.nombreSinDefinir
                           : nombre,
-                      style: tipografia.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                          fontSize: movil ? 18 : 19,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: Tema.familia),
                     ),
                   ),
                 ],
@@ -86,9 +96,18 @@ class PantallaFamiliares extends StatelessWidget {
       contenido: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Text(Textos.familiares, style: tipografia.headlineLarge),
+          Text(Textos.familiares,
+              style: TextStyle(
+                  fontSize: movil ? 24 : 28,
+                  fontWeight: FontWeight.w700,
+                  color: Tema.texto,
+                  fontFamily: Tema.familia)),
           const SizedBox(height: 6),
-          Text(Textos.familiaresSubtitulo, style: tipografia.bodySmall),
+          Text(Textos.familiaresSubtitulo,
+              style: TextStyle(
+                  fontSize: movil ? 15 : 17,
+                  color: Tema.secundario,
+                  fontFamily: Tema.familia)),
           const SizedBox(height: 16),
           Card(
             child: Padding(
@@ -101,7 +120,10 @@ class PantallaFamiliares extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               '${familiares(estado.nombresFamiliares.length)} · ${Textos.avisoFamiliares}',
-              style: tipografia.bodySmall,
+              style: TextStyle(
+                  fontSize: movil ? 14 : 16,
+                  color: Tema.secundario,
+                  fontFamily: Tema.familia),
             ),
           ],
           const SizedBox(height: 8),
@@ -157,38 +179,69 @@ class PieFamiliares extends StatelessWidget {
   @override
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
+    final double fuente = movil ? 14 : 15;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: <Widget>[
-          TextButton(
-            onPressed: estado.aceptarAviso,
-            style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 48),
-                foregroundColor: Tema.primario),
-            child: Text(Textos.verAviso,
-                style: Theme.of(contexto)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(
-                        color: Tema.primario,
-                        decoration: TextDecoration.underline)),
-          ),
-          const Spacer(),
-          TextButton(
-            onPressed: () => _salir(contexto, estado),
-            style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 48)),
-            child: Text(Textos.cerrarSesion,
-                style: Theme.of(contexto)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: Tema.secundario)),
-          ),
-        ],
-      ),
+      child: movil
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                TextButton(
+                  onPressed: estado.aceptarAviso,
+                  style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 32),
+                      foregroundColor: Tema.primario),
+                  child: Text(Textos.verAviso,
+                      style: TextStyle(
+                          fontSize: fuente,
+                          color: Tema.primario,
+                          decoration: TextDecoration.underline,
+                          fontFamily: Tema.familia)),
+                ),
+                TextButton(
+                  onPressed: () => _salir(contexto, estado),
+                  style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 32)),
+                  child: Text(Textos.cerrarSesion,
+                      style: TextStyle(
+                          fontSize: fuente,
+                          color: Tema.secundario,
+                          fontFamily: Tema.familia)),
+                ),
+              ],
+            )
+          : Row(
+              children: <Widget>[
+                TextButton(
+                  onPressed: estado.aceptarAviso,
+                  style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 32),
+                      foregroundColor: Tema.primario),
+                  child: Text(Textos.verAviso,
+                      style: TextStyle(
+                          fontSize: fuente,
+                          color: Tema.primario,
+                          decoration: TextDecoration.underline,
+                          fontFamily: Tema.familia)),
+                ),
+                const SizedBox(width: 24),
+                TextButton(
+                  onPressed: () => _salir(contexto, estado),
+                  style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 32)),
+                  child: Text(Textos.cerrarSesion,
+                      style: TextStyle(
+                          fontSize: fuente,
+                          color: Tema.secundario,
+                          fontFamily: Tema.familia)),
+                ),
+              ],
+            ),
     );
   }
 

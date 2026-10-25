@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Recordatorios (móvil)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="width: 390px; height: 1080px; box-sizing: border-box; background: #F4F5F2; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; display: flex; flex-direction: column; overflow: hidden">
+
+<div style="flex: 1; padding: 24px 20px 20px; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+
+<header style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+<div>
+<div style="font-size: 14px; color: #4A524F">Asistente de Voz</div>
+<div style="font-size: 26px; font-weight: 700">Sala principal</div>
+</div>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-weight: 700; font-size: 14px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #0E5E5A"></span>Conectada</span>
+</header>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div>
+<h1 style="margin: 0; font-size: 24px">Recordatorios</h1>
+<p style="margin: 4px 0 0; font-size: 15px; color: #4A524F">Lo que el asistente dice en voz alta a su hora.</p>
+</div>
+<a href="MovNuevoRecordatorio.dc.html" style="min-height: 52px; border-radius: 14px; background: #0E5E5A; color: #FFFFFF; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 18px; font-weight: 700; box-sizing: border-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Nuevo recordatorio</a>
+</div>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 2px 16px">
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-bottom: 1px solid #E7EAE8">
+<div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 22px; font-weight: 700">20:00</span><span style="font-size: 14px; color: #4A524F">Todos los días</span></div>
+<div style="font-size: 17px; font-weight: 700">Tomar el medicamento de la noche</div>
+<div style="font-size: 14px; color: #4A524F">La última vez se dijo ayer a las 20:00.</div>
+<button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 2px solid #DADFDB; background: #FFFFFF; color: #9F1D1D; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Cancelar</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-bottom: 1px solid #E7EAE8">
+<div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 22px; font-weight: 700">10:30</span><span style="font-size: 14px; color: #4A524F">Mañana · una vez</span></div>
+<div style="font-size: 17px; font-weight: 700">Cita médica</div>
+<button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 2px solid #DADFDB; background: #FFFFFF; color: #9F1D1D; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Cancelar</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-bottom: 1px solid #E7EAE8">
+<div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 22px; font-weight: 700">08:00</span><span style="font-size: 14px; color: #4A524F">Lun, mié y vie</span></div>
+<div style="font-size: 17px; font-weight: 700">Medir la presión</div>
+<button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 2px solid #DADFDB; background: #FFFFFF; color: #9F1D1D; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Cancelar</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 14px 0">
+<div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 22px; font-weight: 700">13:00</span><span style="font-size: 14px; color: #4A524F">Todos los días</span></div>
+<div style="font-size: 17px; font-weight: 700">Regar las plantas</div>
+<div style="font-size: 14px; line-height: 1.4; color: #7A4205">La última vez no se pudo decir: el asistente no estaba conectado.</div>
+<button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 2px solid #DADFDB; background: #FFFFFF; color: #9F1D1D; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Cancelar</button>
+</div>
+</section>
+
+</div>
+
+<nav aria-label="Secciones" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #DADFDB; padding: 8px 6px 14px">
+<a href="MovPanel.dc.html" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 13px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"></path></svg>Inicio</a>
+<a href="MovHistorial.dc.html" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 13px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0"></path></svg>Alertas</a>
+<a href="MovRecordatorios.dc.html" aria-current="page" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #0E5E5A; font-size: 13px; font-weight: 700"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Recordatorios</a>
+<a href="MovFamiliares.dc.html" style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; color: #4A524F; font-size: 13px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20v-1a5 5 0 0 1 5-5h3a5 5 0 0 1 5 5v1M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a5 5 0 0 1 3 4.6V20"></path></svg>Familiares</a>
+</nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1080}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

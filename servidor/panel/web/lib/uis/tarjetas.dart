@@ -25,41 +25,53 @@ class TarjetaLuz extends StatelessWidget {
     if (luz.estado == sinDatos && encendida == null) {
       detalle = Textos.todaviaNoHayLuz;
     } else if (luz.recibidoEn == null && luz.origen != null) {
-      detalle = '${titulo.toLowerCase()} ${origenDeLuz(luz.origen).toLowerCase()}';
+      detalle = '$titulo ${origenDeLuz(luz.origen).toLowerCase()}';
     } else if (luz.origen != null) {
       detalle =
-          '${origenDeLuz(luz.origen)} · ${hace(luz.recibidoEn, ahora: estado.ahoraServidor())}';
+          '$titulo ${origenDeLuz(luz.origen).toLowerCase()} · ${hace(luz.recibidoEn, ahora: estado.ahoraServidor())}';
     } else {
       detalle = titulo;
     }
 
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(movil ? 18 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Row(
               children: <Widget>[
-                const Icon(Icons.lightbulb_outline,
-                    color: Tema.secundario, size: 20),
+                Icon(Icons.lightbulb_outline,
+                    color: Tema.secundario, size: movil ? 20 : 22),
                 const SizedBox(width: 8),
-                Text(Textos.luzDeLaSala,
-                    style: Theme.of(contexto)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(
-                            color: Tema.secundario, fontWeight: FontWeight.w700)),
+                Flexible(child: Text(Textos.luzDeLaSala,
+                    style: TextStyle(
+                        fontSize: movil ? 15 : 16,
+                        color: Tema.secundario,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: Tema.familia))),
               ],
             ),
             const SizedBox(height: 12),
-            Text(titulo, style: Theme.of(contexto).textTheme.headlineMedium),
+            Text(titulo,
+                style: TextStyle(
+                    fontSize: movil ? 28 : 30,
+                    fontWeight: FontWeight.w700,
+                    color: Tema.texto,
+                    fontFamily: Tema.familia)),
             const SizedBox(height: 4),
-            Text(detalle, style: Theme.of(contexto).textTheme.bodySmall),
+            Text(detalle,
+                style: TextStyle(
+                    fontSize: movil ? 15 : 16,
+                    color: Tema.secundario,
+                    fontFamily: Tema.familia)),
             const SizedBox(height: 16),
             FilledButton(
               style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(Tema.altoMinimo)),
+                  minimumSize: const Size.fromHeight(Tema.altoMinimo),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(movil ? 14 : 12))),
               onPressed: (encendida == null || estado.cargandoLuz)
                   ? null
                   : () => estado.encenderLuz(encender: !encendida),
@@ -111,57 +123,66 @@ class TarjetaAmbiente extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Row(
               children: <Widget>[
-                const Icon(Icons.thermostat, color: Tema.secundario, size: 20),
+                const Icon(Icons.thermostat, color: Tema.secundario, size: 22),
                 const SizedBox(width: 8),
-                Text(Textos.ambiente,
-                    style: Theme.of(contexto)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(
-                            color: Tema.secundario, fontWeight: FontWeight.w700)),
+                Flexible(child: Text(Textos.ambiente,
+                    style: const TextStyle(
+                        fontSize: 16, color: Tema.secundario,
+                        fontWeight: FontWeight.w700, fontFamily: Tema.familia))),
               ],
             ),
             const SizedBox(height: 16),
             Row(
               children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(temp,
-                          style: const TextStyle(
-                              fontSize: 34, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 4),
-                      Text(Textos.temperatura,
-                          style: Theme.of(contexto).textTheme.bodySmall),
-                    ],
-                  ),
+                Text(temp,
+                    style: TextStyle(
+                        fontSize: s.temperaturaC != null ? 30 : 20,
+                        fontWeight: FontWeight.w700,
+                        color: s.temperaturaC != null
+                            ? Tema.texto
+                            : Tema.secundario,
+                        fontFamily: Tema.familia)),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(Textos.temperatura,
+                      style: const TextStyle(
+                          fontSize: 16, color: Tema.secundario,
+                          fontFamily: Tema.familia)),
                 ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(hum,
-                          style: const TextStyle(
-                              fontSize: 34, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 4),
-                      Text(Textos.humedad,
-                          style: Theme.of(contexto).textTheme.bodySmall),
-                    ],
-                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: <Widget>[
+                Text(hum,
+                    style: TextStyle(
+                        fontSize: s.humedadPct != null ? 30 : 20,
+                        fontWeight: FontWeight.w700,
+                        color: s.humedadPct != null
+                            ? Tema.texto
+                            : Tema.secundario,
+                        fontFamily: Tema.familia)),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(Textos.humedad,
+                      style: const TextStyle(
+                          fontSize: 16, color: Tema.secundario,
+                          fontFamily: Tema.familia)),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             if (s.recibidoEn != null)
               Text('Actualizado ${haceCorto(s.recibidoEn, ahora: ahora)}',
-                  style: Theme.of(contexto).textTheme.bodySmall),
+                  style: const TextStyle(
+                      fontSize: 15, color: Tema.secundario,
+                      fontFamily: Tema.familia)),
           ],
         ),
       ),
@@ -225,7 +246,7 @@ class BarraGas extends StatelessWidget {
               Container(
                 decoration: BoxDecoration(
                     color: Tema.caja,
-                    borderRadius: BorderRadius.circular(6)),
+                    borderRadius: BorderRadius.circular(5)),
               ),
               if (gasAdc != null)
                 Align(
@@ -234,7 +255,7 @@ class BarraGas extends StatelessWidget {
                     width: lleno < 10 ? 10 : lleno,
                     decoration: BoxDecoration(
                         color: colorDelGas(gasAdc: gasAdc, umbral: umbral),
-                        borderRadius: BorderRadius.circular(6)),
+                        borderRadius: BorderRadius.circular(5)),
                   ),
                 ),
               if (umbral != null && anchoUmbral > 0 && anchoUmbral < 1)
@@ -244,7 +265,7 @@ class BarraGas extends StatelessWidget {
                   bottom: -3,
                   child: Container(
                     width: 2,
-                    color: Tema.ambarTexto,
+                    color: Tema.texto,
                   ),
                 ),
             ],
@@ -288,7 +309,7 @@ class TarjetaGas extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -297,20 +318,20 @@ class TarjetaGas extends StatelessWidget {
                 const Icon(Icons.local_gas_station,
                     color: Tema.secundario, size: 20),
                 const SizedBox(width: 8),
-                Text(Textos.gas,
-                    style: Theme.of(contexto)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(
-                            color: Tema.secundario, fontWeight: FontWeight.w700)),
+                Flexible(child: Text(Textos.gas,
+                    style: const TextStyle(
+                        fontSize: 16, color: Tema.secundario,
+                        fontWeight: FontWeight.w700, fontFamily: Tema.familia))),
               ],
             ),
             const SizedBox(height: 12),
             Text(valor,
-                style: Theme.of(contexto).textTheme.headlineMedium?.copyWith(
+                style: TextStyle(
+                    fontSize: 30, fontWeight: FontWeight.w700,
                     color: hayDatoNum
                         ? colorDelGas(gasAdc: gasAdc, umbral: umbral)
-                        : Tema.secundario)),
+                        : Tema.secundario,
+                    fontFamily: Tema.familia)),
             if (hayDatoNum) ...<Widget>[
               const SizedBox(height: 12),
               BarraGas(gasAdc: gasAdc, umbral: umbral),
@@ -318,7 +339,9 @@ class TarjetaGas extends StatelessWidget {
               Text(
                   '${Textos.lectura}${_num(gasAdc)}'
                   '${umbral == null ? '' : ' · ${Textos.umbral}${_num(umbral)}'}',
-                  style: Theme.of(contexto).textTheme.bodySmall),
+                  style: const TextStyle(
+                      fontSize: 15, color: Tema.secundario,
+                      fontFamily: Tema.familia)),
             ],
           ],
         ),
@@ -368,46 +391,71 @@ class TarjetaMovimiento extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Row(
               children: <Widget>[
                 const Icon(Icons.directions_walk,
-                    color: Tema.secundario, size: 20),
+                    color: Tema.secundario, size: 22),
                 const SizedBox(width: 8),
-                Text(Textos.movimiento,
-                    style: Theme.of(contexto)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(
-                            color: Tema.secundario, fontWeight: FontWeight.w700)),
+                Flexible(child: Text(Textos.movimiento,
+                    style: const TextStyle(
+                        fontSize: 16, color: Tema.secundario,
+                        fontWeight: FontWeight.w700, fontFamily: Tema.familia))),
               ],
             ),
             const SizedBox(height: 12),
-            Text(valor, style: Theme.of(contexto).textTheme.headlineMedium),
+            Text(valor,
+                style: TextStyle(
+                    fontSize: 30, fontWeight: FontWeight.w700,
+                    color: (valor == Textos.sinDatos || valor == Textos.sinSensor)
+                        ? Tema.secundario
+                        : Tema.texto,
+                    fontFamily: Tema.familia)),
             if (ultimoLinea != null) ...<Widget>[
               const SizedBox(height: 4),
-              Text(ultimoLinea, style: Theme.of(contexto).textTheme.bodySmall),
+              Text(ultimoLinea,
+                  style: const TextStyle(
+                      fontSize: 16, color: Tema.secundario,
+                      fontFamily: Tema.familia)),
             ],
             const SizedBox(height: 16),
-            if (inact != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => mostrarDialogoInactividad(contexto),
-                  style: TextButton.styleFrom(
-                      foregroundColor: Tema.primario,
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 48)),
-                  child: Text(avisoInactividadAlos(inact.tiempoMin),
-                      style: Theme.of(contexto)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  Flexible(
+                    child: Text(
+                      inact == null
+                          ? Textos.avisoInactividad
+                          : avisoInactividadAlos(inact.tiempoMin),
+                      style: const TextStyle(
+                          fontSize: 15, color: Tema.secundario,
+                          fontFamily: Tema.familia),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => mostrarDialogoInactividad(contexto),
+                    style: TextButton.styleFrom(
+                        foregroundColor: Tema.primario,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 48),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    child: Text(Textos.cambiar,
+                        style: Theme.of(contexto)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(
+                                color: Tema.primario,
+                                fontWeight: FontWeight.w700,
+                                decoration: TextDecoration.underline)),
+                  ),
+                ],
               ),
+            ),
           ],
         ),
       ),
@@ -469,39 +517,41 @@ class _DialogoInactividadState extends State<DialogoInactividad> {
     final Inactividad inact = e.inactividad;
 
     return AlertDialog(
-      title: const Text(Textos.dialogoInactividad),
+      title: const Text(Textos.dialogoInactividad,
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, fontFamily: Tema.familia)),
       content: SizedBox(
         width: 420,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                  '${avisoInactividadAlos(inact.tiempoMin)} '
-                  '(${inact.minimo}–${inact.maximo} ${Textos.minutosUnidad})',
-                  style: Theme.of(contexto).textTheme.bodySmall),
-              const SizedBox(height: 16),
-              TextFormField(
-                // La clave lleva el valor del servidor: cuando se guarda (o
-                // cambia en otro dispositivo), el campo se reinicia con el
-                // número que confirmó el servidor en vez de quedarse con lo
-                // que se había teclado.
-                key: ValueKey<int>(inact.tiempoMin),
-                initialValue: '${inact.tiempoMin}',
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: Textos.avisarSiNoHayMovimiento,
-                  suffixText: Textos.minutosUnidad,
-                ),
-                validator: (String? valor) => _validar(valor, inact),
-                onSaved: (String? valor) =>
-                    _editado = int.tryParse((valor ?? '').trim()),
-                onFieldSubmitted: (_) => _guardar(estado),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+                'Si no se detecta movimiento en la sala durante este tiempo, se avisa a la familia por Telegram. El asistente no dice nada en voz alta.',
+                style: const TextStyle(
+                    fontSize: 17, color: Tema.secundario, height: 1.5,
+                    fontFamily: Tema.familia)),
+            const SizedBox(height: 16),
+            Text(
+                '${avisoInactividadAlos(inact.tiempoMin)}'
+                '(${inact.minimo}–${inact.maximo} ${Textos.minutosUnidad})',
+                style: const TextStyle(
+                    fontSize: 15, color: Tema.secundario, fontFamily: Tema.familia)),
+            const SizedBox(height: 16),
+            TextFormField(
+              key: ValueKey<int>(inact.tiempoMin),
+              initialValue: '${inact.tiempoMin}',
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: Textos.avisarSiNoHayMovimiento,
+                suffixText: Textos.minutosUnidad,
+                helperText: 'Entre 2 y 720 minutos. El cambio aplica de inmediato.',
               ),
-            ],
-          ),
+              validator: (String? valor) => _validar(valor, inact),
+              onSaved: (String? valor) =>
+                  _editado = int.tryParse((valor ?? '').trim()),
+              onFieldSubmitted: (_) => _guardar(estado),
+            ),
+          ],
         ),
       ),
       actions: <Widget>[
@@ -543,25 +593,50 @@ class TarjetaEquipos extends StatelessWidget {
       _Enlace(Textos.asistenteDeVoz, e.satelite),
     ];
 
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
+    final double nombreAncho = movil ? 0 : 200;
+    final double fuente = movil ? 15 : 16;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: movil ? 16 : 24, vertical: movil ? 12 : 8),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(Textos.equipos,
+                  style: TextStyle(
+                      fontSize: movil ? 18 : 19,
+                      fontWeight: FontWeight.w700,
+                      color: Tema.texto,
+                      fontFamily: Tema.familia)),
+            ),
             for (final _Enlace enlace in enlaces)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Row(
                   children: <Widget>[
-                    SizedBox(
-                        width: 110,
-                        child: Text(enlace.nombre,
-                            style: Theme.of(contexto)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w700))),
+                    if (movil)
+                      Expanded(
+                        flex: 0,
+                        child: SizedBox(
+                            width: 150,
+                            child: Text(enlace.nombre,
+                                style: TextStyle(
+                                    fontSize: fuente,
+                                    fontWeight: FontWeight.w700,
+                                    fontFamily: Tema.familia))),
+                      )
+                    else
+                      SizedBox(
+                          width: nombreAncho,
+                          child: Text(enlace.nombre,
+                              style: TextStyle(
+                                  fontSize: fuente,
+                                  fontWeight: FontWeight.w700,
+                                  fontFamily: Tema.familia))),
                     Expanded(child: Text(enlace.texto(ahora),
-                        style: Theme.of(contexto).textTheme.bodyMedium)),
+                        style: TextStyle(fontSize: fuente, fontFamily: Tema.familia))),
                     _EstadoPunto(estado: enlace.componente.estado),
                   ],
                 ),
@@ -572,20 +647,27 @@ class TarjetaEquipos extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: Row(
                 children: <Widget>[
-                  SizedBox(
-                      width: 110,
+                  if (movil)
+                    Expanded(
                       child: Text(Textos.servidor,
-                          style: Theme.of(contexto)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w700))),
+                          style: TextStyle(
+                              fontSize: fuente,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: Tema.familia)))
+                  else
+                    SizedBox(
+                        width: nombreAncho,
+                        child: Text(Textos.servidor,
+                            style: TextStyle(
+                                fontSize: fuente,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: Tema.familia))),
                   Expanded(
                       child: Text(
                           estado.conectadoAlServidor
                               ? Textos.enLinea
                               : Textos.sinConexion,
-                          style:
-                              Theme.of(contexto).textTheme.bodyMedium)),
+                          style: TextStyle(fontSize: fuente, fontFamily: Tema.familia))),
                   _EstadoPunto(
                       estado: estado.conectadoAlServidor
                           ? conectado
@@ -649,52 +731,75 @@ class PiePanel extends StatelessWidget {
   @override
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
-    final TextTheme tipografia = Theme.of(contexto).textTheme;
+    final bool movil = MediaQuery.sizeOf(contexto).width < Tema.anchoTableta;
+    final double fuente = movil ? 14 : 15;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            Textos.piePrivacidad,
-            style: tipografia.bodySmall,
-          ),
-          const SizedBox(height: 4),
-          LayoutBuilder(builder: (BuildContext context, BoxConstraints c) {
-            return Row(
+      child: movil
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Flexible(
-                  child: TextButton(
-                    onPressed: estado.aceptarAviso,
-                    style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 32),
-                        foregroundColor: Tema.primario),
-                    child: Text(Textos.verAviso,
-                        overflow: TextOverflow.ellipsis,
-                        style: tipografia.bodySmall?.copyWith(
-                            color: Tema.primario,
-                            decoration: TextDecoration.underline)),
-                  ),
+                Text(Textos.piePrivacidad,
+                    style: TextStyle(fontSize: fuente, color: Tema.secundario, fontFamily: Tema.familia)),
+                const SizedBox(height: 10),
+                TextButton(
+                  onPressed: estado.aceptarAviso,
+                  style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 32),
+                      foregroundColor: Tema.primario),
+                  child: Text(Textos.verAviso,
+                      style: TextStyle(
+                          fontSize: fuente, color: Tema.primario,
+                          decoration: TextDecoration.underline, fontFamily: Tema.familia)),
                 ),
-                Flexible(
-                  child: TextButton(
-                    onPressed: () => _salir(contexto, estado),
-                    style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 32),
-                        foregroundColor: Tema.secundario),
-                    child: Text(Textos.cerrarSesion,
-                        overflow: TextOverflow.ellipsis,
-                        style: tipografia.bodySmall
-                            ?.copyWith(color: Tema.secundario)),
-                  ),
+                TextButton(
+                  onPressed: () => _salir(contexto, estado),
+                  style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 32),
+                      foregroundColor: Tema.secundario),
+                  child: Text(Textos.cerrarSesion,
+                      style: TextStyle(fontSize: fuente, color: Tema.secundario, fontFamily: Tema.familia)),
                 ),
               ],
-            );
-          }),
-        ],
-      ),
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                Flexible(
+                  child: Text(Textos.piePrivacidad,
+                      style: TextStyle(fontSize: fuente, color: Tema.secundario, fontFamily: Tema.familia)),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    TextButton(
+                      onPressed: estado.aceptarAviso,
+                      style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 32),
+                          foregroundColor: Tema.primario),
+                      child: Text(Textos.verAviso,
+                          style: TextStyle(
+                              fontSize: fuente, color: Tema.primario,
+                              decoration: TextDecoration.underline, fontFamily: Tema.familia)),
+                    ),
+                    const SizedBox(width: 24),
+                    TextButton(
+                      onPressed: () => _salir(contexto, estado),
+                      style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 32),
+                          foregroundColor: Tema.secundario),
+                      child: Text(Textos.cerrarSesion,
+                          style: TextStyle(fontSize: fuente, color: Tema.secundario, fontFamily: Tema.familia)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 

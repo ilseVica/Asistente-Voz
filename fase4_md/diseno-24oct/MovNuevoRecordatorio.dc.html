@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Nuevo recordatorio (móvil)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #FFFFFF; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; display: flex; flex-direction: column; overflow: hidden">
+
+<header style="display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 8px; border-bottom: 1px solid #DADFDB">
+<a href="MovRecordatorios.dc.html" aria-label="Cerrar" style="width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #1B1F1E; flex: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+<h1 style="margin: 0; font-size: 21px; flex: 1">Nuevo recordatorio</h1>
+</header>
+
+<div style="flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 20px; overflow: hidden">
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="texto-m" style="font-size: 17px; font-weight: 700">¿Qué debe decir el asistente?</label>
+<textarea id="texto-m" rows="2" style="font-family: inherit; font-size: 18px; padding: 12px 14px; border-radius: 12px; border: 2px solid #0E5E5A; resize: vertical">Medir la presión</textarea>
+<span style="font-size: 14px; color: #4A524F">Lo dirá así: «Le recuerdo: medir la presión».</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="hora-m" style="font-size: 17px; font-weight: 700">Hora</label>
+<input id="hora-m" type="time" value="08:00" style="font-family: inherit; font-size: 20px; padding: 10px 14px; min-height: 52px; box-sizing: border-box; border-radius: 12px; border: 1px solid #B9C1BC">
+</div>
+
+<fieldset style="border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px">
+<legend style="font-size: 17px; font-weight: 700; padding: 0; margin-bottom: 10px">¿Cuándo?</legend>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid #DADFDB; font-size: 17px"><input type="radio" name="cuando-m" style="width: 22px; height: 22px">Una vez</label>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid #DADFDB; font-size: 17px"><input type="radio" name="cuando-m" style="width: 22px; height: 22px">Todos los días</label>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 2px solid #0E5E5A; background: #E3F0EE; font-size: 17px; font-weight: 700"><input type="radio" name="cuando-m" checked style="width: 22px; height: 22px">Algunos días de la semana</label>
+<div role="group" aria-label="Días" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px">
+<button type="button" aria-pressed="true" style="min-height: 44px; border-radius: 10px; border: none; background: #0E5E5A; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700">L</button>
+<button type="button" aria-pressed="false" style="min-height: 44px; border-radius: 10px; border: 1px solid #B9C1BC; background: #FFFFFF; color: #1B1F1E; font-family: inherit; font-size: 15px">M</button>
+<button type="button" aria-pressed="true" style="min-height: 44px; border-radius: 10px; border: none; background: #0E5E5A; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700">M</button>
+<button type="button" aria-pressed="false" style="min-height: 44px; border-radius: 10px; border: 1px solid #B9C1BC; background: #FFFFFF; color: #1B1F1E; font-family: inherit; font-size: 15px">J</button>
+<button type="button" aria-pressed="true" style="min-height: 44px; border-radius: 10px; border: none; background: #0E5E5A; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700">V</button>
+<button type="button" aria-pressed="false" style="min-height: 44px; border-radius: 10px; border: 1px solid #B9C1BC; background: #FFFFFF; color: #1B1F1E; font-family: inherit; font-size: 15px">S</button>
+<button type="button" aria-pressed="false" style="min-height: 44px; border-radius: 10px; border: 1px solid #B9C1BC; background: #FFFFFF; color: #1B1F1E; font-family: inherit; font-size: 15px">D</button>
+</div>
+</fieldset>
+
+</div>
+
+<div style="padding: 12px 20px 20px; border-top: 1px solid #DADFDB; display: flex; flex-direction: column; gap: 10px">
+<a href="MovRecordatorios.dc.html" style="min-height: 56px; border-radius: 14px; background: #0E5E5A; color: #FFFFFF; text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700">Guardar recordatorio</a>
+<a href="MovRecordatorios.dc.html" style="min-height: 48px; border-radius: 14px; color: #1B1F1E; text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700">Cancelar</a>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

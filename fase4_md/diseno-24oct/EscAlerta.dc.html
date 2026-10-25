@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Detalle de alerta (escritorio)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F4F5F2; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; box-sizing: border-box; padding: 32px 24px 48px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px">
+<div style="display: flex; align-items: center; gap: 14px">
+<div style="width: 48px; height: 48px; border-radius: 14px; background: #0E5E5A; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 12v0M8 8v8M12 5v14M16 8v8M20 12v0"></path></svg></div>
+<div>
+<div style="font-size: 15px; color: #4A524F">Asistente de Voz</div>
+<div style="font-size: 30px; font-weight: 700; line-height: 1.15">Sala principal</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px">
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: #9F1D1D; color: #FFFFFF; font-weight: 700; font-size: 16px"><span style="width: 10px; height: 10px; border-radius: 50%; background: #FFFFFF"></span>Alerta activa</span>
+<span style="font-size: 15px; color: #4A524F">Actualizado hace 5 s</span>
+</div>
+</header>
+
+<nav aria-label="Secciones" style="display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #DADFDB; padding-bottom: 12px">
+<a href="EscPanel.dc.html" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Panel</a>
+<a href="EscHistorial.dc.html" aria-current="page" style="padding: 10px 16px; border-radius: 10px; background: #1B1F1E; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 16px">Historial de alertas</a>
+<a href="EscRecordatorios.dc.html" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Recordatorios</a>
+<a href="EscFamiliares.dc.html" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Familiares</a>
+</nav>
+
+<a href="EscHistorial.dc.html" style="display: inline-flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; text-decoration: none; min-height: 44px; align-self: flex-start"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>Volver al historial</a>
+
+<section style="background: #9F1D1D; color: #FFFFFF; border-radius: 18px; padding: 32px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px">
+<div style="display: flex; align-items: flex-start; gap: 20px; flex: 1 1 520px">
+<div style="width: 64px; height: 64px; border-radius: 18px; background: #FFFFFF; color: #9F1D1D; display: flex; align-items: center; justify-content: center; flex: none"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M12 3c1 3 4 4.5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"></path></svg></div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 15px; font-weight: 700; letter-spacing: 0.04em">ALERTA · SALA PRINCIPAL · PENDIENTE</div>
+<h1 style="margin: 0; font-size: 36px; line-height: 1.1">Gas detectado</h1>
+<p style="margin: 0; font-size: 18px; line-height: 1.45; max-width: 640px">La lectura es de 2100, por encima del umbral de 1800. La alarma local está sonando en la sala.</p>
+<div style="font-size: 16px">Hoy, 18:42 · hace 20 s</div>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 12px">
+<button type="button" style="min-height: 56px; padding: 0 28px; border-radius: 14px; border: none; background: #FFFFFF; color: #9F1D1D; font-family: inherit; font-size: 19px; font-weight: 700; cursor: pointer">Ya lo atendí</button>
+<button type="button" style="min-height: 56px; padding: 0 24px; border-radius: 14px; border: 2px solid #FFFFFF; background: transparent; color: #FFFFFF; font-family: inherit; font-size: 18px; font-weight: 700; cursor: pointer">Descartar</button>
+</div>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start">
+
+<section style="grid-column: span 2; background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 4px">
+<h2 style="margin: 0 0 12px; font-size: 21px">Qué pasó</h2>
+<div style="display: flex; gap: 16px; padding: 12px 0; border-bottom: 1px solid #E7EAE8">
+<span style="width: 12px; height: 12px; margin-top: 6px; border-radius: 50%; background: #9F1D1D; flex: none"></span>
+<span style="width: 90px; flex: none; font-weight: 700; font-size: 16px">18:42:10</span>
+<span style="font-size: 17px; line-height: 1.45">Se creó la alerta: el sensor de gas superó el umbral.</span>
+</div>
+<div style="display: flex; gap: 16px; padding: 12px 0; border-bottom: 1px solid #E7EAE8">
+<span style="width: 12px; height: 12px; margin-top: 6px; border-radius: 50%; background: #0E5E5A; flex: none"></span>
+<span style="width: 90px; flex: none; font-weight: 700; font-size: 16px">18:42:12</span>
+<span style="font-size: 17px; line-height: 1.45">Se envió el aviso por Telegram a 1 familiar: Ilse.</span>
+</div>
+<div style="display: flex; gap: 16px; padding: 12px 0">
+<span style="width: 12px; height: 12px; margin-top: 6px; border-radius: 50%; border: 2px solid #4A524F; box-sizing: border-box; flex: none"></span>
+<span style="width: 90px; flex: none; font-weight: 700; font-size: 16px; color: #4A524F">—</span>
+<span style="font-size: 17px; line-height: 1.45; color: #4A524F">Todavía nadie la ha atendido.</span>
+</div>
+</section>
+
+<div style="display: flex; flex-direction: column; gap: 20px">
+<section style="background: #FBEFD9; border: 1px solid #E8C98F; border-radius: 16px; padding: 20px; color: #5C3204; font-size: 17px; line-height: 1.45">
+Si nadie responde en la sala, considere llamar a alguien cercano o a los servicios de emergencia.
+</section>
+<a href="EscPanelAlerta.dc.html" style="min-height: 52px; border-radius: 14px; border: 2px solid #1B1F1E; color: #1B1F1E; text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; box-sizing: border-box">Ver el estado de la sala</a>
+</div>
+
+</div>
+
+<footer style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px; font-size: 15px; color: #4A524F">
+<span>El asistente no guarda grabaciones de voz. El panel no tiene micrófono ni cámara.</span>
+<span style="display: flex; gap: 24px"><a href="EscPrivacidad.dc.html">Ver el aviso de privacidad</a><a href="EscAcceso.dc.html" style="color: #4A524F">Cerrar sesión</a></span>
+</footer>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":960}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

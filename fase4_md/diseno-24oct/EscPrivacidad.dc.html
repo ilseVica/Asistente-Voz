@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Aviso de privacidad (escritorio)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F4F5F2; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; box-sizing: border-box; padding: 32px 24px 48px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; align-items: center; gap: 14px">
+<div style="width: 48px; height: 48px; border-radius: 14px; background: #0E5E5A; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 12v0M8 8v8M12 5v14M16 8v8M20 12v0"></path></svg></div>
+<div>
+<div style="font-size: 15px; color: #4A524F">Asistente de Voz</div>
+<div style="font-size: 30px; font-weight: 700; line-height: 1.15">Sala principal</div>
+</div>
+</header>
+
+<a href="EscPanel.dc.html" style="display: inline-flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; text-decoration: none; min-height: 44px; align-self: flex-start"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>Volver al panel</a>
+
+<article style="max-width: 760px; background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 36px 40px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; align-items: center; gap: 14px">
+<span style="width: 48px; height: 48px; border-radius: 14px; background: #E3F0EE; color: #0E5E5A; display: flex; align-items: center; justify-content: center; flex: none"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span>
+<h1 style="margin: 0; font-size: 30px">Sus datos</h1>
+</div>
+<p style="margin: 0; font-size: 18px; line-height: 1.6">Este panel muestra el estado de la casa: la luz, la temperatura, el gas y las alertas. La información se guarda en el servidor de la casa. Solo sale de ella para mostrarse en este panel y para enviar las alertas por Telegram.</p>
+<p style="margin: 0; font-size: 18px; line-height: 1.6">Solo pueden entrar los familiares registrados en el bot de Telegram. Cada código sirve una sola vez y la sesión vence a los 30 días.</p>
+<p style="margin: 0; font-size: 18px; line-height: 1.6">El asistente no guarda grabaciones de lo que se dice en la casa. El panel no tiene micrófono ni cámara y no pide su ubicación.</p>
+<p style="margin: 0; font-size: 18px; line-height: 1.6">Si algo de esto cambia, se le avisará por Telegram antes del cambio.</p>
+</article>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1060}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

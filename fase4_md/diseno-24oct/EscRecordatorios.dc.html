@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Recordatorios (escritorio)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0E5E5A}a:hover{color:#0A4441}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F4F5F2; font-family: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif; color: #1B1F1E; box-sizing: border-box; padding: 32px 24px 48px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px">
+<div style="display: flex; align-items: center; gap: 14px">
+<div style="width: 48px; height: 48px; border-radius: 14px; background: #0E5E5A; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 12v0M8 8v8M12 5v14M16 8v8M20 12v0"></path></svg></div>
+<div>
+<div style="font-size: 15px; color: #4A524F">Asistente de Voz</div>
+<div style="font-size: 30px; font-weight: 700; line-height: 1.15">Sala principal</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px">
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: #E3F0EE; color: #0E5E5A; font-weight: 700; font-size: 16px"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0E5E5A"></span>Sala conectada</span>
+<span style="font-size: 15px; color: #4A524F">Actualizado hace 5 s</span>
+</div>
+</header>
+
+<nav aria-label="Secciones" style="display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #DADFDB; padding-bottom: 12px">
+<a href="EscPanel.dc.html" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Panel</a>
+<a href="EscHistorial.dc.html" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Historial de alertas</a>
+<a href="EscRecordatorios.dc.html" aria-current="page" style="padding: 10px 16px; border-radius: 10px; background: #1B1F1E; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 16px">Recordatorios</a>
+<a href="EscFamiliares.dc.html" style="padding: 10px 16px; border-radius: 10px; text-decoration: none; font-size: 16px; color: #1B1F1E">Familiares</a>
+</nav>
+
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px">
+<div>
+<h1 style="margin: 0; font-size: 28px">Recordatorios</h1>
+<p style="margin: 6px 0 0; font-size: 17px; color: #4A524F">Lo que el asistente dice en voz alta a su hora.</p>
+</div>
+<a href="EscNuevoRecordatorio.dc.html" style="min-height: 52px; padding: 0 22px; border-radius: 12px; background: #0E5E5A; color: #FFFFFF; text-decoration: none; display: inline-flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; box-sizing: border-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Nuevo recordatorio</a>
+</div>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 8px 24px">
+
+<div style="display: flex; align-items: center; gap: 20px; padding: 18px 0; border-bottom: 1px solid #E7EAE8">
+<div style="width: 80px; flex: none; font-size: 24px; font-weight: 700">20:00</div>
+<div style="flex: 1; min-width: 0"><div style="font-size: 18px; font-weight: 700">Tomar el medicamento de la noche</div><div style="font-size: 15px; color: #4A524F">Todos los días · próximo: hoy</div><div style="font-size: 15px; color: #4A524F">La última vez se dijo ayer a las 20:00.</div></div>
+<button type="button" style="min-height: 44px; padding: 0 18px; border-radius: 10px; border: 2px solid #DADFDB; background: #FFFFFF; color: #9F1D1D; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Cancelar</button>
+</div>
+
+<div style="display: flex; align-items: center; gap: 20px; padding: 18px 0; border-bottom: 1px solid #E7EAE8">
+<div style="width: 80px; flex: none; font-size: 24px; font-weight: 700">10:30</div>
+<div style="flex: 1; min-width: 0"><div style="font-size: 18px; font-weight: 700">Cita médica</div><div style="font-size: 15px; color: #4A524F">Una vez · mañana, 25 oct</div></div>
+<button type="button" style="min-height: 44px; padding: 0 18px; border-radius: 10px; border: 2px solid #DADFDB; background: #FFFFFF; color: #9F1D1D; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Cancelar</button>
+</div>
+
+<div style="display: flex; align-items: center; gap: 20px; padding: 18px 0; border-bottom: 1px solid #E7EAE8">
+<div style="width: 80px; flex: none; font-size: 24px; font-weight: 700">08:00</div>
+<div style="flex: 1; min-width: 0"><div style="font-size: 18px; font-weight: 700">Medir la presión</div><div style="font-size: 15px; color: #4A524F">Lunes, miércoles y viernes · próximo: lunes</div></div>
+<button type="button" style="min-height: 44px; padding: 0 18px; border-radius: 10px; border: 2px solid #DADFDB; background: #FFFFFF; color: #9F1D1D; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Cancelar</button>
+</div>
+
+<div style="display: flex; align-items: center; gap: 20px; padding: 18px 0">
+<div style="width: 80px; flex: none; font-size: 24px; font-weight: 700">13:00</div>
+<div style="flex: 1; min-width: 0"><div style="font-size: 18px; font-weight: 700">Regar las plantas</div><div style="font-size: 15px; color: #4A524F">Todos los días · próximo: mañana</div><div style="font-size: 15px; color: #7A4205">La última vez no se pudo decir: el asistente no estaba conectado.</div></div>
+<button type="button" style="min-height: 44px; padding: 0 18px; border-radius: 10px; border: 2px solid #DADFDB; background: #FFFFFF; color: #9F1D1D; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Cancelar</button>
+</div>
+
+</section>
+
+<section style="background: #FFFFFF; border: 1px solid #DADFDB; border-radius: 16px; padding: 20px 24px; display: flex; align-items: flex-start; gap: 14px">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E5E5A" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v.5M12 11v5"></path></svg>
+<p style="margin: 0; font-size: 16px; line-height: 1.45; color: #4A524F">El asistente dice cada recordatorio dos veces: «Le recuerdo: … Repito: …». Si el asistente estaba apagado a esa hora, lo dice al volver, siempre que no hayan pasado más de 30 minutos.</p>
+</section>
+
+<footer style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px; font-size: 15px; color: #4A524F">
+<span>El asistente no guarda grabaciones de voz. El panel no tiene micrófono ni cámara.</span>
+<span style="display: flex; gap: 24px"><a href="EscPrivacidad.dc.html">Ver el aviso de privacidad</a><a href="EscAcceso.dc.html" style="color: #4A524F">Cerrar sesión</a></span>
+</footer>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":960}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

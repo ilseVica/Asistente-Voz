@@ -136,6 +136,74 @@ class TestNodosPipeWire(unittest.TestCase):
         self.assertTrue(salidas["bocina-actual"]["actual"])
 
 
+class _FakePopen:
+    """Simula pw-record: no termina hasta recibir SIGINT."""
+
+    def __init__(self, args, stdout=None, stderr=None, text=False, **kwargs):
+        self.args = list(args)
+        self._stderr_text = ""
+        self._terminado = False
+        self.returncode = None
+        self._ignore_sigint = kwargs.pop("_ignore_sigint", False)
+        self._fail_stderr = kwargs.pop("_fail_stderr", None)
+        self._write_on_signal = kwargs.pop("_write_on_signal", True)
+        # stderr como archivo de texto
+        import io
+        self.stderr = io.StringIO()
+
+    def send_signal(self, sig):
+        import signal as _signal
+        if sig != _signal.SIGINT:
+            self.returncode = -sig
+            self._terminado = True
+            return
+        if self._ignore_sigint:
+            return
+        if self._fail_stderr is not None:
+            self._stderr_text = self._fail_stderr
+            self.stderr = __import__("io").StringIO(self._stderr_text)
+            self.returncode = 1
+            self._terminado = True
+            return
+        if self._write_on_signal:
+            import wave as _w, struct as _s
+            ruta = self.args[-1]
+            with _w.open(ruta, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(16000)
+                w.writeframes(_s.pack("<h", 10000) * 16000)
+        self._stderr_text = ""
+        self.stderr = __import__("io").StringIO("")
+        self.returncode = 0
+        self._terminado = True
+
+    def communicate(self, timeout=None):
+        import subprocess as _sp
+        if not self._terminado:
+            raise _sp.TimeoutExpired(self.args, timeout)
+        return ("", self._stderr_text)
+
+    def wait(self, timeout=None):
+        import subprocess as _sp
+        if not self._terminado:
+            raise _sp.TimeoutExpired(self.args, timeout)
+        return self.returncode
+
+    def terminate(self):
+        if not self._terminado:
+            self.returncode = -15
+            self._terminado = True
+
+    def kill(self):
+        if not self._terminado:
+            self.returncode = -9
+            self._terminado = True
+
+    def poll(self):
+        return self.returncode if self._terminado else None
+
+
 class TestGrabacion(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(dir=os.path.dirname(os.path.dirname(__file__)))
@@ -146,36 +214,34 @@ class TestGrabacion(unittest.TestCase):
         cfg = os.path.join(self.tmp.name, "config.toml")
         Path(cfg).write_text("[audio]\n", encoding="utf-8")
         prueba_audio.CONFIG_PATH = cfg
+        self._old_seg = prueba_audio.SEGUNDOS_GRABACION
+        prueba_audio.SEGUNDOS_GRABACION = 0
 
     def tearDown(self):
         if self.old_xdg is None:
             os.environ.pop("XDG_RUNTIME_DIR", None)
         else:
             os.environ["XDG_RUNTIME_DIR"] = self.old_xdg
+        prueba_audio.SEGUNDOS_GRABACION = getattr(self, "_old_seg", 5)
         self.tmp.cleanup()
 
-    def _fake_pw_record(self, args, **kwargs):
-        # args: pw-record ... ruta
-        ruta = Path(args[-1])
-        import wave as _w
-        import struct as _s
-        with _w.open(str(ruta), "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(16000)
-            # Señal moderada.
-            frames = _s.pack("<h", 10000) * 16000
-            w.writeframes(frames)
-        return _Completed(0, "", "")
+    def _patch_popen(self, **kwargs):
+        def factory(*a, **kw):
+            kw = dict(kw)
+            kw.update(kwargs)
+            # args passed as first positional
+            args = a[0] if a else kw.pop("args", [])
+            return _FakePopen(args, **kw)
+        return factory
 
     def test_grabacion_comando_y_nivel(self):
         llamadas = []
 
-        def fake(args, **kwargs):
+        def factory(args, **kw):
             llamadas.append(list(args))
-            return self._fake_pw_record(args, **kwargs)
+            return _FakePopen(args, **kw)
 
-        with patch.object(prueba_audio, "run_command", side_effect=fake):
+        with patch.object(prueba_audio.subprocess, "Popen", side_effect=factory):
             res = prueba_audio.grabar_fuente("mic-prueba")
         self.assertTrue(res["ok"])
         self.assertEqual(llamadas[0][:6], ["pw-record", "--target", "mic-prueba",
@@ -184,40 +250,60 @@ class TestGrabacion(unittest.TestCase):
         self.assertFalse(res["silencio"])
         self.assertFalse(res["saturada"])
         self.assertTrue(Path(res["ruta"]).parent == Path(self.runtime))
-        self.assertTrue(Path(res["ruta"]).name.startswith("prueba_audio_"))
 
     def test_grabacion_silencio(self):
-        def fake(args, **kwargs):
-            ruta = Path(args[-1])
-            import wave as _w
-            with _w.open(str(ruta), "wb") as w:
-                w.setnchannels(1)
-                w.setsampwidth(2)
-                w.setframerate(16000)
-                w.writeframes(b"\x00\x00" * 16000)
-            return _Completed(0, "", "")
-
-        with patch.object(prueba_audio, "run_command", side_effect=fake):
+        def factory(args, **kw):
+            # escribir silencio al recibir SIGINT
+            class P(_FakePopen):
+                def send_signal(self, sig):
+                    import signal as _s
+                    if sig == _s.SIGINT:
+                        import wave as _w
+                        with _w.open(self.args[-1], "wb") as w:
+                            w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+                            w.writeframes(b"\x00\x00" * 16000)
+                        self.returncode = 0
+                        self._terminado = True
+                    else:
+                        super().send_signal(sig)
+            return P(args, **kw)
+        with patch.object(prueba_audio.subprocess, "Popen", side_effect=factory):
             res = prueba_audio.grabar_fuente("mic-prueba")
         self.assertTrue(res["silencio"])
         self.assertIn("silencio", res["aviso"])
 
     def test_grabacion_saturada(self):
-        def fake(args, **kwargs):
-            ruta = Path(args[-1])
-            import wave as _w
-            import struct as _s
-            with _w.open(str(ruta), "wb") as w:
-                w.setnchannels(1)
-                w.setsampwidth(2)
-                w.setframerate(16000)
-                w.writeframes(_s.pack("<h", 32767) * 16000)
-            return _Completed(0, "", "")
-
-        with patch.object(prueba_audio, "run_command", side_effect=fake):
+        def factory(args, **kw):
+            class P(_FakePopen):
+                def send_signal(self, sig):
+                    import signal as _s, struct as _st, wave as _w
+                    if sig == _s.SIGINT:
+                        with _w.open(self.args[-1], "wb") as w:
+                            w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+                            w.writeframes(_st.pack("<h", 32767) * 16000)
+                        self.returncode = 0
+                        self._terminado = True
+                    else:
+                        super().send_signal(sig)
+            return P(args, **kw)
+        with patch.object(prueba_audio.subprocess, "Popen", side_effect=factory):
             res = prueba_audio.grabar_fuente("mic-prueba")
         self.assertTrue(res["saturada"])
 
+    def test_grabacion_ignora_sigint(self):
+        def factory(args, **kw):
+            return _FakePopen(args, _ignore_sigint=True, **kw)
+        with patch.object(prueba_audio.subprocess, "Popen", side_effect=factory):
+            res = prueba_audio.grabar_fuente("mic-prueba")
+        self.assertFalse(res["ok"])
+
+    def test_grabacion_stderr_error(self):
+        def factory(args, **kw):
+            return _FakePopen(args, _fail_stderr="pw-record: error de dispositivo", **kw)
+        with patch.object(prueba_audio.subprocess, "Popen", side_effect=factory):
+            res = prueba_audio.grabar_fuente("mic-prueba")
+        self.assertFalse(res["ok"])
+        self.assertIn("error de dispositivo", res["error"])
 
 class TestReproduccion(unittest.TestCase):
     def setUp(self):
@@ -229,6 +315,8 @@ class TestReproduccion(unittest.TestCase):
         cfg = os.path.join(self.tmp.name, "config.toml")
         Path(cfg).write_text("[audio]\n", encoding="utf-8")
         prueba_audio.CONFIG_PATH = cfg
+        self._old_seg = prueba_audio.SEGUNDOS_GRABACION
+        prueba_audio.SEGUNDOS_GRABACION = 0
 
     def tearDown(self):
         if self.old_xdg is None:

@@ -14,6 +14,7 @@ import json
 import math
 import os
 import re
+import signal
 import shutil
 import socket
 import subprocess
@@ -227,24 +228,55 @@ def analizar_wav(ruta: Path):
 def grabar_fuente(nodo: str):
     if not nodo:
         return {"ok": False, "error": "micrófono no indicado"}
-    base = runtime_dir()
+    try:
+        base = runtime_dir()
+    except Exception as error:  # noqa: BLE001
+        return {"ok": False, "error": str(error)}
     gid = uuid.uuid4().hex
     ruta = base / ("prueba_audio_%s.wav" % gid)
     cmd = ["pw-record", "--target", nodo, "--rate", "16000",
            "--channels", "1", "--format", "s16", str(ruta)]
     try:
-        run_command(cmd, timeout=SEGUNDOS_GRABACION)
-    except subprocess.TimeoutExpired as error:
-        if error.process is not None:
+        proceso = subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    except OSError as error:
+        return {"ok": False, "error": "no se pudo iniciar pw-record: %s" % error}
+    # pw-record no termina solo: se deja grabar SEGUNDOS_GRABACION y se pide
+    # que cierre con SIGINT para que el WAV quede bien formado.
+    time.sleep(SEGUNDOS_GRABACION)
+    try:
+        proceso.send_signal(signal.SIGINT)
+    except OSError:
+        pass
+    stderr = ""
+    try:
+        _, stderr = proceso.communicate(timeout=2)
+    except subprocess.TimeoutExpired:
+        try:
+            proceso.terminate()
+        except OSError:
+            pass
+        try:
+            _, stderr = proceso.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
             try:
-                error.process.kill()
+                proceso.kill()
             except OSError:
                 pass
             try:
-                error.process.wait()
-            except OSError:
-                pass
+                _, stderr = proceso.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                stderr = stderr or ""
+    if stderr is None:
+        stderr = ""
+    if proceso.returncode not in (0, -signal.SIGINT, -15, -9, None) and stderr.strip():
+        return {"ok": False, "error": stderr.strip()}
+    if proceso.returncode not in (0, -signal.SIGINT, -15, -9, None):
+        return {"ok": False, "error": stderr.strip() or
+                "pw-record terminó con código %s" % proceso.returncode}
     if not ruta.is_file() or ruta.stat().st_size == 0:
+        if stderr.strip():
+            return {"ok": False, "error": stderr.strip()}
         return {"ok": False, "error": "no se generó la grabación"}
     global ULTIMA_GRABACION
     ULTIMA_GRABACION = gid
@@ -252,6 +284,8 @@ def grabar_fuente(nodo: str):
     try:
         stats = analizar_wav(ruta)
     except Exception as error:  # noqa: BLE001
+        if stderr.strip():
+            return {"ok": False, "error": stderr.strip()}
         return {"ok": False, "error": "no se pudo analizar: %s" % error}
     resultado = {"ok": True, "id": gid, "ruta": str(ruta)}
     resultado.update(stats)
@@ -272,7 +306,10 @@ def reproducir_grabacion(grabacion_id: str, salida: str):
     if salida:
         cmd += ["--target", salida]
     cmd += [ruta]
-    res = run_command(cmd, timeout=60)
+    try:
+        res = run_command(cmd, timeout=60)
+    except Exception as error:  # noqa: BLE001
+        return {"ok": False, "error": str(error)}
     return {"ok": res.returncode == 0, "error": res.stderr.strip()}
 
 
@@ -333,13 +370,19 @@ def hablar_accion(accion: str):
 
 
 def estado_servicio():
-    res = run_command(["systemctl", "--user", "is-active", "asistente-satelite"],
-                      timeout=10)
+    try:
+        res = run_command(["systemctl", "--user", "is-active", "asistente-satelite"],
+                          timeout=10)
+    except Exception as error:  # noqa: BLE001
+        return {"activo": False, "estado": str(error), "lineas": []}
     estado = res.stdout.strip() or res.stderr.strip()
     activo = res.returncode == 0 and estado == "active"
-    res2 = run_command(
-        ["journalctl", "--user", "-u", "asistente-satelite", "-n", "20",
-         "--no-pager", "--output=short"], timeout=15)
+    try:
+        res2 = run_command(
+            ["journalctl", "--user", "-u", "asistente-satelite", "-n", "20",
+             "--no-pager", "--output=short"], timeout=15)
+    except Exception as error:  # noqa: BLE001
+        return {"activo": activo, "estado": estado, "lineas": [enmascarar(str(error))]}
     lineas = []
     if res2.returncode == 0:
         lineas = [enmascarar(l) for l in res2.stdout.splitlines()]
@@ -351,8 +394,11 @@ def estado_servicio():
 def reiniciar_servicio(confirmado: bool):
     if not confirmado:
         return {"ok": False, "error": "falta confirmación"}
-    res = run_command(["systemctl", "--user", "restart", "asistente-satelite"],
-                      timeout=30)
+    try:
+        res = run_command(["systemctl", "--user", "restart", "asistente-satelite"],
+                          timeout=30)
+    except Exception as error:  # noqa: BLE001
+        return {"ok": False, "error": str(error)}
     return {"ok": res.returncode == 0, "error": res.stderr.strip()}
 
 

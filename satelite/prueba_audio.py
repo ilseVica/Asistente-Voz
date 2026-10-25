@@ -241,52 +241,66 @@ def grabar_fuente(nodo: str):
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     except OSError as error:
         return {"ok": False, "error": "no se pudo iniciar pw-record: %s" % error}
+
+    senial_enviada = False
     # pw-record no termina solo: se deja grabar SEGUNDOS_GRABACION y se pide
-    # que cierre con SIGINT para que el WAV quede bien formado.
+    # que cierre. Su código de salida al recibir la señal no es fiable (pw-record
+    # sale con 1 aunque el WAV quede bien), así que la decisión se toma por el
+    # archivo resultante.
     time.sleep(SEGUNDOS_GRABACION)
-    try:
-        proceso.send_signal(signal.SIGINT)
-    except OSError:
-        pass
+    salio_antes = proceso.poll() is not None
+    if not salio_antes:
+        senial_enviada = True
+        try:
+            proceso.send_signal(signal.SIGINT)
+        except OSError:
+            pass
     stderr = ""
     try:
         _, stderr = proceso.communicate(timeout=2)
     except subprocess.TimeoutExpired:
         try:
             proceso.terminate()
-        except OSError:
-            pass
-        try:
+            senial_enviada = True
             _, stderr = proceso.communicate(timeout=2)
         except subprocess.TimeoutExpired:
             try:
                 proceso.kill()
-            except OSError:
-                pass
-            try:
+                senial_enviada = True
                 _, stderr = proceso.communicate(timeout=2)
             except subprocess.TimeoutExpired:
                 stderr = stderr or ""
     if stderr is None:
         stderr = ""
-    if proceso.returncode not in (0, -signal.SIGINT, -15, -9, None) and stderr.strip():
-        return {"ok": False, "error": stderr.strip()}
-    if proceso.returncode not in (0, -signal.SIGINT, -15, -9, None):
-        return {"ok": False, "error": stderr.strip() or
-                "pw-record terminó con código %s" % proceso.returncode}
-    if not ruta.is_file() or ruta.stat().st_size == 0:
-        if stderr.strip():
-            return {"ok": False, "error": stderr.strip()}
-        return {"ok": False, "error": "no se generó la grabación"}
+
+    def _error(mensaje):
+        codigo = proceso.returncode
+        texto = (stderr or "").strip()
+        if texto:
+            lineas = [l for l in texto.splitlines() if l.strip()]
+            texto = "\n".join(lineas[-5:])
+        if texto:
+            return {"ok": False, "error": "%s (código %s)" % (texto, codigo)}
+        return {"ok": False, "error": "pw-record terminó con código %s" % codigo}
+
+    # Si salió antes de la señal, es un error real (nodo inexistente, etc.).
+    if not senial_enviada or salio_antes:
+        return _error("pw-record terminó antes de tiempo")
+
+    # Si llegó hasta aquí, se le envió la señal. Se acepta solo si el archivo
+    # es un WAV legible con al menos ~1 s de audio.
+    stats = None
+    if ruta.is_file() and ruta.stat().st_size > 0:
+        try:
+            stats = analizar_wav(ruta)
+        except Exception:  # noqa: BLE001
+            stats = None
+    if stats is None or stats["duracion_s"] < 1.0:
+        return _error("no se generó una grabación válida")
+
     global ULTIMA_GRABACION
     ULTIMA_GRABACION = gid
     GRABACIONES[gid] = str(ruta)
-    try:
-        stats = analizar_wav(ruta)
-    except Exception as error:  # noqa: BLE001
-        if stderr.strip():
-            return {"ok": False, "error": stderr.strip()}
-        return {"ok": False, "error": "no se pudo analizar: %s" % error}
     resultado = {"ok": True, "id": gid, "ruta": str(ruta)}
     resultado.update(stats)
     if stats["silencio"]:
@@ -296,7 +310,6 @@ def grabar_fuente(nodo: str):
     else:
         resultado["aviso"] = "Nivel correcto."
     return resultado
-
 
 def reproducir_grabacion(grabacion_id: str, salida: str):
     ruta = GRABACIONES.get(grabacion_id)

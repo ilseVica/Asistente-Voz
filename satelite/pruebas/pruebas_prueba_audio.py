@@ -147,6 +147,13 @@ class _FakePopen:
         self._ignore_sigint = kwargs.pop("_ignore_sigint", False)
         self._fail_stderr = kwargs.pop("_fail_stderr", None)
         self._write_on_signal = kwargs.pop("_write_on_signal", True)
+        self._exit_before_signal = kwargs.pop("_exit_before_signal", False)
+        self._stderr_text = kwargs.pop("_stderr_text", "")
+        if self._exit_before_signal:
+            self._terminado = True
+            self.returncode = kwargs.pop("_returncode", 1)
+            import io
+            self.stderr = io.StringIO(self._stderr_text)
         # stderr como archivo de texto
         import io
         self.stderr = io.StringIO()
@@ -175,7 +182,7 @@ class _FakePopen:
                 w.writeframes(_s.pack("<h", 10000) * 16000)
         self._stderr_text = ""
         self.stderr = __import__("io").StringIO("")
-        self.returncode = 0
+        self.returncode = 1
         self._terminado = True
 
     def communicate(self, timeout=None):
@@ -304,6 +311,15 @@ class TestGrabacion(unittest.TestCase):
             res = prueba_audio.grabar_fuente("mic-prueba")
         self.assertFalse(res["ok"])
         self.assertIn("error de dispositivo", res["error"])
+
+    def test_grabacion_sale_antes_de_senial(self):
+        def factory(args, **kw):
+            return _FakePopen(args, _exit_before_signal=True,
+                              _stderr_text="pw-record: nodo inexistente", **kw)
+        with patch.object(prueba_audio.subprocess, "Popen", side_effect=factory):
+            res = prueba_audio.grabar_fuente("mic-prueba")
+        self.assertFalse(res["ok"])
+        self.assertIn("nodo inexistente", res["error"])
 
 class TestReproduccion(unittest.TestCase):
     def setUp(self):

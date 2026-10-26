@@ -146,7 +146,7 @@ class ClienteMQTT:
         for topico in (config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA,
                        config.TOPICO_VOZ_TEXTO, config.TOPICO_SATELITE_ESTADO,
                        config.TOPICO_SENSORES, config.TOPICO_NODO_ESTADO,
-                       config.TOPICO_ENLACE_SITIO):
+                       config.TOPICO_ENLACE_SITIO, config.TOPICO_LUZ_ESTADO):
             resultado, _ = self.cliente.subscribe(topico, qos=config.QOS_ALERTAS)
             if resultado != mqtt.MQTT_ERR_SUCCESS:
                 registro.error("NO se pudo suscribir a %s (error %d). La ACL de "

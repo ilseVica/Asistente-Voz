@@ -24,7 +24,18 @@ import time
 # Hablado (satelite/decir)
 # =============================================================================
 
-NO_ENTENDIDO = "Disculpe, no le entendí. ¿Me lo puede repetir?"
+NO_ENTENDIDO = "Perdón, no le entendí. ¿Me lo repite?"
+
+# Paso 3: respuestas de las intenciones de voz.
+RESPUESTA_ENCENDER_LUZ = "Con gusto. Ya encendí la luz."
+RESPUESTA_APAGAR_LUZ = "Listo, apagué la luz."
+LUZ_YA_ENCENDIDA = "La luz ya está encendida."
+LUZ_YA_APAGADA = "La luz ya está apagada."
+NO_PUDO_ENCENDER_LUZ = "No pude encender la luz."
+NO_PUDO_APAGAR_LUZ = "No pude apagar la luz."
+RESPUESTA_AYUDA = "No se preocupe, ya avisé a su familia."
+RESPUESTA_AYUDA_RECIENTE = "Ya avisé a su familia hace un momento. Alguien se comunicará con usted pronto."
+RESPUESTA_CANCELAR = "De acuerdo, cancelado."
 
 # El eco de prueba (se queda hasta el Paso 3).
 ECO = "Usted dijo: {texto}."

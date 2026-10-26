@@ -2031,6 +2031,20 @@ print("------------------")
 prueba("el topico del texto de voz es el del contrato",
        config.TOPICO_VOZ_TEXTO == "casa/sala/voz/texto", config.TOPICO_VOZ_TEXTO)
 
+# --- Fuente unica de la gramatica ---
+import tempfile as _tmp
+_ruta_faltante = os.path.join(_tmp.gettempdir(), "no-existe-gramatica.json")
+os.environ["GRAMATICA_JSON"] = _ruta_faltante
+prueba("sin archivo de gramatica, voz no carga intenciones",
+       voz._cargar() == {}, voz._cargar())
+_ruta_vacia = os.path.join(_tmp.gettempdir(), "gramatica-vacia.json")
+with open(_ruta_vacia, "w") as _f:
+    _f.write("{}")
+os.environ["GRAMATICA_JSON"] = _ruta_vacia
+prueba("gramatica vacia, voz no carga intenciones",
+       voz._cargar() == {}, voz._cargar())
+os.environ.pop("GRAMATICA_JSON", None)
+
 # La regla de antiguedad de voz/texto compara el `ts` del mensaje con la hora del
 # sistema, asi que los `ts` de estas pruebas se calculan al correr y NO se dejan
 # literales: un ts fijo vence a los 10 s y convierte la suite en una bomba de
@@ -2048,31 +2062,37 @@ def publicar_que_recoge():
     return apuntes, publicar
 
 
-# --- El eco de una frase reconocida ---
+# --- Intenciones de voz (Paso 3) ---
 apuntes, publicar = publicar_que_recoge()
 publicado = voz.procesar('{"frase_id":"f1","texto":"prende la luz","modo":"comandos","ts":%d}' % AHORA, publicar)
-prueba("una frase reconocida hace eco", publicado is True and len(apuntes) == 1,
+prueba("una frase reconocida publica accion y respuesta", publicado is True and len(apuntes) == 2,
        apuntes)
-if apuntes:
+if len(apuntes) >= 2:
     topico, carga, qos, retain = apuntes[0]
-    prueba("el eco va al topico satelite/decir",
-           topico == config.TOPICO_SATELITE_DECIR, topico)
-    prueba("el eco dice 'Usted dijo: ' + lo reconocido + punto",
-           carga.get("texto") == "Usted dijo: prende la luz.", carga)
-    prueba("el eco lleva tipo respuesta", carga.get("tipo") == "respuesta", carga)
-    prueba("el eco lleva ts entero", isinstance(carga.get("ts"), int), carga)
-    prueba("el eco va con QoS 1", qos == 1, qos)
-    prueba("el eco NO se retiene", retain is False, retain)
+    prueba("la accion va a casa/sala/luz/set",
+           topico == config.TOPICO_LUZ_SET, topico)
+    prueba("luz/set pide on con origen voz",
+           carga.get("estado") == "on" and carga.get("origen") == "voz", carga)
+    topico2, carga2, qos2, retain2 = apuntes[1]
+    prueba("la respuesta va a satelite/decir",
+           topico2 == config.TOPICO_SATELITE_DECIR, topico2)
+    prueba("la respuesta es la de encender",
+           carga2.get("texto") == textos.RESPUESTA_ENCENDER_LUZ, carga2)
 
 # --- `[unk]` y vacio: no se entendio ---
-for texto_raro in ("[unk]", "", "   "):
+for texto_raro in ("[unk]", "", "   ", "la luz [unk] cosa"):
     apuntes, publicar = publicar_que_recoge()
     voz.procesar('{"frase_id":"f","texto":"%s","modo":"comandos","ts":%d}'
                  % (texto_raro, AHORA), publicar)
     prueba("texto %r contesta la frase de no entendido" % texto_raro,
            len(apuntes) == 1
-           and apuntes[0][1].get("texto")
-           == "Disculpe, no le entendí. ¿Me lo puede repetir?", apuntes)
+           and apuntes[0][1].get("texto") == textos.NO_ENTENDIDO, apuntes)
+
+# --- Frase no reconocida: NO_ENTENDI ---
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"f","texto":"prende la tele","modo":"comandos","ts":%d}' % AHORA, publicar)
+prueba("frase ajena contesta NO_ENTENDIDO",
+       len(apuntes) == 1 and apuntes[0][1].get("texto") == textos.NO_ENTENDIDO, apuntes)
 
 # --- Cuerpos que no son una frase ---
 apuntes, publicar = publicar_que_recoge()
@@ -2082,19 +2102,9 @@ apuntes, publicar = publicar_que_recoge()
 prueba("un cuerpo que no es objeto no publica nada",
        voz.procesar('["una","lista"]', publicar) is False and apuntes == [], apuntes)
 
-# --- Con el eco apagado, el texto solo va al log ---
-eco_original = config.ECO_VOZ
-config.ECO_VOZ = False
-apuntes, publicar = publicar_que_recoge()
-publicado = voz.procesar('{"frase_id":"f","texto":"apaga la luz","ts":%d}' % AHORA, publicar)
-config.ECO_VOZ = eco_original
-prueba("con ECO_VOZ=0 no se publica el eco", publicado is False and apuntes == [],
-       apuntes)
-
-
 # --- Antigüedad de voz/texto (regla > 10 s o sin ts) ---
 apuntes, publicar = publicar_que_recoge()
-prueba("voz sin ts no publica eco",
+prueba("voz sin ts no publica nada",
        voz.procesar('{"frase_id": "f", "texto": "prende la luz"}', publicar) is False and apuntes == [],
        apuntes)
 apuntes, publicar = publicar_que_recoge()
@@ -2103,13 +2113,82 @@ prueba("voz con ts > 10 s se descarta",
        apuntes)
 apuntes, publicar = publicar_que_recoge()
 publicado = voz.procesar('{"frase_id": "f", "texto": "prende la luz", "ts": %d}' % AHORA, publicar)
-prueba("voz con ts reciente publica eco", publicado is True and len(apuntes) == 1, apuntes)
+prueba("voz con ts reciente publica accion", publicado is True and len(apuntes) >= 1, apuntes)
 
 apuntes, publicar = publicar_que_recoge()
 prueba("voz con ts en milisegundos se descarta (unidades incorrectas)",
        voz.procesar('{"frase_id": "f", "texto": "prende", "ts": %d}' % (AHORA * 1000), publicar) is False and apuntes == [],
        apuntes)
 
+# --- Luz ya en ese estado ---
+voz.actualizar_estado_luz('{"estado":"on","origen":"panel","ts":%d}' % AHORA)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"f","texto":"enciende la luz","ts":%d}' % AHORA, publicar)
+prueba("luz ya encendida no publica luz/set",
+       all(t != config.TOPICO_LUZ_SET for t, *_ in apuntes), apuntes)
+prueba("luz ya encendida responde ya encendida",
+       len(apuntes) == 1 and apuntes[0][1].get("texto") == textos.LUZ_YA_ENCENDIDA, apuntes)
+voz.actualizar_estado_luz('{"estado":"off","origen":"panel","ts":%d}' % AHORA)
+
+# --- Nodo desconectado ---
+voz.actualizar_nodo('{"conectado":false}')
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"f","texto":"enciende la luz","ts":%d}' % AHORA, publicar)
+prueba("nodo desconectado no publica luz/set",
+       all(t != config.TOPICO_LUZ_SET for t, *_ in apuntes), apuntes)
+prueba("nodo desconectado responde no pudo",
+       len(apuntes) == 1 and apuntes[0][1].get("texto") == textos.NO_PUDO_ENCENDER_LUZ, apuntes)
+voz.actualizar_nodo('{"conectado":true}')
+voz.actualizar_estado_luz('{"estado":"off","origen":"panel","ts":%d}' % AHORA)
+
+# --- Confirmacion de luz en 3 s ---
+voz._estado_luz["valor"] = "off"
+apuntes, publicar = publicar_que_recoge()
+_sleep_original = voz.time.sleep
+_time_original = voz.time.time
+contador_tiempo = {"t": 0.0}
+def _tiempo_falso():
+    contador_tiempo["t"] += 0.5
+    return contador_tiempo["t"]
+voz.time.sleep = lambda _s: None
+voz.time.time = _tiempo_falso
+voz._confirmar_luz("on", publicar, "f3s")
+voz.time.sleep = _sleep_original
+voz.time.time = _time_original
+prueba("sin confirmacion en 3 s publica no pudo encender",
+       any(c.get("texto") == textos.NO_PUDO_ENCENDER_LUZ for _, c, *_ in apuntes),
+       apuntes)
+voz._estado_luz["valor"] = None
+
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"f","texto":"necesito ayuda","ts":%d}' % AHORA, publicar)
+prueba("ayuda publica alerta/ayuda",
+       any(t == config.TOPICO_ALERTA_AYUDA for t, *_ in apuntes), apuntes)
+prueba("ayuda responde texto de ayuda",
+       any(c.get("texto") == textos.RESPUESTA_AYUDA
+           for _, c, *_ in apuntes), apuntes)
+
+# --- Cancelar ---
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"f","texto":"cancela","ts":%d}' % AHORA, publicar)
+prueba("cancelar responde cancelado",
+       len(apuntes) == 1 and apuntes[0][1].get("texto") == textos.RESPUESTA_CANCELAR, apuntes)
+
+# --- Ayuda antirrebote con base ---
+base_ar, _ = base_nueva("voz-ar-")
+# Sembrar una ayuda reciente.
+base_ar.insertar_alerta("ayuda-reciente", "ayuda", '{"id":"ayuda-reciente","origen":"voz"}')
+# hay_ayuda_reciente mira envios enviados; forzar marcando enviado? Insertar envio manual.
+base_ar.conexion.execute("INSERT INTO envios (alerta_id, chat_id, creado_en, enviado_en) VALUES (?,?,?,?)",
+                         ("ayuda-reciente", "1", int(time.time()), int(time.time())))
+base_ar.conexion.commit()
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"f","texto":"ayuda","ts":%d}' % AHORA, publicar, base=base_ar)
+prueba("ayuda en antirrebote responde reciente",
+       len(apuntes) == 1 and apuntes[0][1].get("texto") == textos.RESPUESTA_AYUDA_RECIENTE, apuntes)
+prueba("ayuda en antirrebote no publica alerta/ayuda",
+       all(t != config.TOPICO_ALERTA_AYUDA for t, *_ in apuntes), apuntes)
+base_ar.cerrar()
 
 # --- El eco no espera el PUBACK desde el callback de paho ---
 # `publicar` con `esperar=False` NO debe llamar a `wait_for_publish`: cuando se
@@ -2689,13 +2768,14 @@ titulo("Fase 2C: alertas habladas y estado por satelite")
 apuntes, publicar = publicar_que_recoge()
 voz.procesar(json.dumps({"frase_id": "satelite-vm-1791900000-1", "texto": "prende la luz",
                          "modo": "comandos", "ts": int(time.time())}), publicar)
-prueba("el eco reenvia el frase_id del satelite que pregunto",
-       len(apuntes) == 1 and apuntes[0][1].get("frase_id") == "satelite-vm-1791900000-1"
-       and apuntes[0][1].get("tipo") == "respuesta", apuntes)
+prueba("la respuesta reenvia el frase_id del satelite que pregunto",
+       any(c.get("frase_id") == "satelite-vm-1791900000-1" and c.get("tipo") == "respuesta"
+           for _, c, *_ in apuntes), apuntes)
 apuntes, publicar = publicar_que_recoge()
 voz.procesar(json.dumps({"texto": "prende la luz", "ts": int(time.time())}), publicar)
-prueba("sin frase_id, el eco sale sin frase_id (no se inventa uno)",
-       len(apuntes) == 1 and "frase_id" not in apuntes[0][1], apuntes)
+prueba("sin frase_id, la respuesta sale sin frase_id (no se inventa uno)",
+       all("frase_id" not in c for t, c, *_ in apuntes if t == config.TOPICO_SATELITE_DECIR)
+       and any(t == config.TOPICO_SATELITE_DECIR for t, *_ in apuntes), apuntes)
 
 ubicacion_original = config.UBICACION_GAS
 config.UBICACION_GAS = "cocina"
@@ -2743,6 +2823,26 @@ apuntes, publicar = publicar_que_recoge()
 alertas.procesar(config.TOPICO_ALERTA_AYUDA, '{"id":"2c0000-b0001-0003","origen":"voz"}',
                  base_2c, publicar)
 prueba("una ayuda dentro del antirrebote NO se vuelve a decir", apuntes == [], apuntes)
+
+# --- Origen de la ayuda: Alexa anuncia; voz no (evita doble voz) ---
+base_origen, _ = base_nueva("ayuda-origen-")
+apuntes, publicar = publicar_que_recoge()
+alertas.procesar(config.TOPICO_ALERTA_AYUDA,
+                 '{"id":"origen-alexa-1","origen":"alexa"}',
+                 base_origen, publicar)
+prueba("ayuda de Alexa se anuncia por satelite/decir",
+       any(c.get("tipo") == "alerta" for _, c, *_ in apuntes), apuntes)
+prueba("ayuda de Alexa queda en la base (Telegram)",
+       base_origen.obtener_alerta("origen-alexa-1") is not None)
+apuntes, publicar = publicar_que_recoge()
+alertas.procesar(config.TOPICO_ALERTA_AYUDA,
+                 '{"id":"origen-voz-1","origen":"voz"}',
+                 base_origen, publicar)
+prueba("ayuda de voz NO se anuncia por satelite/decir (la anuncia el orquestador)",
+       not any(c.get("tipo") == "alerta" for _, c, *_ in apuntes), apuntes)
+prueba("ayuda de voz queda en la base (Telegram)",
+       base_origen.obtener_alerta("origen-voz-1") is not None)
+base_origen.cerrar()
 
 
 def publicar_que_falla(topico, carga, qos=1, retain=False):
@@ -3459,7 +3559,7 @@ prueba("retenido y con QoS 1, para que lo reciba quien se conecte después",
 esperados = [config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA,
              config.TOPICO_VOZ_TEXTO, config.TOPICO_SATELITE_ESTADO,
              config.TOPICO_SENSORES, config.TOPICO_NODO_ESTADO,
-             config.TOPICO_ENLACE_SITIO]
+             config.TOPICO_ENLACE_SITIO, config.TOPICO_LUZ_ESTADO]
 prueba("y la suscripción sigue siendo la de siempre, sin nodo/config",
        [t for t, _ in al_conectar.cliente.suscritos] == esperados,
        al_conectar.cliente.suscritos)

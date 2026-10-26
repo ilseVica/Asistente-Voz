@@ -182,7 +182,7 @@ def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
     que existiera la Fase 4).
     """
     if topico == config.TOPICO_VOZ_TEXTO:
-        voz.procesar(cuerpo, publicar)
+        voz.procesar(cuerpo, publicar, base)
     elif alertas.client_id_de_estado(topico) is not None:
         alertas.al_estado_satelite(topico, cuerpo, retenido, base, publicar,
                                    satelites=satelites)
@@ -190,6 +190,9 @@ def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
         reloj.registrar_sensores(cuerpo)
     elif reloj is not None and topico == config.TOPICO_NODO_ESTADO:
         reloj.registrar_nodo(cuerpo)
+        voz.actualizar_nodo(cuerpo)
+    elif topico == config.TOPICO_LUZ_ESTADO:
+        voz.actualizar_estado_luz(cuerpo)
     elif reloj is not None and inactividad.es_enlace_sitio(topico):
         reloj.registrar_enlace(cuerpo)
     else:

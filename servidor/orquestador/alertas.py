@@ -531,7 +531,12 @@ def procesar(topico: str, cuerpo: str, base, publicar=None) -> bool:
 
     # La casa se entera en voz alta. Va DESPUES de guardar la alerta, y un fallo
     # aqui no la deshace: lo de la familia (Telegram, la cola) no cambia.
-    anunciar(tipo, publicar)
+    # La ayuda que llega por voz ya se anuncia en la respuesta del orquestador
+    # (voz.procesar), para no hablar dos veces. Las demas (Alexa, boton, panel)
+    # siguen anunciandose aqui como antes.
+    if not (tipo == "ayuda" and isinstance(carga, dict)
+            and carga.get("origen") == "voz"):
+        anunciar(tipo, publicar)
 
     # `insertar_alerta` ya ha creado un envio por cada familiar ACTIVO
     # (db.insertar_alerta hace el fan out a familiares_activos; los dados de baja

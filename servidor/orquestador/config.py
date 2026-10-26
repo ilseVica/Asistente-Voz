@@ -110,7 +110,7 @@ UBICACION_GAS = os.environ.get("UBICACION_GAS", "").strip() or "cocina"
 # Por defecto 1 para que la etapa A sea visible tal cual, y para que la prueba de
 # punta a punta del arnes pueda mirar el eco. Es una ayuda de la etapa A, no una
 # funcion del producto: cuando exista el satelite (etapa B), el `.env` lo pone a 0.
-ECO_VOZ = os.environ.get("ECO_VOZ", "1").strip() not in ("0", "false", "no", "")
+ECO_VOZ = os.environ.get("ECO_VOZ", "0").strip() not in ("0", "false", "no", "")
 
 # Ventana del antirrebote de ayuda, en segundos (P05). El ESP32 ya ignora nuevas
 # peticiones durante 60 s; este es el segundo filtro, para el caso de que la alerta
@@ -185,6 +185,7 @@ MQTT_SESION_LIMPIA_PANEL = True
 # cambiar con él, y si no, el panel se queda mirando un tópico que ya no existe y
 # muestra «sin datos» sin decir por qué.
 TOPICO_LUZ_ESTADO = "casa/sala/luz/estado"
+TOPICO_LUZ_SET = "casa/sala/luz/set"
 TOPICO_SENSORES = "casa/sala/sensores"
 TOPICO_NODO_ESTADO = "casa/sala/nodo/estado"
 # Un estado POR satelite (Fase 2C): `casa/sala/satelite/<client_id>/estado`. Es

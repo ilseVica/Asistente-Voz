@@ -163,6 +163,8 @@ services:
     volumes:
       # La base de datos y el registro de la familia. Ver la nota de arriba.
       - orquestador_datos:/datos
+      # Fuente unica de la gramatica de intenciones (solo lectura).
+      - ./voz/gramatica.json:/app/gramatica.json:ro
 
     read_only: true
     tmpfs:

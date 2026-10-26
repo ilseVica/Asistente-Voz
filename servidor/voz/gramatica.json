@@ -1,48 +1,87 @@
 {
   "_comentario": [
-    "Gramatica del modo «comandos» del servicio de voz (etapa A del Paso 2).",
-    "Vive en un archivo de configuracion y NO en el codigo, porque es material que",
-    "se congela con el contrato y se revisa con el equipo: cambiarla es editar este",
-    "JSON y reiniciar el servicio, sin tocar Python ni reconstruir nada mas.",
-    "",
-    "En modo gramatica Vosk tiende a convertir cualquier sonido en la frase mas",
-    "parecida de esta lista, asi que la lista es CERRADA a proposito. Por eso no",
-    "existe «no» ni «ayuda» a secas: una frase corta como «no» se activaria con",
-    "cualquier ruido. El token [unk] se anade siempre, para que el modelo tenga una",
-    "salida para lo que no reconoce; el orquestador decide que hacer con el.",
-    "",
-    "El servicio anade [unk] por su cuenta a partir del campo «unk» de aqui abajo y",
-    "avisa si alguna palabra de la gramatica no esta en el vocabulario del modelo",
-    "(Vosk imprime «Ignoring word missing in vocabulary»). Esas palabras se reportan",
-    "y se proponen sustitutos; no se cambian solas."
+    "Gramatica congelada del Paso 3 (intenciones de voz).",
+    "Fuente unica: el servidor de voz y el orquestador leen este mismo archivo.",
+    "En modo gramatica Vosk fuerza la salida a una de estas frases o a [unk].",
+    "La clave SENUELO agrupa frases que NO son intenciones: Vosk las usa como",
+    "salida para audio parecido, y el orquestador las trata como NO_ENTENDI.",
+    "El orquestador clasifica por coincidencia exacta tras normalizar.",
+    "No anadir frases sin verificarlas en el vocabulario del modelo."
   ],
   "unk": "[unk]",
   "intenciones": {
-    "encender": [
-      "prende la luz",
+    "ENCENDER_LUZ": [
       "enciende la luz",
-      "prende el foco",
+      "prende la luz",
       "enciende el foco",
-      "prende la luz de la sala",
+      "prende el foco",
       "enciende la luz de la sala",
+      "enciende la luz por favor",
       "prende la luz por favor",
-      "enciende la luz por favor"
+      "enciende el foco por favor",
+      "prende el foco por favor"
     ],
-    "apagar": [
+    "APAGAR_LUZ": [
       "apaga la luz",
       "apaga el foco",
       "apaga la luz de la sala",
-      "apaga la luz por favor"
+      "apaga la luz por favor",
+      "apaga el foco por favor"
     ],
-    "ayuda": [
+    "AYUDA": [
       "necesito ayuda",
-      "necesito ayuda por favor",
-      "ayudame por favor"
+      "ayuda",
+      "ayudame",
+      "auxilio",
+      "ayudame por favor",
+      "ayuda por favor",
+      "necesito auxilio",
+      "ayuda ya",
+      "auxilio ya"
     ],
-    "cancelar": [
+    "CANCELAR": [
       "cancela",
-      "cancelar",
       "olvidalo"
+    ],
+    "SENUELO": [
+      "ayer",
+      "agua",
+      "necesito agua",
+      "a ver",
+      "ya",
+      "la tele",
+      "la estufa",
+      "el radio",
+      "buenas noches",
+      "gracias",
+      "cuanto cuesta",
+      "paga",
+      "prenda",
+      "apague",
+      "pagar",
+      "prendas",
+      "apagues",
+      "auxilios",
+      "ayudas",
+      "ayudar",
+      "auxiliar",
+      "prende la tele",
+      "apaga la musica",
+      "enciende el ventilador",
+      "necesito un cafe",
+      "cancela la cita",
+      "olvidalo todo",
+      "hola buenos dias",
+      "que hora es",
+      "la luz",
+      "la luz esta bonita",
+      "gracias por todo",
+      "cuanto cuesta eso",
+      "auxilio por favor",
+      "ayuda por favor",
+      "prende",
+      "apaga",
+      "enciende"
     ]
   }
 }

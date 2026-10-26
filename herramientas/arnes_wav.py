@@ -71,13 +71,25 @@ MAX_BYTES_FRASE = TRAMA * 100
 # primera es la interesante: "prende la tele" no debe encender la luz.
 FRASES_FUERA = [
     "prende la tele",
-    "apaga la musica",
-    "enciende el ventilador",
-    "necesito un cafe",
-    "cancela la cita",          # lleva "cancela", que SI esta en la gramatica
-    "olvidalo todo",            # parecido a "olvidalo"
-    "hola, buenos dias",
-    "que hora es",
+    "apaga la estufa",
+    "enciende el radio",
+    "la luz esta bonita",
+    "ayer",
+    "a ver",
+    "ya",
+    "necesito agua",
+    "cuanto cuesta",
+    "buenas noches",
+    "necesito ayuda por favor",
+    "ayuda ahora",
+    "auxilio ahora",
+    "ayudame ya",
+    "apaga la tele",
+    "prende la estufa",
+    "enciende la tele",
+    "apaga por favor",
+    "prende por favor",
+    "la ayuda",
 ]
 
 _FALLOS = []
@@ -102,6 +114,26 @@ def cargar_gramatica():
     for lista in configuracion.get("intenciones", {}).values():
         frases.extend(lista)
     return frases
+
+
+def cargar_comandos():
+    with open(SERVICIO_GRABADO, encoding="utf-8") as archivo:
+        configuracion = json.load(archivo)
+    comandos = []
+    intenciones = configuracion.get("intenciones", {})
+    for clave, lista in intenciones.items():
+        if clave == "SENUELO":
+            continue
+        if isinstance(lista, list):
+            comandos.extend(lista)
+    return comandos
+
+
+def cargar_senuelos():
+    with open(SERVICIO_GRABADO, encoding="utf-8") as archivo:
+        configuracion = json.load(archivo)
+    intenciones = configuracion.get("intenciones", {})
+    return intenciones.get("SENUELO", []) if isinstance(intenciones.get("SENUELO"), list) else []
 
 
 def leer_token(ruta: str) -> str:
@@ -314,7 +346,7 @@ class Observador:
 async def seccion_aciertos(args, token, observador):
     print("\n1. Aciertos sobre la gramatica")
     print("-------------------------------")
-    frases = cargar_gramatica()
+    frases = cargar_comandos()
     if args.limite:
         frases = frases[:args.limite]
 
@@ -389,7 +421,8 @@ async def seccion_aciertos(args, token, observador):
 async def seccion_fuera(args, token):
     print("\n2. Frases fuera de la gramatica")
     print("--------------------------------")
-    en_gramatica = {normalizar(f) for f in cargar_gramatica()}
+    comandos = {normalizar(f) for f in cargar_comandos()}
+    senuelos = {normalizar(f) for f in cargar_senuelos()}
     falso_positivo = []
     for indice, frase in enumerate(FRASES_FUERA, 1):
         pcm = sintetizar_frase(args, frase)
@@ -399,9 +432,11 @@ async def seccion_fuera(args, token):
         await ws.close()
         texto = final.get("texto", "") if final.get("tipo") == "final" else ""
         normal = normalizar(texto)
-        if normal in en_gramatica:
+        if normal in comandos:
             falso_positivo.append((frase, texto))
             marca = "COMMAND"
+        elif normal in senuelos:
+            marca = "señuelo"
         elif normal in ("", "[unk]"):
             marca = "[unk] "
         else:

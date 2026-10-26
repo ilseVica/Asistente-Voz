@@ -370,15 +370,20 @@ def hablar_accion(accion: str):
     if accion not in ("presionar", "soltar"):
         return {"ok": False, "error": "acción no válida"}
     cfg = cargar_config()
-    socket_path = cfg.socket_ruta or satelite._ruta_socket_defecto()
+    socket_path = satelite._expandir(cfg.socket_ruta or satelite._ruta_socket_defecto())
+    if not os.path.exists(socket_path):
+        return {"ok": False,
+                "error": "No encontré el socket del asistente en %s" % socket_path}
     letra = b"P" if accion == "presionar" else b"R"
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-            s.settimeout(0.5)
+            s.settimeout(0.3)
             s.connect(socket_path)
             s.sendall(letra)
     except OSError as error:
-        return {"ok": False, "error": "no se pudo contactar al satélite: %s" % error}
+        return {"ok": False,
+                "error": "No se pudo contactar al asistente en %s: %s"
+                % (socket_path, error)}
     return {"ok": True}
 
 
@@ -401,7 +406,10 @@ def estado_servicio():
         lineas = [enmascarar(l) for l in res2.stdout.splitlines()]
     else:
         lineas = [enmascarar(l) for l in (res2.stderr or "").splitlines()]
-    return {"activo": activo, "estado": estado, "lineas": lineas}
+    cfg = cargar_config()
+    socket_path = satelite._expandir(cfg.socket_ruta or satelite._ruta_socket_defecto())
+    return {"activo": activo, "estado": estado, "lineas": lineas,
+            "socket": socket_path}
 
 
 def reiniciar_servicio(confirmado: bool):
@@ -599,7 +607,8 @@ async function actualizarEstado() {
   const r = await fetch('/api/estado');
   const d = await r.json();
   document.getElementById('estado').textContent =
-    'Servicio: ' + d.estado + (d.activo ? ' (activo)' : ' (no activo)');
+    'Servicio: ' + d.estado + (d.activo ? ' (activo)' : ' (no activo)') +
+    ' | Socket: ' + (d.socket || '');
   document.getElementById('journal').textContent = (d.lineas || []).join('\n');
 }
 

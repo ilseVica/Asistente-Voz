@@ -16,6 +16,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import prueba_audio
+import satelite
 
 
 class _Completed:
@@ -495,6 +496,71 @@ class TestEnmascarar(unittest.TestCase):
         self.assertNotIn("abc123", salida)
         self.assertNotIn("xyz", salida)
         self.assertNotIn("qwe", salida)
+
+
+class TestHablarReal(unittest.IsolatedAsyncioTestCase):
+    async def test_presionar_soltar_real(self):
+        tmp = tempfile.TemporaryDirectory(dir=os.path.dirname(os.path.dirname(__file__)))
+        old_xdg = os.environ.get("XDG_RUNTIME_DIR")
+        os.environ["XDG_RUNTIME_DIR"] = tmp.name
+        try:
+            cfg_path = os.path.join(tmp.name, "config.toml")
+            Path(cfg_path).write_text(
+                '[tecla]\nsocket = "$XDG_RUNTIME_DIR/asistente-satelite.sock"\n',
+                encoding="utf-8")
+            prueba_audio.CONFIG_PATH = cfg_path
+
+            class Nodo:
+                def __init__(self):
+                    self.veces = []
+
+                def presionar(self):
+                    self.veces.append("presionar")
+
+                def soltar(self):
+                    self.veces.append("soltar")
+
+            nodo = Nodo()
+            socket_path = os.path.join(tmp.name, "asistente-satelite.sock")
+            server = await satelite.ServidorTecla(socket_path, nodo).servir()
+            try:
+                r1 = prueba_audio.hablar_accion("presionar")
+                r2 = prueba_audio.hablar_accion("soltar")
+                await asyncio.sleep(0.1)
+                self.assertTrue(r1["ok"], r1)
+                self.assertTrue(r2["ok"], r2)
+                self.assertEqual(nodo.veces, ["presionar", "soltar"])
+            finally:
+                server.close()
+                await server.wait_closed()
+        finally:
+            if old_xdg is None:
+                os.environ.pop("XDG_RUNTIME_DIR", None)
+            else:
+                os.environ["XDG_RUNTIME_DIR"] = old_xdg
+            tmp.cleanup()
+
+    async def test_socket_inexistente(self):
+        tmp = tempfile.TemporaryDirectory(dir=os.path.dirname(os.path.dirname(__file__)))
+        old_xdg = os.environ.get("XDG_RUNTIME_DIR")
+        os.environ["XDG_RUNTIME_DIR"] = tmp.name
+        try:
+            cfg_path = os.path.join(tmp.name, "config.toml")
+            Path(cfg_path).write_text(
+                '[tecla]\nsocket = "$XDG_RUNTIME_DIR/no-existe.sock"\n',
+                encoding="utf-8")
+            prueba_audio.CONFIG_PATH = cfg_path
+            ruta = os.path.join(tmp.name, "no-existe.sock")
+            res = prueba_audio.hablar_accion("presionar")
+            self.assertFalse(res["ok"])
+            self.assertIn(ruta, res["error"])
+        finally:
+            if old_xdg is None:
+                os.environ.pop("XDG_RUNTIME_DIR", None)
+            else:
+                os.environ["XDG_RUNTIME_DIR"] = old_xdg
+            tmp.cleanup()
+
 
 
 if __name__ == "__main__":

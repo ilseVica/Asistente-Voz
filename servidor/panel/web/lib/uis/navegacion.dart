@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../modelos.dart';
 import '../tema.dart';
+import '../presentacion_alerta.dart';
 import '../textos.dart';
 import 'banner_alerta.dart';
 import 'banner_sin_conexion.dart';
@@ -119,9 +120,13 @@ class PastillaConexion extends StatelessWidget {
     final Color fondo;
 
     if (alertaActiva != null) {
-      texto = Textos.alertaActivaPildora;
-      color = Tema.tarjeta;
-      fondo = Tema.peligro;
+      final PresentacionAlerta pres = presentacionAlerta(
+          alertaActiva.tipo,
+          origen: alertaActiva.carga['origen']?.toString(),
+          carga: alertaActiva.carga);
+      texto = pres.pildora;
+      color = pres.colorTexto;
+      fondo = pres.colorFondo;
     } else if (!estado.conectadoAlServidor) {
       texto = compacta ? Textos.sinConexion : Textos.sinConexionSala;
       color = Tema.ambarPildora;

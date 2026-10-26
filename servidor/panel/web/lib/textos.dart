@@ -84,6 +84,8 @@ class Textos {
   static const String ahoraMismo = 'Ahora mismo';
   static const String movimientoDetectado = 'Movimiento detectado';
   static const String sinMovimiento = 'Sin movimiento';
+  static String sinMovimientoMinutos(int min) =>
+      'No se ha detectado movimiento en $min minutos.';
   static const String noSeDetectaNadie = 'Sin movimiento';
   static const String ultimaLectura = 'Última lectura: ';
 
@@ -126,6 +128,18 @@ class Textos {
   static const String enviada = 'Enviada';
   static const String pendiente = 'Pendiente';
   static const String alertaActivaPildora = 'Alerta activa';
+  static const String pidenAyuda = 'Piden ayuda';
+  static const String sinMovimientoPildora = 'Sin movimiento';
+  static const String aviso = 'Aviso';
+
+  static const String pidenAyudaEnLaSala = 'Piden ayuda en la sala';
+  static const String sinMovimientoEnLaSala = 'Sin movimiento en la sala';
+  static const String avisoEnLaSala = 'Aviso en la sala';
+
+  static const String ayudaPorVoz = 'Se pidió ayuda por voz.';
+  static const String ayudaPorAlexa = 'Se pidió ayuda por Alexa.';
+  static const String ayudaGenerica = 'Se pidió ayuda.';
+  static const String seRecibioUnAviso = 'Se recibió un aviso.';
   static const String alertaDeGas = 'Alerta de gas';
   static const String peticionDeAyuda = 'Petición de ayuda';
   static const String sinMovimientoEnLaCasa = 'Sin movimiento en la casa';
@@ -264,7 +278,7 @@ class Textos {
   static const String sinFamiliares =
       'Todavía no hay ningún familiar registrado en esta casa.';
   static const String sinFamiliaresAyuda = 'Para añadir a alguien, escriba '
-      '/panel al bot de la casa en Telegram.';
+      '/registro seguido del código al bot de la casa en Telegram.';
   static const String nombreSinDefinir = 'Familiar';
   static const String avisoFamiliares = 'La lista sale de Telegram y sólo '
       'incluye a los familiares activos: los que de verdad reciben los avisos.';
@@ -294,6 +308,7 @@ String parrafoDeGas(num gasAdc, num? umbral) => umbral == null
 String parrafoDeInactividad(int min) =>
     'Sin movimiento durante ${minutos(min)}';
 
+
 /// Qué ocurrió en una alerta, sólo con lo que la alerta trae de verdad.
 ///
 /// Se manda la `carga` tal cual de la base y el umbral de gas actual del
@@ -308,6 +323,16 @@ String? quePasoDe(String tipo, Map<String, dynamic> carga,
   if (tipo == 'inactividad') {
     final Object? m = carga['minutos'];
     if (m is num) return parrafoDeInactividad(m.toInt());
+  }
+  if (tipo == 'ayuda') {
+    final Object? origen = carga['origen'];
+    if (origen == null) return 'Se creó la alerta: pidieron ayuda.';
+    final String o = origen.toString();
+    if (o == 'voz') return 'Se creó la alerta: pidieron ayuda por voz.';
+    if (o == 'alexa') return 'Se creó la alerta: pidieron ayuda por Alexa.';
+    if (o == 'boton') return 'Se creó la alerta: pidieron ayuda con el botón.';
+    if (o == 'panel') return 'Se creó la alerta: pidieron ayuda desde el panel.';
+    return 'Se creó la alerta: pidieron ayuda.';
   }
   final Object? origen = carga['origen'];
   if (origen == null) return null;

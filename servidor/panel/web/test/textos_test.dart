@@ -130,7 +130,7 @@ void main() {
 
     test('ayuda con su origen, como lo cuenta el bot', () {
       expect(quePasoDe('ayuda', <String, dynamic>{'origen': 'boton'}),
-          'Se pidió por medio del botón de ayuda');
+          'Se creó la alerta: pidieron ayuda con el botón.');
     });
 
     test('sin nada que contar devuelve null y no una línea vacía', () {

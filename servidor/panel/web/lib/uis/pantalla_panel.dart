@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../modelos.dart';
 import '../tema.dart';
+import '../presentacion_alerta.dart';
 import '../textos.dart';
 import 'navegacion.dart';
 import 'banner_sin_conexion.dart';
@@ -502,12 +503,15 @@ class _FilaAlerta extends StatelessWidget {
 
   @override
   Widget build(BuildContext contexto) {
-    final IconData icono = _iconoAlerta(alerta.tipo);
+    final PresentacionAlerta pres = presentacionAlerta(
+        alerta.tipo,
+        origen: alerta.carga['origen']?.toString(),
+        carga: alerta.carga);
+    final IconData icono = pres.icono;
     final Color iconoColor =
-        (alerta.sinResolver && alerta.tipo == 'gas') ? Tema.peligro : Tema.primario;
-    final Color iconoFondo = (alerta.sinResolver && alerta.tipo == 'gas')
-        ? Tema.peligro.withValues(alpha: 0.12)
-        : Tema.suave;
+        alerta.sinResolver ? pres.colorTexto : Tema.primario;
+    final Color iconoFondo =
+        alerta.sinResolver ? pres.colorFondo : Tema.suave;
 
     String subtitulo = fechaAlerta(alerta.creadoEn);
     final String? origen = _origenFila(alerta);

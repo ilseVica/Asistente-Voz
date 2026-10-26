@@ -569,4 +569,167 @@ void main() {
     expect(boton.top >= titulo.bottom || titulo.top >= boton.bottom, isTrue);
   });
 
+// --- Alertas por tipo (Fase 2 del ajuste del panel) -------------------------
+
+Future<void> _montarConAlertas(WidgetTester tester, int ancho, List<Alerta> alertas) async {
+  tester.view.physicalSize = Size(ancho.toDouble(), 900);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+
+  final EstadoPanel estado = EstadoPanel();
+  estado.api.ponerToken('token-de-prueba');
+  estado.preparando = false;
+  estado.avisoPendiente = false;
+  estado.errorArranque = null;
+  final int ahora = estado.ahoraLocal();
+  estado.estado = Estado(
+    servidorHora: ahora,
+    luz: Luz(estado: conectado, encendida: true, origen: 'panel', recibidoEn: null),
+    sensores: Sensores(
+        estado: conectado,
+        temperaturaC: 22.5,
+        humedadPct: 45,
+        movimiento: true,
+        gasAdc: 312,
+        recibidoEn: ahora - 10),
+    nodo: Componente(estado: conectado, recibidoEn: null),
+    satelite: Componente(estado: conectado, recibidoEn: null),
+    sitio: Componente(estado: conectado, recibidoEn: null),
+    inactividad: Inactividad(ultimoMovimiento: ahora - 120, tiempoMin: 120, minimo: 2, maximo: 720),
+    modo: 'normal',
+    alertas: <String, int>{'pendiente': alertas.length},
+    familiares: 2,
+    conexiones: 1,
+    gasOnAdc: 1800,
+  );
+  estado.alertas = alertas;
+  estado.conectadoAlServidor = true;
+  estado.anotarMensajeVivo(ahora);
+  estado.destino = Destino.inicio;
+
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: Tema.construir(),
+      home: AsistentePanel(estado: estado, arrancar: false),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+  expect(tester.takeException(), isNull);
+}
+
+testWidgets('alerta de gas en 390, 820 y 1280', (tester) async {
+  for (final int ancho in <int>[390, 820, 1280]) {
+    await _montarConAlertas(tester, ancho, <Alerta>[
+      Alerta(
+        id: 'g1',
+        tipo: 'gas',
+        estado: 'pendiente',
+        creadoEn: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 20,
+        carga: const <String, dynamic>{'gas_adc': 2100},
+        resueltaEn: null,
+      ),
+    ]);
+    expect(find.text('Gas detectado'), findsWidgets);
+    expect(find.text('Alerta activa en la sala'), findsWidgets);
+  }
+});
+
+testWidgets('ayuda por voz en 390, 820 y 1280', (tester) async {
+  for (final int ancho in <int>[390, 820, 1280]) {
+    await _montarConAlertas(tester, ancho, <Alerta>[
+      Alerta(
+        id: 'a1',
+        tipo: 'ayuda',
+        estado: 'pendiente',
+        creadoEn: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 20,
+        carga: const <String, dynamic>{'origen': 'voz'},
+        resueltaEn: null,
+      ),
+    ]);
+    expect(find.text('Piden ayuda'), findsWidgets);
+    expect(find.text('Piden ayuda en la sala'), findsWidgets);
+    expect(find.text('Se pidió ayuda por voz.'), findsWidgets);
+    expect(find.text('Gas detectado'), findsNothing);
+  }
+});
+
+testWidgets('ayuda por Alexa en 390, 820 y 1280', (tester) async {
+  for (final int ancho in <int>[390, 820, 1280]) {
+    await _montarConAlertas(tester, ancho, <Alerta>[
+      Alerta(
+        id: 'a2',
+        tipo: 'ayuda',
+        estado: 'pendiente',
+        creadoEn: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 20,
+        carga: const <String, dynamic>{'origen': 'alexa'},
+        resueltaEn: null,
+      ),
+    ]);
+    expect(find.text('Piden ayuda'), findsWidgets);
+    expect(find.text('Se pidió ayuda por Alexa.'), findsWidgets);
+    expect(find.text('Gas detectado'), findsNothing);
+  }
+});
+
+testWidgets('inactividad en 390, 820 y 1280', (tester) async {
+  for (final int ancho in <int>[390, 820, 1280]) {
+    await _montarConAlertas(tester, ancho, <Alerta>[
+      Alerta(
+        id: 'i1',
+        tipo: 'inactividad',
+        estado: 'pendiente',
+        creadoEn: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 20,
+        carga: const <String, dynamic>{'minutos': 120},
+        resueltaEn: null,
+      ),
+    ]);
+    expect(find.text('Sin movimiento'), findsWidgets);
+    expect(find.text('Sin movimiento en la sala'), findsWidgets);
+    expect(find.text('No se ha detectado movimiento en 120 minutos.'), findsWidgets);
+    expect(find.text('Gas detectado'), findsNothing);
+  }
+});
+
+testWidgets('tipo desconocido en 390, 820 y 1280', (tester) async {
+  for (final int ancho in <int>[390, 820, 1280]) {
+    await _montarConAlertas(tester, ancho, <Alerta>[
+      Alerta(
+        id: 'x1',
+        tipo: 'desconocido',
+        estado: 'pendiente',
+        creadoEn: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 20,
+        carga: const <String, dynamic>{},
+        resueltaEn: null,
+      ),
+    ]);
+    expect(find.text('Aviso'), findsWidgets);
+    expect(find.text('Gas detectado'), findsNothing);
+  }
+});
+
+testWidgets('gas y ayuda a la vez: manda gas en 390, 820 y 1280', (tester) async {
+  for (final int ancho in <int>[390, 820, 1280]) {
+    await _montarConAlertas(tester, ancho, <Alerta>[
+      Alerta(
+        id: 'g2',
+        tipo: 'gas',
+        estado: 'pendiente',
+        creadoEn: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 30,
+        carga: const <String, dynamic>{'gas_adc': 2100},
+        resueltaEn: null,
+      ),
+      Alerta(
+        id: 'a3',
+        tipo: 'ayuda',
+        estado: 'pendiente',
+        creadoEn: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 10,
+        carga: const <String, dynamic>{'origen': 'voz'},
+        resueltaEn: null,
+      ),
+    ]);
+    expect(find.text('Gas detectado'), findsWidgets);
+    expect(find.text('Piden ayuda'), findsNothing);
+  }
+});
 }

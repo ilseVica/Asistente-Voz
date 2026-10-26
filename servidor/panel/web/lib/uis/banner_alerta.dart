@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../tema.dart';
 import '../textos.dart';
+import '../presentacion_alerta.dart';
 import '../modelos.dart';
 
 /// El aviso de que hay gas en la sala, fijo arriba en TODAS las pantallas
@@ -25,13 +26,16 @@ class BannerAlertaActiva extends StatelessWidget {
 
     if (alerta == null) return const SizedBox.shrink();
 
+    final PresentacionAlerta pres = presentacionAlerta(
+        alerta.tipo, origen: alerta.carga['origen']?.toString(),
+        carga: alerta.carga);
     final String subtitulo =
-        '${tituloAlerta(alerta.tipo)} · ${fechaAlerta(alerta.creadoEn)}';
+        '${pres.cuerpo} · ${fechaAlerta(alerta.creadoEn)}';
 
     final bool estrecho = MediaQuery.sizeOf(contexto).width < 700;
 
     return Container(
-      color: Tema.peligro,
+      color: pres.colorFondo,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: SafeArea(
         bottom: false,
@@ -45,35 +49,35 @@ class BannerAlertaActiva extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: Tema.peligro,
+                    color: pres.colorFondo,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                        color: Tema.tarjeta.withValues(alpha: 0.6), width: 2),
+                        color: pres.colorTexto.withValues(alpha: 0.6), width: 2),
                   ),
-                  child: const Icon(Icons.local_gas_station,
-                      color: Tema.tarjeta, size: 24),
+                  child: Icon(pres.icono,
+                      color: pres.colorTexto, size: 24),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text(Textos.alertaActiva,
-                          style: const TextStyle(
-                              color: Tema.tarjeta,
+                      Text(pres.titulo,
+                          style: TextStyle(
+                              color: pres.colorTexto,
                               fontSize: 14,
                               fontWeight: FontWeight.w700)),
                       const SizedBox(height: 4),
-                      Text(Textos.gasDetectado,
-                          style: const TextStyle(
-                              color: Tema.tarjeta,
+                      Text(pres.cuerpo,
+                          style: TextStyle(
+                              color: pres.colorTexto,
                               fontSize: 20,
                               height: 1.2,
                               fontWeight: FontWeight.w800)),
                       const SizedBox(height: 6),
                       Text(subtitulo,
                           style: TextStyle(
-                              color: Tema.tarjeta.withValues(alpha: 0.9),
+                              color: pres.colorTexto.withValues(alpha: 0.9),
                               fontSize: 14,
                               height: 1.3)),
                     ],

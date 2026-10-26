@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../modelos.dart';
 import '../tema.dart';
+import '../presentacion_alerta.dart';
 import '../textos.dart';
 import 'navegacion.dart';
 
@@ -173,6 +174,10 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
+    final PresentacionAlerta pres = presentacionAlerta(
+        alerta.tipo,
+        origen: alerta.carga['origen']?.toString(),
+        carga: alerta.carga);
     final String fecha =
         '${hace(alerta.creadoEn, ahora: estado.ahoraServidor())} · '
         '${fechaAlerta(alerta.creadoEn)}';
@@ -245,7 +250,7 @@ class _Hero extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(movil ? 20 : 32),
       decoration: BoxDecoration(
-        color: Tema.peligro,
+        color: pres.colorFondo,
         borderRadius: BorderRadius.circular(movil ? Tema.radio : 18),
       ),
       child: Column(
@@ -258,16 +263,14 @@ class _Hero extends StatelessWidget {
                 width: movil ? 56 : 64,
                 height: movil ? 56 : 64,
                 decoration: BoxDecoration(
-                  color: Tema.peligro,
+                  color: pres.colorFondo,
                   borderRadius: BorderRadius.circular(movil ? 16 : 18),
                   border: Border.all(
                       color: Tema.tarjeta.withValues(alpha: 0.6), width: 2),
                 ),
                 child: Icon(
-                    alerta.tipo == 'inactividad'
-                        ? Icons.hourglass_empty
-                        : Icons.local_gas_station,
-                    color: Tema.tarjeta,
+                    pres.icono,
+                    color: pres.colorTexto,
                     size: 30),
               ),
               const SizedBox(width: 14),
@@ -277,14 +280,14 @@ class _Hero extends StatelessWidget {
                   children: <Widget>[
                     Text(Textos.alertaEnLaSala,
                         style: TextStyle(
-                            color: Tema.tarjeta.withValues(alpha: 0.85),
+                            color: pres.colorTexto.withValues(alpha: 0.85),
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                             fontFamily: Tema.familia)),
                     const SizedBox(height: 4),
                     Text(tituloAlerta(alerta.tipo),
                         style: TextStyle(
-                            color: Tema.tarjeta,
+                            color: pres.colorTexto,
                             fontSize: movil ? 32 : 36,
                             height: 1.1,
                             fontWeight: FontWeight.w800,

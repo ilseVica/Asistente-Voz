@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../modelos.dart';
 import '../tema.dart';
+import '../presentacion_alerta.dart';
 import '../textos.dart';
 import 'navegacion.dart';
 import 'tarjetas.dart';
@@ -108,13 +109,13 @@ class _FilaHistorial extends StatelessWidget {
     final double titulo = movil ? 16 : 18;
     final double sub = movil ? 14 : 15;
     final double pillFont = movil ? 13 : 14;
-    final IconData iconoD = _iconoAlerta(alerta.tipo);
-    final Color iconoColor = (alerta.sinResolver && alerta.tipo == 'gas')
-        ? Tema.peligro
-        : Tema.primario;
-    final Color iconoFondo = (alerta.sinResolver && alerta.tipo == 'gas')
-        ? Tema.peligro.withValues(alpha: 0.12)
-        : Tema.suave;
+    final PresentacionAlerta pres = presentacionAlerta(
+        alerta.tipo,
+        origen: alerta.carga['origen']?.toString(),
+        carga: alerta.carga);
+    final IconData iconoD = pres.icono;
+    final Color iconoColor = alerta.sinResolver ? pres.colorTexto : Tema.primario;
+    final Color iconoFondo = alerta.sinResolver ? pres.colorFondo : Tema.suave;
 
     String subtitulo = fechaAlerta(alerta.creadoEn);
     final String? origen = _origenFila(alerta);

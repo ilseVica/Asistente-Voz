@@ -72,7 +72,17 @@ class EstadoPanel extends ChangeNotifier {
     final List<Alerta> vivas =
         alertas.where((Alerta a) => a.sinResolver).toList();
     if (vivas.isEmpty) return null;
-    vivas.sort((Alerta a, Alerta b) => b.creadoEn.compareTo(a.creadoEn));
+    int prioridad(String t) {
+      if (t == 'gas') return 0;
+      if (t == 'ayuda') return 1;
+      if (t == 'inactividad') return 2;
+      return 3;
+    }
+    vivas.sort((Alerta a, Alerta b) {
+      final int p = prioridad(a.tipo).compareTo(prioridad(b.tipo));
+      if (p != 0) return p;
+      return b.creadoEn.compareTo(a.creadoEn);
+    });
     return vivas.first;
   }
 

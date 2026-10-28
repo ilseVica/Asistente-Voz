@@ -25,7 +25,14 @@ bool hay_cierre_en_curso = false;
 // que el patron de pitidos lo genere el firmware (2.4). El patron es un pitido de
 // 120 ms cada 500 ms, actualizado a la cadencia del loop.
 constexpr uint32_t MS_PITIDO_ON = 120UL;
-constexpr uint32_t MS_ENTRE_PITIDOS = 500UL;
+constexpr uint32_t MS_PITIDO_OFF = 380UL;
+
+enum class BuzzerEstado : uint8_t { Apagado, Encendido };
+
+// Estado explicito del patron y momento del proximo cambio.
+BuzzerEstado buzzer_estado = BuzzerEstado::Apagado;
+uint32_t buzzer_proximo_ms = 0;
+bool buzzer_cita_programada = false;
 
 // Muestreo del MQ-2 a 1 Hz. El plan dice que el aviso sale "a los ~3 s, con 3
 // lecturas seguidas" (5.9), asi que leer en cada vuelta del loop (50 ms) seria
@@ -35,14 +42,15 @@ uint32_t proxima_lectura_ms = 0;
 // Cuanto lleva abierto el episodio, para el estado.
 uint32_t inicio_episodio_ms = 0;
 
-// Cuando termina el pitido en curso; 0 significa "no hay pitido en curso".
-uint32_t ultimo_pitido_fin_ms = 0;
+// (estado del buzzer declarado junto a las constantes, arriba)
 }  // namespace
 
 void gas_iniciar() {
   ultima_lectura = SENSORES_SIN_GAS;
   proxima_lectura_ms = 0;
-  ultimo_pitido_fin_ms = 0;
+  buzzer_estado = BuzzerEstado::Apagado;
+  buzzer_proximo_ms = 0;
+  buzzer_cita_programada = false;
   aviso_sin_dato = false;
   episodio_abierto = false;
   lecturas_sobre_umbral = 0;
@@ -88,21 +96,30 @@ void buzzer_tarea(uint32_t ahora) {
   return;
 #else
   if (!episodio_abierto) {
-    if (ultimo_pitido_fin_ms != 0) {
+    if (buzzer_estado != BuzzerEstado::Apagado || buzzer_cita_programada) {
       buzzer_escribir(false);
-      ultimo_pitido_fin_ms = 0;
+      buzzer_estado = BuzzerEstado::Apagado;
+      buzzer_cita_programada = false;
+      buzzer_proximo_ms = 0;
     }
     return;
   }
 
-  if (ultimo_pitido_fin_ms == 0) {
-    buzzer_escribir(true);
-    ultimo_pitido_fin_ms = ahora + MS_PITIDO_ON;
+  if (buzzer_estado == BuzzerEstado::Apagado) {
+    if (!buzzer_cita_programada || (int32_t)(ahora - buzzer_proximo_ms) >= 0) {
+      buzzer_escribir(true);
+      buzzer_estado = BuzzerEstado::Encendido;
+      buzzer_proximo_ms = ahora + MS_PITIDO_ON;
+      buzzer_cita_programada = true;
+    }
     return;
   }
-  if ((int32_t)(ahora - ultimo_pitido_fin_ms) >= 0) {
+
+  if (buzzer_cita_programada && (int32_t)(ahora - buzzer_proximo_ms) >= 0) {
     buzzer_escribir(false);
-    ultimo_pitido_fin_ms = ahora + (MS_ENTRE_PITIDOS - MS_PITIDO_ON);
+    buzzer_estado = BuzzerEstado::Apagado;
+    buzzer_proximo_ms = ahora + MS_PITIDO_OFF;
+    buzzer_cita_programada = true;
   }
 #endif
 }
@@ -128,6 +145,10 @@ void cerrar_episodio(int gas_adc) {
   episodio_abierto = false;
   inicio_bajo_umbral_ms = 0;
   hay_cierre_en_curso = false;
+  buzzer_escribir(false);
+  buzzer_estado = BuzzerEstado::Apagado;
+  buzzer_cita_programada = false;
+  buzzer_proximo_ms = 0;
   anotar_retencion();
   log_info(ETIQUETA, "EPISODIO CERRADO, gas=%d", gas_adc);
 }

@@ -670,15 +670,43 @@ class _RecordatoriosProximos extends StatelessWidget {
 ///
 /// No hay datos de mensajes en la casa y aquí no se inventan: se dice que viene,
 /// con el pastón «Próximamente» del prototipo, y nada más.
-class _TarjetaMensajes extends StatelessWidget {
+class _TarjetaMensajes extends StatefulWidget {
   const _TarjetaMensajes();
+
+  @override
+  State<_TarjetaMensajes> createState() => _TarjetaMensajesState();
+}
+
+class _TarjetaMensajesState extends State<_TarjetaMensajes> {
+  final TextEditingController _controlador = TextEditingController();
+
+  @override
+  void dispose() {
+    _controlador.dispose();
+    super.dispose();
+  }
+
+  Future<void> _enviar() async {
+    final EstadoPanel estado = PanelScope.de(context);
+    final String texto = _controlador.text;
+    if (texto.trim().isEmpty) return;
+    if (estado.enviandoMensaje) return;
+    final bool ok = await estado.enviarMensaje(texto);
+    if (ok && mounted) {
+      _controlador.clear();
+      setState(() {});
+    }
+  }
 
   @override
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
+    final double ancho = MediaQuery.sizeOf(contexto).width;
+    final bool compacto = ancho < Tema.anchoTableta;
     final List<EntradaConversacion> ultimos = estado.conversacion.length <= 3
         ? estado.conversacion
         : estado.conversacion.sublist(estado.conversacion.length - 3);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -693,7 +721,7 @@ class _TarjetaMensajes extends StatelessWidget {
                 Expanded(
                   child: Text(Textos.mensajeParaLaSala,
                       style: TextStyle(
-                          fontSize: MediaQuery.sizeOf(contexto).width >= Tema.anchoTableta ? 21 : 16,
+                          fontSize: ancho >= Tema.anchoTableta ? 21 : 16,
                           fontWeight: FontWeight.w700,
                           color: Tema.secundario,
                           fontFamily: Tema.familia)),
@@ -705,50 +733,35 @@ class _TarjetaMensajes extends StatelessWidget {
               Text(Textos.mensajesVacio,
                   style: Theme.of(contexto).textTheme.bodySmall)
             else
-              ...ultimos.map((EntradaConversacion e) {
-                if (e.esAlerta) {
-                  final PresentacionAlerta pres = presentacionAlerta(
-                    e.alerta?.tipo ?? 'aviso',
-                    origen: e.alerta?.carga['origen']?.toString(),
-                    carga: e.alerta?.carga,
-                  );
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: <Widget>[
-                        Icon(pres.icono,
-                            size: 14, color: pres.colorTexto),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            pres.titulo +
-                                ' · ' +
-                                (e.alerta != null && e.alerta!.sinResolver
-                                    ? Textos.pendiente
-                                    : Textos.atendida),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(contexto).textTheme.bodySmall,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                final String autor = (e.esRespuesta
-                    ? 'Sala'
-                    : (e.autor ?? Textos.sinAutor)).trim();
-                final String texto = (e.texto ?? Textos.sinTexto).trim();
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    '$autor: $texto',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(contexto).textTheme.bodySmall,
+              ...ultimos.map((EntradaConversacion e) => _BurbujaCompacta(entrada: e)),
+            const SizedBox(height: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                TextField(
+                  controller: _controlador,
+                  maxLength: 200,
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _enviar(),
+                  decoration: InputDecoration(
+                    hintText: Textos.chatPlaceholder,
+                    counterText: '',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
                   ),
-                );
-              }),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: (_controlador.text.trim().isEmpty ||
+                          estado.enviandoMensaje)
+                      ? null
+                      : _enviar,
+                  child: Text(compacto
+                      ? Textos.enviar
+                      : Textos.enviarYDecirEnVozAlta),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => estado.irA(Destino.mensajes),
@@ -768,7 +781,96 @@ String _num(num? valor) {
   return d.toStringAsFixed(1);
 }
 
-/// La pastilla de estado de una alerta en una lista.
+class _BurbujaCompacta extends StatelessWidget {
+  const _BurbujaCompacta({required this.entrada});
+  final EntradaConversacion entrada;
+
+  @override
+  Widget build(BuildContext context) {
+    if (entrada.esAlerta) {
+      final PresentacionAlerta pres = presentacionAlerta(
+        entrada.alerta?.tipo ?? 'aviso',
+        origen: entrada.alerta?.carga['origen']?.toString(),
+        carga: entrada.alerta?.carga,
+      );
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: pres.colorFondo,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(pres.icono, size: 14, color: pres.colorTexto),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  pres.titulo +
+                      ' · ' +
+                      (entrada.alerta != null && entrada.alerta!.sinResolver
+                          ? Textos.pendiente
+                          : Textos.atendida),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: pres.colorTexto, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final bool esRespuesta = entrada.esRespuesta;
+    final Color fondo = esRespuesta ? Tema.suave : Tema.caja;
+    final String autor = esRespuesta
+        ? 'Sala'
+        : (entrada.autor ?? Textos.sinAutor).trim();
+    final String texto = (entrada.texto ?? Textos.sinTexto).trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: fondo,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(
+                  esRespuesta ? Icons.volume_up : Icons.person_outline,
+                  size: 14,
+                  color: Tema.secundario,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    '$autor',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              texto,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class PastillaEstado extends StatelessWidget {
   const PastillaEstado({super.key, required this.estado});
 

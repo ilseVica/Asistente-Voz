@@ -228,6 +228,8 @@ class Textos {
 
   // Chat
   static const String chatPlaceholder = 'Escriba un mensaje para la sala';
+  static const String enviarYDecirEnVozAlta = 'Enviar y decir en voz alta';
+  static const String enviar = 'Enviar';
   static const String chatEnviar = 'Enviar a la sala';
   static const String chatDemasiadoLargo = 'El mensaje no puede pasar de 200 caracteres.';
   static const String chatDemasiadoRapido = 'Solo puede enviar un mensaje cada 5 segundos.';

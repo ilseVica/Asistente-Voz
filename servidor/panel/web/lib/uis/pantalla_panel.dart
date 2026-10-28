@@ -705,15 +705,50 @@ class _TarjetaMensajes extends StatelessWidget {
               Text(Textos.mensajesVacio,
                   style: Theme.of(contexto).textTheme.bodySmall)
             else
-              ...ultimos.map((EntradaConversacion e) => Padding(
+              ...ultimos.map((EntradaConversacion e) {
+                if (e.esAlerta) {
+                  final PresentacionAlerta pres = presentacionAlerta(
+                    e.alerta?.tipo ?? 'aviso',
+                    origen: e.alerta?.carga['origen']?.toString(),
+                    carga: e.alerta?.carga,
+                  );
+                  return Padding(
                     padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      (e.autor ?? '') + ': ' + (e.texto ?? ''),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(contexto).textTheme.bodySmall,
+                    child: Row(
+                      children: <Widget>[
+                        Icon(pres.icono,
+                            size: 14, color: pres.colorTexto),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            pres.titulo +
+                                ' · ' +
+                                (e.alerta != null && e.alerta!.sinResolver
+                                    ? Textos.pendiente
+                                    : Textos.atendida),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(contexto).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
                     ),
-                  )),
+                  );
+                }
+                final String autor = (e.esRespuesta
+                    ? 'Sala'
+                    : (e.autor ?? Textos.sinAutor)).trim();
+                final String texto = (e.texto ?? Textos.sinTexto).trim();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    '$autor: $texto',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(contexto).textTheme.bodySmall,
+                  ),
+                );
+              }),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => estado.irA(Destino.mensajes),

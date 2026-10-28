@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:asistente_panel/main.dart';
 import 'package:asistente_panel/modelos.dart';
+import 'package:asistente_panel/textos.dart';
 import 'package:asistente_panel/tema.dart';
 
 void main() {
@@ -657,7 +658,8 @@ testWidgets('ayuda por voz en 390, 820 y 1280', (tester) async {
       ),
     ]);
     expect(find.text('Piden ayuda'), findsWidgets);
-    expect(find.text('Piden ayuda en la sala'), findsWidgets);
+    expect(find.text('Mensaje para la sala'), findsWidgets);
+    expect(find.textContaining('Piden ayuda en la sala'), findsWidgets);
     expect(find.text('Se pidió ayuda por voz.'), findsWidgets);
     expect(find.text('Gas detectado'), findsNothing);
   }
@@ -766,5 +768,83 @@ testWidgets('gas y ayuda a la vez: manda gas en 390, 820 y 1280', (tester) async
       expect(find.text('Enviar a la sala'), findsWidgets);
     });
   }
+
+
+  testWidgets('conversacion real: sin ":" suelto y titulo de alerta', (tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final EstadoPanel estado = EstadoPanel();
+    estado.api.ponerToken('token-de-prueba');
+    estado.preparando = false;
+    estado.avisoPendiente = false;
+    estado.errorArranque = null;
+    estado.conectadoAlServidor = true;
+    estado.destino = Destino.inicio;
+    final int ahora = estado.ahoraLocal();
+    final Map<String, dynamic> alertaJson = <String, dynamic>{
+      'id': 'a1',
+      'tipo': 'ayuda',
+      'estado': 'pendiente',
+      'creado_en': ahora,
+      'carga': <String, dynamic>{'origen': 'voz'},
+      'resuelta_en': null,
+      'resuelto_por': null,
+      'descartada_en': null,
+      'enviados': 0,
+      'sin_mandar': 1,
+    };
+    estado.conversacion = <EntradaConversacion>[
+      EntradaConversacion.desde(<String, dynamic>{
+        'id': 1,
+        'creado_en': ahora,
+        'tipo': 'mensaje',
+        'autor': 'Ana',
+        'origen': 'panel',
+        'texto': 'hola',
+        'estado': 'enviado',
+        'estado_texto': 'Enviado',
+      }),
+      EntradaConversacion.desde(<String, dynamic>{
+        'id': 2,
+        'creado_en': ahora,
+        'tipo': 'respuesta',
+        'autor': 'La sala',
+        'origen': null,
+        'texto': 'bien',
+        'estado': 'se_dijo',
+        'estado_texto': 'Se dijo en la sala',
+      }),
+      EntradaConversacion.desde(<String, dynamic>{
+        'id': 3,
+        'creado_en': ahora,
+        'tipo': 'alerta',
+        'autor': null,
+        'origen': null,
+        'texto': null,
+        'estado': 'pendiente',
+        'estado_texto': 'Pendiente',
+        'alerta': alertaJson,
+        'alerta_id': 'a1',
+      }),
+    ];
+
+    await tester.pumpWidget(MaterialApp(theme: Tema.construir(), home: AsistentePanel(estado: estado, arrancar: false)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+    expect(estado.conversacion[2].alerta!.sinResolver, isTrue);
+    expect(find.text(':'), findsNothing);
+    expect(find.textContaining('Piden ayuda en la sala'), findsWidgets);
+
+    estado.irA(Destino.mensajes);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+    expect(find.text(':'), findsNothing);
+    expect(find.textContaining('Piden ayuda en la sala'), findsWidgets);
+    expect(find.byType(FilledButton), findsNWidgets(2));
+  });
 
 }

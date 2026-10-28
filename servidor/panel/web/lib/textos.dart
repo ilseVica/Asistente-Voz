@@ -126,6 +126,8 @@ class Textos {
   static const String alertasBorradoAuto =
       'Las alertas se borran automáticamente después de 30 días.';
   static const String atendida = 'Atendida';
+  static const String sinAutor = 'Sin autor';
+  static const String sinTexto = 'Sin texto';
   static const String descartada = 'Descartada';
   static const String enviada = 'Enviada';
   static const String pendiente = 'Pendiente';

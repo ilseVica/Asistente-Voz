@@ -190,22 +190,51 @@ class TrabajadorTelegram:
                                            str(error))
             return True
         except Exception as error:  # noqa: BLE001
+            # Error permanente: el envio deja de reintentarse y queda marcado como
+            # fallido. El familiar NO se inactiva: eso es decisión del operador.
+            if telegram_cliente.es_error_permanente(error):
+                motivo = type(error).__name__
+                registro.warning("fallo PERMANENTE al mandar la alerta %s al familiar "
+                                 "%s (intento %d): %s; no se reintenta. El familiar "
+                                 "no se inactiva. Los envios a los demas familiares "
+                                 "no se ven afectados.", id_alerta, quien, intentos,
+                                 motivo)
+                self.base.marcar_envio_fallido(
+                    id_alerta, chat_id, intentos,
+                                           db_modulo.ENVIO_FALLIDO_PERMANENTE, motivo,
+                )
+                return True
+
             # Un fallo de red, o un rechazo de la API. El envío NO se descarta:
             # se queda pendiente y se reintenta para siempre con la escalera de
             # esperas de `config.REINTENTO_SEGUNDOS`.
+            #
+            # Un `BadRequest` que NO sea permanente (formato HTML, longitud, etc.)
+            # se sigue reintentando como un fallo de red, pero se registra como
+            # ERROR con el tipo de error y sin el texto del mensaje.
             #
             # Y no toca los envíos de los otros familiares: cada uno tiene su fila
             # y su reloj. Este fallo es de este familiar, no de la alerta.
             #
             # El error se limpia antes de escribirse: python-telegram-bot incluye la
             # URL de la API en algunos errores, y esa URL lleva el token del bot.
-            motivo = telegram_cliente.sanear("%s: %s" % (type(error).__name__, error))
-            espera = espera_actual(intentos)
-            registro.warning("fallo al mandar la alerta %s al familiar %s (intento "
-                             "%d): %s; reintento en %d s. Este envio NO se descarta: "
-                             "se reintenta hasta que salga. Los envios a los demas "
-                             "familiares no se ven afectados.",
-                             id_alerta, quien, intentos, motivo, espera)
+            if telegram_cliente.es_badrequest(error):
+                motivo = type(error).__name__
+                espera = espera_actual(intentos)
+                registro.error("fallo al mandar la alerta %s al familiar %s (intento "
+                               "%d): %s; reintento en %d s. Este envio NO se "
+                               "descarta: se reintenta hasta que salga. Los envios "
+                               "a los demas familiares no se ven afectados.",
+                               id_alerta, quien, intentos, motivo, espera)
+            else:
+                motivo = telegram_cliente.sanear(
+                    "%s: %s" % (type(error).__name__, error))
+                espera = espera_actual(intentos)
+                registro.warning("fallo al mandar la alerta %s al familiar %s (intento "
+                                 "%d): %s; reintento en %d s. Este envio NO se "
+                                 "descarta: se reintenta hasta que salga. Los envios "
+                                 "a los demas familiares no se ven afectados.",
+                                 id_alerta, quien, intentos, motivo, espera)
             self.base.marcar_envio_fallido(
                 id_alerta, chat_id, intentos, int(time.time()) + espera, motivo,
             )

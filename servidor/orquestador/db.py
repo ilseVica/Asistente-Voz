@@ -58,6 +58,13 @@ _candado = threading.Lock()
 RUTA_ESQUEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "esquema.sql")
 
+# Marca de un envio que fallo de forma permanente (chat no encontrado, bot bloqueado,
+# etc.): no se reintenta. Es un valor centinela en `proximo_intento_en`, porque esa
+# columna es `NOT NULL` y no se cambia el esquema. `tomar_envios_pendientes` y el
+# aviso horario lo excluyen, asi que el envio no vuelve a intentarse ni avisa cada
+# hora como si estuviera atascado.
+ENVIO_FALLIDO_PERMANENTE = 2147483647
+
 # La versión del esquema, en `PRAGMA user_version`. Es lo que hace que una migración
 # corra una vez y no en cada arranque.
 #
@@ -1280,8 +1287,9 @@ class BaseDatos:
                 "SELECT e.*, a.tipo AS tipo, a.carga_json AS carga_json "
                 "FROM envios e JOIN alertas a ON a.id = e.alerta_id "
                 "WHERE e.enviado_en IS NULL AND e.proximo_intento_en <= ? "
+                "  AND e.proximo_intento_en <> ? "
                 "ORDER BY e.proximo_intento_en LIMIT ?",
-                (ahora, limite),
+                (ahora, 2147483647, limite),
             ))
 
     def marcar_enviado(self, id_alerta: str, chat_id: str,
@@ -1538,8 +1546,9 @@ class BaseDatos:
                 "SELECT e.*, a.tipo AS tipo, a.creado_en AS alerta_creado_en "
                 "FROM envios e JOIN alertas a ON a.id = e.alerta_id "
                 "WHERE e.enviado_en IS NULL AND a.creado_en <= ? "
+                "  AND e.proximo_intento_en <> ? "
                 "ORDER BY a.creado_en",
-                (limite,),
+                (limite, 2147483647),
             ))
 
     def contar_por_estado(self) -> dict:

@@ -3829,6 +3829,177 @@ prueba("ayuda fuera de la ventana tambien publica alerta de ayuda",
        any(t == config.TOPICO_ALERTA_AYUDA for t, _ in _pub2))
 _base2.cerrar()
 
+
+# =============================================================================
+# 13. Errores permanentes de Telegram
+# =============================================================================
+
+titulo("13. Errores permanentes de Telegram")
+
+from telegram.error import (BadRequest, Forbidden, NetworkError, RetryAfter,
+                            TimedOut, TelegramError)
+
+# 13a. Forbidden -> permanente: no se reintenta y queda marcado como fallido.
+base, _ = base_nueva("perm-forbidden-")
+base.registrar_familiar("111", nombre="Marta")
+base.insertar_alerta("000000-pf-0001", "gas",
+                     '{"id":"000000-pf-0001","gas_adc":2100}')
+
+class RemitentePermanente(cola_modulo.TrabajadorTelegram.__class__ and object):
+    pass
+
+class RemPerm:
+    def __init__(self, exc):
+        self.exc = exc
+        self.token = "x"
+        self.disponible = True
+        self.enviados = []
+    def enviar(self, texto, teclado=None, chat_id=None):
+        raise self.exc
+    def editar_mensaje(self, *a, **k):
+        return True
+
+trab = cola_modulo.TrabajadorTelegram(base, RemPerm(Forbidden("bot was blocked by the user")))
+trab._intentar_uno()
+fila = base.obtener_envio("000000-pf-0001", "111")
+prueba("Forbidden marca el envio como fallido de forma permanente",
+       fila is not None and fila["proximo_intento_en"] == db_modulo.ENVIO_FALLIDO_PERMANENTE,
+       fila["proximo_intento_en"] if fila else None)
+prueba("Forbidden no borra el envio ni lo marca enviado",
+       fila is not None and fila["enviado_en"] is None, fila)
+prueba("Forbidden deja ultimo_error con el tipo",
+       fila is not None and fila["ultimo_error"] == "Forbidden", fila["ultimo_error"] if fila else None)
+prueba("Forbidden no desactiva al familiar",
+       base.familiar_activo("111") is True)
+# segundo intento no vuelve a llamar a Telegram
+antes = fila["intentos"]
+trab._intentar_uno()
+prueba("Forbidden no se reintenta (intentos no suben)",
+       base.obtener_envio("000000-pf-0001", "111")["intentos"] == antes,
+       base.obtener_envio("000000-pf-0001", "111")["intentos"])
+prueba("Forbidden deja la cola vacia",
+       base.tomar_envios_pendientes() == [])
+base.cerrar()
+
+# 13b. BadRequest "chat not found" -> permanente.
+base, _ = base_nueva("perm-badrequest-")
+base.registrar_familiar("111", nombre="Marta")
+base.insertar_alerta("000000-pb-0001", "gas",
+                     '{"id":"000000-pb-0001","gas_adc":2100}')
+trab = cola_modulo.TrabajadorTelegram(
+    base, RemPerm(BadRequest("Bad Request: chat not found")))
+trab._intentar_uno()
+fila = base.obtener_envio("000000-pb-0001", "111")
+prueba("BadRequest chat not found es permanente",
+       fila["proximo_intento_en"] == db_modulo.ENVIO_FALLIDO_PERMANENTE,
+       fila["proximo_intento_en"])
+prueba("BadRequest chat not found no se reintenta",
+       base.tomar_envios_pendientes() == [])
+base.cerrar()
+
+# 13c. BadRequest de formato -> se reintenta y queda ERROR en el log sin el texto.
+base, _ = base_nueva("perm-formato-")
+base.registrar_familiar("111", nombre="Marta")
+base.insertar_alerta("000000-pf2-0001", "gas",
+                     '{"id":"000000-pf2-0001","gas_adc":2100}')
+manipulador = logging.Handler()
+capturado = []
+manipulador.emit = lambda r: capturado.append("%s %s" % (r.levelname, r.getMessage()))
+cola_modulo.registro.addHandler(manipulador)
+cola_modulo.registro.setLevel(logging.DEBUG)
+trab = cola_modulo.TrabajadorTelegram(
+    base, RemPerm(BadRequest("Message text is empty")))
+trab._intentar_uno()
+texto_log = "\n".join(capturado)
+prueba("BadRequest de formato deja el envio pendiente para reintentar",
+       base.obtener_envio("000000-pf2-0001", "111")["proximo_intento_en"]
+       != db_modulo.ENVIO_FALLIDO_PERMANENTE
+       and base.obtener_envio("000000-pf2-0001", "111")["proximo_intento_en"]
+       <= int(time.time()) + 100)
+prueba("BadRequest de formato queda en el log como ERROR",
+       "ERROR" in texto_log and "BadRequest" in texto_log)
+prueba("el log del BadRequest de formato no contiene el texto del mensaje",
+       "Message text is empty" not in texto_log, texto_log[:200])
+cola_modulo.registro.removeHandler(manipulador)
+base.cerrar()
+
+# 13d. NetworkError, RetryAfter y 5xx se reintentan.
+for nombre_exc, exc in (("NetworkError", NetworkError("network down")),
+                        ("RetryAfter", RetryAfter(10)),
+                        ("TimedOut", TimedOut("timed out")),
+                        ("5xx", TelegramError("Internal Server Error"))):
+    base, _ = base_nueva("perm-trans-" + nombre_exc + "-")
+    base.registrar_familiar("111", nombre="Marta")
+    base.insertar_alerta("000000-pt-0001", "gas",
+                         '{"id":"000000-pt-0001","gas_adc":2100}')
+    trab = cola_modulo.TrabajadorTelegram(base, RemPerm(exc))
+    trab._intentar_uno()
+    fila = base.obtener_envio("000000-pt-0001", "111")
+    prueba("%s se reintenta (no permanente)" % nombre_exc,
+           fila["proximo_intento_en"] != db_modulo.ENVIO_FALLIDO_PERMANENTE,
+           fila["proximo_intento_en"])
+    base.cerrar()
+
+# 13e. Un familiar con error permanente no frena al otro.
+base, _ = base_nueva("perm-dos-")
+base.registrar_familiar("111", nombre="Marta")
+base.registrar_familiar("222", nombre="Javi")
+base.insertar_alerta("000000-pd-0001", "gas",
+                     '{"id":"000000-pd-0001","gas_adc":2100}')
+
+class RemPermDos:
+    def __init__(self):
+        self.token = "x"
+        self.disponible = True
+        self.enviados = []
+    def enviar(self, texto, teclado=None, chat_id=None):
+        if str(chat_id) == "222":
+            raise Forbidden("bot was blocked by the user")
+        self.enviados.append(str(chat_id))
+        return len(texto)
+    def editar_mensaje(self, *a, **k):
+        return True
+
+trab = cola_modulo.TrabajadorTelegram(base, RemPermDos())
+for _ in range(4):
+    trab._intentar_uno()
+prueba("el familiar sin error permanente recibe el aviso",
+       "111" in RemPermDos.enviados if False else
+       base.obtener_envio("000000-pd-0001", "111")["enviado_en"] is not None)
+prueba("el familiar con error permanente queda fallido",
+       base.obtener_envio("000000-pd-0001", "222")["proximo_intento_en"]
+       == db_modulo.ENVIO_FALLIDO_PERMANENTE)
+prueba("el familiar con error permanente no frena al otro (1 enviado)",
+       base.listar_recientes(limite=1)[0]["enviados"] == 1)
+base.cerrar()
+
+# 13f. Estado de la alerta con 1 enviado y 1 fallido; "Ya lo atendi" funciona.
+base, _ = base_nueva("perm-estado-")
+base.registrar_familiar("111", nombre="Marta")
+base.registrar_familiar("222", nombre="Javi")
+base.insertar_alerta("000000-pe-0001", "gas",
+                     '{"id":"000000-pe-0001","gas_adc":2100}')
+trab = cola_modulo.TrabajadorTelegram(base, RemPermDos())
+for _ in range(4):
+    trab._intentar_uno()
+rec = base.listar_recientes(limite=1)[0]
+prueba("estado con 1 enviado y 1 fallido es pendiente",
+       rec["estado"] == "pendiente", rec["estado"])
+prueba("desglose con 1 enviado y 1 fallido es 1 y 1",
+       (rec["enviados"], rec["sin_mandar"]) == (1, 1),
+       (rec["enviados"], rec["sin_mandar"]))
+base.marcar_resuelta("000000-pe-0001", ahora=int(time.time()), quien="Marta")
+prueba("Ya lo atendi marca resuelto_en",
+       base.conexion.execute(
+           "SELECT resuelto_en FROM alertas WHERE id='000000-pe-0001'"
+       ).fetchone()[0] is not None)
+prueba("Ya lo atendi borra los envios pendientes (incluido el fallido)",
+       base.conexion.execute(
+           "SELECT COUNT(*) FROM envios WHERE alerta_id='000000-pe-0001' AND enviado_en IS NULL"
+       ).fetchone()[0] == 0)
+base.cerrar()
+
+
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))

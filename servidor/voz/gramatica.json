@@ -81,7 +81,10 @@
       "ayuda por favor",
       "prende",
       "apaga",
-      "enciende"
+      "enciende",
+      "prende por favor",
+      "apaga por favor",
+      "por favor"
     ]
   }
 }

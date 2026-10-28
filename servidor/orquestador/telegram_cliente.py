@@ -395,3 +395,44 @@ class Remitente:
         except Exception as error:  # noqa: BLE001
             registro.error("no se pudo comprobar el token: %s", sanear(error))
             return False
+
+
+def es_error_permanente(error) -> bool:
+    """True si el error de Telegram no se va a arreglar reintentando.
+
+    Solo `Forbidden` y los `BadRequest` que hablan de un chat o un usuario que no
+    existe o no se puede alcanzar. Cualquier otro `BadRequest` (formato, longitud,
+    HTML mal formado, etc.) NO es permanente: se reintenta como un fallo de red.
+    """
+    try:
+        from telegram.error import Forbidden, BadRequest
+    except Exception:  # noqa: BLE001
+        return False
+    if isinstance(error, Forbidden):
+        return True
+    if not isinstance(error, BadRequest):
+        return False
+    texto = str(error).lower()
+    permanentes = (
+        "chat not found",
+        "user not found",
+        "peer id invalid",
+        "peer_id_invalid",
+        "bot was blocked",
+        "bot is blocked",
+        "user is deactivated",
+        "bot can't initiate",
+        "bot cannot initiate",
+        "can't initiate conversation",
+        "cannot initiate conversation",
+        "chat_id is empty",
+    )
+    return any(p in texto for p in permanentes)
+
+
+def es_badrequest(error) -> bool:
+    try:
+        from telegram.error import BadRequest
+    except Exception:  # noqa: BLE001
+        return False
+    return isinstance(error, BadRequest)

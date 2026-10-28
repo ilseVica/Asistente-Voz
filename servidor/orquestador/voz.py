@@ -27,6 +27,8 @@ CONTADOR_AYUDA = [0]
 # Estado en memoria que actualizan los mensajes MQTT (orquestador.enrutar).
 _estado_luz = {"valor": None}   # "on" | "off" | None
 _nodo_conectado = {"valor": None}  # True | False | None
+_ventana_hasta = {"valor": 0.0}
+_ventana_reintentos = {"valor": 0}
 
 _frase_a_intencion = {}
 
@@ -141,6 +143,22 @@ def _confirmar_luz(estado_pedido, publicar, frase_id):
         registro.warning("voz: luz no confirmo %s en 3 s", estado_pedido)
 
 
+
+
+def abrir_ventana_respuesta() -> None:
+    _ventana_hasta["valor"] = time.time() + config.VENTANA_RESPUESTA_CHAT_S
+    _ventana_reintentos["valor"] = 1
+
+
+def cerrar_ventana_respuesta() -> None:
+    _ventana_hasta["valor"] = 0.0
+    _ventana_reintentos["valor"] = 0
+
+
+def ventana_respuesta_abierta() -> bool:
+    return time.time() < _ventana_hasta["valor"]
+
+
 def procesar(cuerpo: str, publicar, base=None) -> bool:
     try:
         carga = json.loads(cuerpo)
@@ -164,18 +182,57 @@ def procesar(cuerpo: str, publicar, base=None) -> bool:
 
     texto = carga.get("texto", "")
     frase_id = carga.get("frase_id")
+    texto_libre = carga.get("texto_libre", "")
+    if not isinstance(texto_libre, str):
+        texto_libre = ""
+
+    # Ventana de respuesta del chat: tiene prioridad sobre todo lo demas.
+    if ventana_respuesta_abierta():
+        es_ayuda = (_frase_a_intencion.get(normalizar(texto)) == "AYUDA"
+                    or _frase_a_intencion.get(normalizar(texto_libre)) == "AYUDA")
+        if es_ayuda:
+            cerrar_ventana_respuesta()
+            if base is not None and hasattr(base, "hay_ayuda_reciente") \
+                    and base.hay_ayuda_reciente():
+                _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)
+                return True
+            CONTADOR_AYUDA[0] += 1
+            id_alerta = "srv-%08x-%04x" % (int(time.time()) % 0xFFFFFFFF,
+                                           CONTADOR_AYUDA[0])
+            publicar(config.TOPICO_ALERTA_AYUDA,
+                     {"id": id_alerta, "origen": "voz"}, qos=1)
+            _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA, frase_id)
+            return True
+
+        if no_entendido(texto) and no_entendido(texto_libre):
+            _publicar_respuesta(publicar, textos.PERDON_NO_ESCUCHO, frase_id)
+            if _ventana_reintentos["valor"] > 0:
+                _ventana_reintentos["valor"] -= 1
+                _ventana_hasta["valor"] = time.time() + config.VENTANA_RESPUESTA_CHAT_S
+            else:
+                cerrar_ventana_respuesta()
+            return True
+
+        respuesta = texto_libre if not no_entendido(texto_libre) else texto
+        if base is not None and hasattr(base, "crear_respuesta_conversacion"):
+            base.crear_respuesta_conversacion(respuesta)
+        _publicar_respuesta(publicar, textos.RESPUESTA_CHAT_ENVIADA, frase_id)
+        cerrar_ventana_respuesta()
+        return True
 
     if no_entendido(texto):
         _publicar_respuesta(publicar, textos.NO_ENTENDIDO, frase_id)
-        registro.info("voz turno: texto=%r intencion=NO_ENTENDI accion=no_entendido "
-                      "latencia_ms=%d", texto, int((time.time() - int(ts)) * 1000))
+        registro.info("voz turno: intencion=NO_ENTENDI accion=no_entendido "
+                      "texto_len=%d latencia_ms=%d", len(texto),
+                      int((time.time() - int(ts)) * 1000))
         return True
 
     intencion = _frase_a_intencion.get(normalizar(texto))
     if intencion is None:
         _publicar_respuesta(publicar, textos.NO_ENTENDIDO, frase_id)
-        registro.info("voz turno: texto=%r intencion=NO_ENTENDI accion=no_entendido "
-                      "latencia_ms=%d", texto, int((time.time() - int(ts)) * 1000))
+        registro.info("voz turno: intencion=NO_ENTENDI accion=no_entendido "
+                      "texto_len=%d latencia_ms=%d", len(texto),
+                      int((time.time() - int(ts)) * 1000))
         return True
 
     latencia = int((time.time() - int(ts)) * 1000)
@@ -235,8 +292,8 @@ def procesar(cuerpo: str, publicar, base=None) -> bool:
 
     # Intencion desconocida (no deberia ocurrir).
     _publicar_respuesta(publicar, textos.NO_ENTENDIDO, frase_id)
-    registro.info("voz turno: texto=%r intencion=%s accion=no_entendido "
-                  "latencia_ms=%d", texto, intencion, latencia)
+    registro.info("voz turno: intencion=%s accion=no_entendido "
+                  "texto_len=%d latencia_ms=%d", intencion, len(texto), latencia)
     return True
 
 

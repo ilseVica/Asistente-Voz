@@ -107,7 +107,7 @@ RUTA_ESQUEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # antes, y rellenarlo con un nombre inventado seria peor que dejarlo vacio. Otra
 # columna nueva en una tabla vieja, asi que otra vez el `ALTER TABLE` idempotente
 # de la 2->3 y de la 4.
-VERSION_ESQUEMA = 8
+VERSION_ESQUEMA = 9
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -324,6 +324,72 @@ class BaseDatos:
             "ON alertas (fanout_hecho) "
             "WHERE resuelto_en IS NULL AND descartada_en IS NULL"
         )
+
+        # De la 8 a la 9 (chat de dos vias): tablas `conversacion` y
+        # `conversacion_envios`, mas backfill de las alertas de los ultimos 30 dias
+        # como entradas tipo alerta (para que el panel muestre lo mismo que ya esta
+        # en Telegram). Las tablas las crea esquema.sql con IF NOT EXISTS; aqui se
+        # aseguran en bases antiguas y se hace el backfill una sola vez.
+        if version < 9:
+            self.conexion.execute("""
+                CREATE TABLE IF NOT EXISTS conversacion (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    creado_en       INTEGER NOT NULL,
+                    tipo            TEXT NOT NULL CHECK(tipo IN ('mensaje','respuesta','alerta')),
+                    autor           TEXT,
+                    origen          TEXT CHECK(origen IS NULL OR origen IN ('panel','telegram')),
+                    autor_chat_id   TEXT,
+                    texto           TEXT,
+                    estado          TEXT CHECK(estado IS NULL OR estado IN ('enviado','se_dijo','no_se_pudo_decir')),
+                    estado_en       INTEGER,
+                    alerta_id       TEXT,
+                    notificado_en   INTEGER,
+                    purgable_en     INTEGER NOT NULL
+                )
+            """)
+            self.conexion.execute("""
+                CREATE INDEX IF NOT EXISTS idx_conversacion_creado
+                    ON conversacion (creado_en)
+            """)
+            self.conexion.execute("""
+                CREATE INDEX IF NOT EXISTS idx_conversacion_alerta
+                    ON conversacion (alerta_id)
+            """)
+            self.conexion.execute("""
+                CREATE INDEX IF NOT EXISTS idx_conversacion_estado
+                    ON conversacion (estado, creado_en)
+            """)
+            self.conexion.execute("""
+                CREATE TABLE IF NOT EXISTS conversacion_envios (
+                    conversacion_id INTEGER NOT NULL,
+                    chat_id         TEXT NOT NULL,
+                    mensaje_id      INTEGER,
+                    editado_en      INTEGER,
+                    creado_en       INTEGER NOT NULL,
+                    PRIMARY KEY (conversacion_id, chat_id)
+                )
+            """)
+            self.conexion.execute("""
+                CREATE INDEX IF NOT EXISTS idx_conv_envios_pendientes
+                    ON conversacion_envios (editado_en, mensaje_id)
+            """)
+            # Backfill: una entrada tipo alerta por cada alerta de los ultimos 30 dias.
+            ahora = int(time.time())
+            limite = ahora - 30 * 86400
+            for fila in self.conexion.execute(
+                    "SELECT id, creado_en, purgable_en FROM alertas "
+                    "WHERE creado_en >= ?", (limite,)):
+                existe = self.conexion.execute(
+                    "SELECT 1 FROM conversacion WHERE alerta_id = ?",
+                    (fila["id"],)).fetchone()
+                if existe is None:
+                    self.conexion.execute(
+                        "INSERT INTO conversacion (creado_en, tipo, alerta_id, "
+                        "purgable_en) VALUES (?, 'alerta', ?, ?)",
+                        (fila["creado_en"], fila["id"],
+                         fila["purgable_en"] if fila["purgable_en"] else
+                         fila["creado_en"] + 30 * 86400),
+                    )
 
         self.conexion.execute("PRAGMA user_version = %d" % VERSION_ESQUEMA)
         registro.info("base de datos migrada a la versión %d del esquema",
@@ -1776,6 +1842,175 @@ class BaseDatos:
 
     # --- Purgas ------------------------------------------------------------
 
+    # --- Conversacion (chat de dos vias) -----------------------------------
+
+    def crear_mensaje_conversacion(self, autor: str, autor_chat_id: str,
+                                   origen: str, texto: str,
+                                   ahora: int = None) -> int:
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            cursor = self.conexion.execute(
+                "INSERT INTO conversacion (creado_en, tipo, autor, origen, "
+                "autor_chat_id, texto, estado, estado_en, purgable_en) "
+                "VALUES (?, 'mensaje', ?, ?, ?, ?, 'enviado', ?, ?)",
+                (ahora, autor, origen, str(autor_chat_id), texto, ahora,
+                 ahora + 30 * 86400),
+            )
+            self.conexion.commit()
+            return cursor.lastrowid
+
+    def crear_respuesta_conversacion(self, texto: str, ahora: int = None) -> int:
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            cursor = self.conexion.execute(
+                "INSERT INTO conversacion (creado_en, tipo, autor, texto, "
+                "purgable_en) VALUES (?, 'respuesta', 'La sala', ?, ?)",
+                (ahora, texto, ahora + 30 * 86400),
+            )
+            self.conexion.commit()
+            return cursor.lastrowid
+
+    def crear_alerta_conversacion(self, alerta_id: str, creado_en: int,
+                                  purgable_en: int = None) -> None:
+        if purgable_en is None:
+            purgable_en = creado_en + 30 * 86400
+        with _candado:
+            existe = self.conexion.execute(
+                "SELECT 1 FROM conversacion WHERE alerta_id = ?", (alerta_id,)
+            ).fetchone()
+            if existe is None:
+                self.conexion.execute(
+                    "INSERT INTO conversacion (creado_en, tipo, alerta_id, "
+                    "purgable_en) VALUES (?, 'alerta', ?, ?)",
+                    (creado_en, alerta_id, purgable_en),
+                )
+                self.conexion.commit()
+
+    def actualizar_estado_conversacion(self, id_conv: int, estado: str,
+                                      ahora: int = None) -> None:
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "UPDATE conversacion SET estado = ?, estado_en = ? WHERE id = ?",
+                (estado, ahora, id_conv),
+            )
+            self.conexion.commit()
+
+    def obtener_conversacion(self, id_conv: int):
+        with _candado:
+            return self.conexion.execute(
+                "SELECT * FROM conversacion WHERE id = ?", (id_conv,)
+            ).fetchone()
+
+    def listar_conversacion(self, limite: int = 50, antes_id: int = None) -> list:
+        with _candado:
+            if antes_id is None:
+                filas = self.conexion.execute(
+                    "SELECT * FROM conversacion ORDER BY id DESC LIMIT ?",
+                    (limite + 1,),
+                ).fetchall()
+            else:
+                filas = self.conexion.execute(
+                    "SELECT * FROM conversacion WHERE id < ? ORDER BY id DESC LIMIT ?",
+                    (antes_id, limite + 1),
+                ).fetchall()
+        hay_mas = len(filas) > limite
+        filas = filas[:limite]
+        filas = list(reversed(filas))
+        return filas, hay_mas
+
+    def hay_mas_conversacion(self, antes_id: int) -> bool:
+        with _candado:
+            fila = self.conexion.execute(
+                "SELECT 1 FROM conversacion WHERE id < ? LIMIT 1",
+                (antes_id,),
+            ).fetchone()
+        return fila is not None
+
+    def ultimo_mensaje_de(self, chat_id: str):
+        with _candado:
+            return self.conexion.execute(
+                "SELECT creado_en FROM conversacion "
+                "WHERE autor_chat_id = ? AND tipo = 'mensaje' "
+                "ORDER BY creado_en DESC LIMIT 1",
+                (str(chat_id),),
+            ).fetchone()
+
+    def conversacion_desde(self, desde_id: int, limite: int = 50) -> list:
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT * FROM conversacion WHERE id > ? ORDER BY id LIMIT ?",
+                (desde_id, limite),
+            ))
+
+    def mensajes_pendientes_conversacion(self) -> list:
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT * FROM conversacion WHERE estado = 'enviado' "
+                "ORDER BY creado_en"
+            ))
+
+    def mensajes_enviados_sin_notificar(self, limite: int = 10) -> list:
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT * FROM conversacion WHERE tipo IN ('mensaje','respuesta') "
+                "AND notificado_en IS NULL ORDER BY creado_en LIMIT ?",
+                (limite,),
+            ))
+
+    def marcar_conversacion_notificada(self, id_conv: int, ahora: int = None) -> None:
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "UPDATE conversacion SET notificado_en = ? WHERE id = ?",
+                (ahora, id_conv),
+            )
+            self.conexion.commit()
+
+    def crear_envio_conversacion(self, id_conv: int, chat_id: str,
+                                 mensaje_id: int = None) -> None:
+        ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "INSERT OR IGNORE INTO conversacion_envios "
+                "(conversacion_id, chat_id, mensaje_id, creado_en) "
+                "VALUES (?, ?, ?, ?)",
+                (id_conv, str(chat_id), mensaje_id, ahora),
+            )
+            self.conexion.commit()
+
+    def envios_conversacion_a_editar(self, id_conv: int) -> list:
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT * FROM conversacion_envios WHERE conversacion_id = ? "
+                "AND mensaje_id IS NOT NULL AND editado_en IS NULL",
+                (id_conv,),
+            ))
+
+    def marcar_envio_conversacion_editado(self, id_conv: int, chat_id: str,
+                                          ahora: int = None) -> None:
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "UPDATE conversacion_envios SET editado_en = ? "
+                "WHERE conversacion_id = ? AND chat_id = ?",
+                (ahora, id_conv, str(chat_id)),
+            )
+            self.conexion.commit()
+
+    def purgar_conversacion(self, ahora: int) -> None:
+        with _candado:
+            self.conexion.execute(
+                "DELETE FROM conversacion_envios WHERE conversacion_id IN "
+                "(SELECT id FROM conversacion WHERE purgable_en < ?)", (ahora,))
+            self.conexion.execute(
+                "DELETE FROM conversacion WHERE purgable_en < ?", (ahora,))
+
     def purgar(self, ahora: int = None) -> tuple:
         """Borra lo viejo. Devuelve cuántos borró de cada tabla.
 
@@ -1860,6 +2095,12 @@ class BaseDatos:
                 (ahora,),
             )
             borrados_recordatorios = cursor_recordatorios.rowcount
+            # Conversacion: 30 dias, igual que las alertas.
+            self.conexion.execute(
+                "DELETE FROM conversacion_envios WHERE conversacion_id IN "
+                "(SELECT id FROM conversacion WHERE purgable_en < ?)", (ahora,))
+            self.conexion.execute(
+                "DELETE FROM conversacion WHERE purgable_en < ?", (ahora,))
             self.conexion.commit()
         if borrados_enlaces or borrados_tokens:
             registro.info("purgados del panel: %d enlace(s) y %d sesion(es)",

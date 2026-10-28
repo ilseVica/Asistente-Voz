@@ -38,7 +38,7 @@ void main() {
     expect(Tema.altoMinimo, 52);
   });
 
-  testWidgets('en escritorio la cabecera enseña las cuatro pestañas', (
+  testWidgets('en escritorio la cabecera enseña las cinco pestañas', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 900);
@@ -61,12 +61,12 @@ void main() {
     expect(find.text('Historial de alertas'), findsOneWidget);
     expect(find.text('Recordatorios'), findsOneWidget);
     expect(find.text('Familiares'), findsOneWidget);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Mensajes'), findsOneWidget);
     expect(find.byType(BottomNavigationBar), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('en el móvil la barra tiene cuatro con Familiares', (
+  testWidgets('en el móvil la barra tiene cinco con Mensajes', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -87,9 +87,9 @@ void main() {
 
     expect(find.text('Inicio'), findsOneWidget);
     expect(find.text('Alertas'), findsOneWidget);
-    expect(find.text('Recordatorios'), findsOneWidget);
-    expect(find.text('Familiares'), findsWidgets);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Agenda'), findsOneWidget);
+    expect(find.text('Familia'), findsWidgets);
+    expect(find.text('Mensajes'), findsOneWidget);
     expect(find.byTooltip('Familiares'), findsNothing);
     expect(tester.takeException(), isNull);
   });

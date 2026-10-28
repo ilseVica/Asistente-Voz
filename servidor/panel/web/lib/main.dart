@@ -10,6 +10,7 @@ import 'textos.dart';
 import 'uis/pantalla_acceso.dart';
 import 'uis/pantalla_alerta_detalle.dart';
 import 'uis/pantalla_alertas.dart';
+import 'uis/pantalla_chat.dart';
 import 'uis/pantalla_aviso.dart';
 import 'uis/pantalla_familiares.dart';
 import 'uis/pantalla_panel.dart';
@@ -48,6 +49,10 @@ class EstadoPanel extends ChangeNotifier {
   Estado? estado;
   List<Alerta> alertas = const <Alerta>[];
   List<Recordatorio> recordatorios = const <Recordatorio>[];
+  List<EntradaConversacion> conversacion = const <EntradaConversacion>[];
+  bool cargandoConversacion = false;
+  String? errorConversacion;
+  bool enviandoMensaje = false;
   String nombre = '';
 
   /// Los nombres de los familiares activos, para la pantalla «Familiares».
@@ -178,6 +183,7 @@ class EstadoPanel extends ChangeNotifier {
     estado = null;
     alertas = const <Alerta>[];
     recordatorios = const <Recordatorio>[];
+    conversacion = const <EntradaConversacion>[];
     nombresFamiliares = const <String>[];
     errorFamiliares = null;
     alertaAbierta = null;
@@ -252,6 +258,7 @@ class EstadoPanel extends ChangeNotifier {
     cargarEstado();
     cargarAlertas();
     cargarRecordatorios();
+    cargarConversacion();
     cargarFamiliares();
   }
 
@@ -305,6 +312,15 @@ class EstadoPanel extends ChangeNotifier {
         satelite = Componente.desde(datos);
       case 'sitio':
         sitio = Componente.desde(datos);
+      case 'conversacion':
+        final Map<String, dynamic> ent =
+            (datos['entrada'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+        if (ent.isNotEmpty) {
+          final EntradaConversacion nueva = EntradaConversacion.desde(ent);
+          if (!conversacion.any((EntradaConversacion e) => e.id == nueva.id)) {
+            conversacion = <EntradaConversacion>[...conversacion, nueva];
+          }
+        }
       default:
         return;
     }
@@ -714,6 +730,80 @@ class EstadoPanel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> cargarConversacion({int? antesId}) async {
+    if (antesId == null) {
+      cargandoConversacion = true;
+      errorConversacion = null;
+      notifyListeners();
+    }
+    try {
+      final Map<String, dynamic> r = await api.conversacion(limite: 50, antesId: antesId);
+      final List<EntradaConversacion> nuevas =
+          (r['entradas'] as List? ?? const <dynamic>[])
+              .map((dynamic e) => EntradaConversacion.desde(
+                  (e as Map).cast<String, dynamic>()))
+              .toList();
+      if (antesId == null) {
+        conversacion = nuevas;
+      } else {
+        conversacion = <EntradaConversacion>[...nuevas, ...conversacion];
+      }
+      conectadoAlServidor = true;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        cargandoConversacion = false;
+        await cerrarSesion();
+        return;
+      }
+      errorConversacion = error.mensaje;
+      conectadoAlServidor = false;
+    } catch (_) {
+      errorConversacion = Textos.errorDeRed;
+      conectadoAlServidor = false;
+    }
+    cargandoConversacion = false;
+    notifyListeners();
+  }
+
+  Future<bool> enviarMensaje(String texto) async {
+    final String limpio = texto.trim();
+    if (limpio.isEmpty) return false;
+    if (limpio.length > 200) {
+      aviso = Textos.chatDemasiadoLargo;
+      notifyListeners();
+      return false;
+    }
+    enviandoMensaje = true;
+    notifyListeners();
+    try {
+      final EntradaConversacion entrada = await api.enviarMensaje(limpio);
+      if (!conversacion.any((EntradaConversacion e) => e.id == entrada.id)) {
+        conversacion = <EntradaConversacion>[...conversacion, entrada];
+      }
+      conectadoAlServidor = true;
+      enviandoMensaje = false;
+      notifyListeners();
+      return true;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        enviandoMensaje = false;
+        await cerrarSesion();
+        return false;
+      }
+      aviso = error.mensaje;
+      conectadoAlServidor = false;
+      enviandoMensaje = false;
+      notifyListeners();
+      return false;
+    } catch (_) {
+      aviso = Textos.errorDeRed;
+      conectadoAlServidor = false;
+      enviandoMensaje = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   void irA(Destino nuevo) {
     if (destino == nuevo) return;
     destino = nuevo;
@@ -721,6 +811,9 @@ class EstadoPanel extends ChangeNotifier {
     // cambia por fuera (alta o baja en Telegram) y no llega por WebSocket.
     if (nuevo == Destino.familiares) {
       unawaited(cargarFamiliares());
+    }
+    if (nuevo == Destino.mensajes) {
+      unawaited(cargarConversacion());
     }
     notifyListeners();
   }
@@ -845,9 +938,7 @@ class _AsistentePanelState extends State<AsistentePanel> {
       case Destino.recordatorios:
         return const PantallaRecordatorios();
       case Destino.mensajes:
-        return const PantallaProximamente(
-            titulo: Textos.mensajes,
-            texto: Textos.mensajesVacio);
+        return const PantallaChat();
       case Destino.familiares:
         return const PantallaFamiliares();
     }

@@ -83,6 +83,7 @@ limite_token = seguridad.LimiteAccesos(config.INTENTOS_TOKEN_POR_IP,
 CLAVE_GLOBAL = "global"
 base: db.BaseDatos = None
 mqtt: ClienteEstado = None
+_ultimo_id_conversacion: int = 0
 
 
 def ip_real(peer: str, cabeceras) -> str:
@@ -199,13 +200,42 @@ async def ciclo(app: FastAPI):
 
     estados.scrupular(asyncio.get_running_loop())
 
+    global _ultimo_id_conversacion
+    try:
+        fila = base.conexion.execute('SELECT MAX(id) AS m FROM conversacion').fetchone()
+        _ultimo_id_conversacion = int(fila['m'] or 0)
+    except Exception:
+        _ultimo_id_conversacion = 0
+    tarea_conv = asyncio.create_task(_poll_conversacion())
+
     yield
+
+    tarea_conv.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await tarea_conv
 
     registro.info("cerrando el panel")
     if mqtt is not None:
         mqtt.desconectar()
     if base is not None:
         base.cerrar()
+
+
+async def _poll_conversacion() -> None:
+    global _ultimo_id_conversacion
+    while True:
+        try:
+            if base is not None:
+                filas = base.conversacion_desde(_ultimo_id_conversacion)
+                for fila in filas:
+                    entrada = _entrada_conversacion_json(fila, base)
+                    estados.emitir({"tipo": "conversacion",
+                                    "datos": {"entrada": entrada}})
+                    if fila["id"] > _ultimo_id_conversacion:
+                        _ultimo_id_conversacion = fila["id"]
+        except Exception as error:  # noqa: BLE001
+            registro.debug("poll conversacion: %s", error)
+        await asyncio.sleep(2)
 
 
 app = FastAPI(title="Panel del asistente", docs_url=None, redoc_url=None,
@@ -1054,12 +1084,86 @@ async def pagina_acceso(codigo: str):
                                  "X-Robots-Tag": "noindex, nofollow"})
 
 
+
+
+# --- La conversacion ---------------------------------------------------------
+
+
+@app.get("/api/conversacion")
+async def conversacion_listar(sesion: dict = Depends(sesion_requerida),
+                              limite: int = Query(50, ge=1, le=200),
+                              antes_id: int = Query(0, ge=0)):
+    del sesion
+    filas, hay_mas = base.listar_conversacion(limite=limite,
+                                              antes_id=antes_id if antes_id else None)
+    entradas = [_entrada_conversacion_json(f, base) for f in filas]
+    return {"entradas": entradas, "hay_mas": hay_mas,
+            "servidor_hora": int(time.time())}
+
+
+class MensajeConversacion(BaseModel):
+    model_config = {"extra": "forbid"}
+    texto: str = Field(min_length=1, max_length=config.LIMITE_CHAT_CARACTERES)
+
+
+@app.post("/api/conversacion", status_code=201)
+async def conversacion_enviar(cuerpo: MensajeConversacion,
+                              sesion: dict = Depends(sesion_requerida)):
+    texto = cuerpo.texto.strip()
+    if not texto:
+        raise HTTPException(422, "El texto no puede estar vacío.")
+    if len(texto) > config.LIMITE_CHAT_CARACTERES:
+        raise HTTPException(422, "El mensaje no puede pasar de %d caracteres."
+                                 % config.LIMITE_CHAT_CARACTERES)
+    ahora = int(time.time())
+    ultima = base.ultimo_mensaje_de(sesion["chat_id"])
+    if ultima is not None and ahora - int(ultima["creado_en"]) < config.PAUSA_CHAT_S:
+        raise HTTPException(429, "Solo puede enviar un mensaje cada 5 segundos.")
+    nombre = _nombre_de(sesion) or "Familiar"
+    id_conv = base.crear_mensaje_conversacion(
+        nombre, sesion["chat_id"], "panel", texto, ahora=ahora)
+    fila = base.obtener_conversacion(id_conv)
+    return _entrada_conversacion_json(fila, base)
+
+
 # --- El panel compilado ------------------------------------------------------
 
 app.mount("/", StaticFiles(directory=RAIZ_WEB, html=True), name="web")
 
 
 # --- El arranque -------------------------------------------------------------
+
+
+
+
+def _entrada_conversacion_json(fila, base) -> dict:
+    entrada = {
+        "id": fila["id"],
+        "creado_en": fila["creado_en"],
+        "tipo": fila["tipo"],
+        "autor": fila["autor"],
+        "origen": fila["origen"],
+        "texto": fila["texto"],
+        "estado": fila["estado"],
+        "estado_texto": _estado_conversacion_texto(fila["estado"]),
+    }
+    if fila["tipo"] == "alerta" and fila["alerta_id"]:
+        alerta = base.obtener_alerta(fila["alerta_id"])
+        if alerta is not None:
+            entrada["alerta"] = _alerta_json(_con_estado(alerta))
+            entrada["alerta_id"] = fila["alerta_id"]
+    return entrada
+
+
+def _estado_conversacion_texto(estado) -> str:
+    if estado == "se_dijo":
+        return "Se dijo en la sala"
+    if estado == "no_se_pudo_decir":
+        return "No se pudo decir"
+    if estado == "enviado":
+        return "Enviado"
+    return ""
+
 
 
 def principal() -> None:

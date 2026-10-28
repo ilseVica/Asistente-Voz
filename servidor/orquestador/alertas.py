@@ -529,6 +529,13 @@ def procesar(topico: str, cuerpo: str, base, publicar=None) -> bool:
         registro.info("la alerta %s ya estaba en la cola", id_alerta)
         return False
 
+    # La alerta tambien es una entrada de la conversacion (sin duplicar datos).
+    try:
+        base.crear_alerta_conversacion(id_alerta, int(time.time()))
+    except Exception as error:  # noqa: BLE001
+        registro.warning("no se pudo anotar la alerta %s en la conversacion: %s",
+                         id_alerta, error)
+
     # La casa se entera en voz alta. Va DESPUES de guardar la alerta, y un fallo
     # aqui no la deshace: lo de la familia (Telegram, la cola) no cambia.
     # La ayuda que llega por voz ya se anuncia en la respuesta del orquestador

@@ -675,6 +675,10 @@ class _TarjetaMensajes extends StatelessWidget {
 
   @override
   Widget build(BuildContext contexto) {
+    final EstadoPanel estado = PanelScope.de(contexto);
+    final List<EntradaConversacion> ultimos = estado.conversacion.length <= 3
+        ? estado.conversacion
+        : estado.conversacion.sublist(estado.conversacion.length - 3);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -694,24 +698,27 @@ class _TarjetaMensajes extends StatelessWidget {
                           color: Tema.secundario,
                           fontFamily: Tema.familia)),
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                      color: Tema.suave,
-                      borderRadius: BorderRadius.circular(999)),
-                  child: const Text(Textos.proximamente,
-                      style: TextStyle(
-                          color: Tema.primario,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700)),
-                ),
               ],
             ),
             const SizedBox(height: 12),
-            Text(Textos.mensajesVacio,
-                style: Theme.of(contexto).textTheme.bodySmall),
-            const SizedBox(height: 12),
+            if (ultimos.isEmpty)
+              Text(Textos.mensajesVacio,
+                  style: Theme.of(contexto).textTheme.bodySmall)
+            else
+              ...ultimos.map((EntradaConversacion e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      (e.autor ?? '') + ': ' + (e.texto ?? ''),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(contexto).textTheme.bodySmall,
+                    ),
+                  )),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => estado.irA(Destino.mensajes),
+              child: Text(Textos.verLaConversacion),
+            ),
           ],
         ),
       ),

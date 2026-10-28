@@ -1312,6 +1312,55 @@ prueba("y el token de las pruebas no aparece en lo registrado",
                            .replace("[quitado]", "")),
        "el token no debe quedar en ningun mensaje")
 
+
+# =============================================================================
+# Chat de dos vias
+# =============================================================================
+
+titulo("Chat: conversacion")
+
+cab = lambda t: {"Authorization": "Bearer " + t}
+token_luis = entrar("222")
+
+# 401 sin sesion valida
+r = cliente.get("/api/conversacion", headers={"Authorization": "Bearer no-vale"})
+prueba("conversacion sin sesion devuelve 401", r.status_code == 401)
+
+# enviar
+r = cliente.post("/api/conversacion", headers=cab(token_marta),
+                 json={"texto": "hola sala"})
+prueba("enviar mensaje devuelve 201", r.status_code == 201)
+entrada = r.json()
+prueba("la entrada no contiene chat_id", "autor_chat_id" not in entrada and "chat_id" not in entrada)
+prueba("el estado inicial es enviado", entrada["estado"] == "enviado")
+
+# 422 por longitud
+r = cliente.post("/api/conversacion", headers=cab(token_marta),
+                 json={"texto": "x" * 201})
+prueba("mensaje de 201 caracteres devuelve 422", r.status_code == 422)
+
+# 429 por ritmo
+r = cliente.post("/api/conversacion", headers=cab(token_marta),
+                 json={"texto": "segundo"})
+prueba("segundo mensaje inmediato devuelve 429", r.status_code == 429)
+
+# paginacion
+for i in range(60):
+    base.crear_mensaje_conversacion("Marta", "111", "panel", "m%d" % i)
+r = cliente.get("/api/conversacion", headers=cab(token_marta),
+                params={"limite": 5})
+prueba("listar devuelve 5", r.status_code == 200 and len(r.json()["entradas"]) == 5)
+prueba("hay_mas es True", r.json()["hay_mas"] is True)
+antes = r.json()["entradas"][0]["id"]
+r = cliente.get("/api/conversacion", headers=cab(token_marta),
+                params={"limite": 5, "antes_id": antes})
+prueba("paginacion con antes_id devuelve filas", r.status_code == 200 and len(r.json()["entradas"]) == 5)
+
+# autor_chat_id no sale en GET ni en POST
+r = cliente.get("/api/conversacion", headers=cab(token_marta), params={"limite": 3})
+serializado = json.dumps(r.json())
+prueba("GET conversacion no contiene chat_id", "chat_id" not in serializado and "autor_chat_id" not in serializado)
+
 # Se cierra el lifespan, que es lo que cierra la base del `finally` de `ciclo`. Sin
 # esto el proceso acaba igual (el fichero SQLite es temporal y se borra), pero el
 # `TestClient` avisa con un `ResourceWarning` si se le deja el portal abierto.

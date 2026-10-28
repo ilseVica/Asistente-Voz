@@ -176,6 +176,16 @@ def cargar_gramatica(modelo: vosk.Model) -> tuple:
 def _json_gramatica(frases) -> str:
     return json.dumps(frases, ensure_ascii=False)
 
+def crear_reconocedores(modelo: vosk.Model, gramatica_json: str):
+    """Crea los dos reconocedores (gramatica y libre) sobre el mismo modelo."""
+    return (vosk.KaldiRecognizer(modelo, 16000, gramatica_json),
+            vosk.KaldiRecognizer(modelo, 16000))
+
+
+def final_libre(reconocedor) -> str:
+    """Texto final del reconocedor libre, usando la funcion real `_final`."""
+    return _final(reconocedor)
+
 
 # --- MQTT -------------------------------------------------------------------
 
@@ -237,14 +247,16 @@ class Publicador:
 class Frase:
     """El estado de una frase en curso."""
 
-    __slots__ = ("id", "modo", "reconocedor", "textos", "bytes",
-                 "primera_ms", "ultima_ms")
+    __slots__ = ("id", "modo", "reconocedor", "reconocedor_libre", "textos",
+                 "textos_libres", "bytes", "primera_ms", "ultima_ms")
 
-    def __init__(self, frase_id, modo, reconocedor):
+    def __init__(self, frase_id, modo, reconocedor, reconocedor_libre):
         self.id = frase_id
         self.modo = modo
         self.reconocedor = reconocedor
+        self.reconocedor_libre = reconocedor_libre
         self.textos = []
+        self.textos_libres = []
         self.bytes = 0
         self.primera_ms = None
         self.ultima_ms = None
@@ -299,8 +311,12 @@ async def _resolver_frase(websocket, frase: Frase, motivo_error: str,
     texto_seg = await asyncio.to_thread(_final, frase.reconocedor)
     if texto_seg:
         frase.textos.append(texto_seg)
+    texto_libre_seg = await asyncio.to_thread(_final, frase.reconocedor_libre)
+    if texto_libre_seg:
+        frase.textos_libres.append(texto_libre_seg)
     final_ms = ahora_ms()
     texto = " ".join(t for t in frase.textos if t).strip()
+    texto_libre = " ".join(t for t in frase.textos_libres if t).strip()
 
     marcas = {
         "primera_trama_ms": frase.primera_ms,
@@ -315,6 +331,7 @@ async def _resolver_frase(websocket, frase: Frase, motivo_error: str,
             "tipo": "final",
             "frase_id": frase.id,
             "texto": texto,
+            "texto_libre": texto_libre,
             "modo": frase.modo,
             "marcas": marcas,
         }, ensure_ascii=False))
@@ -334,6 +351,7 @@ async def _resolver_frase(websocket, frase: Frase, motivo_error: str,
     carga = {
         "frase_id": frase.id,
         "texto": texto,
+        "texto_libre": texto_libre,
         "modo": frase.modo,
         "ts": int(time.time()),
         "marcas": marcas,
@@ -406,6 +424,10 @@ async def atender(websocket, modelo: vosk.Model, fases, publicador: Publicador):
                                                     bytes(mensaje))
                 if texto_seg:
                     frase.textos.append(texto_seg)
+                texto_libre_seg = await asyncio.to_thread(
+                    _aceptar, frase.reconocedor_libre, bytes(mensaje))
+                if texto_libre_seg:
+                    frase.textos_libres.append(texto_libre_seg)
                 continue
 
             # --- Mensajes de texto (JSON) ---
@@ -459,7 +481,8 @@ async def atender(websocket, modelo: vosk.Model, fases, publicador: Publicador):
                                        "modo %r no soportado" % modo)
                     continue
                 reconocedor = vosk.KaldiRecognizer(modelo, 16000, gramatica_json)
-                frase = Frase(frase_id, modo, reconocedor)
+                reconocedor_libre = vosk.KaldiRecognizer(modelo, 16000)
+                frase = Frase(frase_id, modo, reconocedor, reconocedor_libre)
                 continue
 
             if tipo == "fin" or datos.get("fin") is True:

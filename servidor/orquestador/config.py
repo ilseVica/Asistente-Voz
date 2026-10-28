@@ -486,6 +486,17 @@ SEGUNDOS_CICLO_INACTIVIDAD = 10
 # está dejaría la alerta apagada para siempre sin que nadie lo notara.
 ENLACE_SITIO_VALORES_CAIDO = ("0", "false", "off", "no")
 
+# --- Chat de dos vias (Paso 6) ---------------------------------------------
+
+# Ventana de respuesta tras decir un mensaje de chat, en segundos.
+VENTANA_RESPUESTA_CHAT_S = int(os.environ.get("VENTANA_RESPUESTA_CHAT_S", "60"))
+
+# Limite de caracteres de un mensaje a la sala.
+LIMITE_CHAT_CARACTERES = 200
+
+# Ritmo maximo por familiar: un mensaje cada 5 segundos.
+PAUSA_CHAT_S = 5
+
 # --- Registro --------------------------------------------------------------
 
 NIVEL_LOG = os.environ.get("NIVEL_LOG", "INFO").upper()

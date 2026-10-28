@@ -258,6 +258,7 @@ Reglas del contrato:
 
 | Fecha | Cambio | Motivo |
 | --- | --- | --- |
+| 2026-10-26 | Chat de dos vias (Paso 6): `casa/sala/voz/texto` suma el campo `texto_libre` (transcripcion libre) para la ventana de respuesta; `satelite/decir` tipo `chat` se dice aunque llegue tarde; nueva tabla `conversacion` en SQLite. | El orquestador necesita la transcripcion libre solo dentro de la ventana de respuesta, sin cambiar el satelite. |
 | 2026-10-11 | Alta de `casa/sala/voz/texto` (etapa A del Paso 2), eco del orquestador por `satelite/decir`, gramática Vosk de 18 frases + `[unk]` y descarte de mensajes de voz/texto con `ts` > 10 s o sin `ts`. | El servicio de voz del servidor publica el reconocimiento en texto para que el orquestador decida la intención en el Paso 3; el eco confirma al satélite que el audio se entendió, y se aplica la misma regla de antigüedad que `luz/set`. |
 
 ### Configuración del puente

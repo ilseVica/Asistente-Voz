@@ -641,11 +641,26 @@ def main():
                         help="manda el audio sin esperar 100 ms entre tramas")
     parser.add_argument("--sin-mqtt", action="store_true",
                         help="no abre el observador de MQTT (sin eco ni latencias)")
+    parser.add_argument("--produccion", action="store_true",
+                        help="permite apuntar al servidor de voz/broker de produccion")
     parser.add_argument("--mqtt-host", default="127.0.0.1")
     parser.add_argument("--mqtt-puerto", type=int, default=1883)
     parser.add_argument("--mqtt-usuario", default="puente")
     parser.add_argument("--mqtt-password", default="")
     args = parser.parse_args()
+
+    _HOSTS_PRODUCCION = {"127.0.0.1", "localhost", "192.168.1.169",
+                          "100.116.194.116"}
+    if not args.produccion:
+        if args.host in _HOSTS_PRODUCCION and args.puerto == 2700:
+            raise SystemExit("ERROR: destino es el servidor de voz de produccion "
+                             "(%s:%d). Use --produccion para forzarlo."
+                             % (args.host, args.puerto))
+        if (not args.sin_mqtt and args.mqtt_host in _HOSTS_PRODUCCION
+                and args.mqtt_puerto == 1883):
+            raise SystemExit("ERROR: broker de produccion (%s:%d). "
+                             "Use --produccion para forzarlo."
+                             % (args.mqtt_host, args.mqtt_puerto))
     resolver_voz(args)
     return asyncio.run(principal(args))
 

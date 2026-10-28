@@ -34,6 +34,7 @@ import recordatorios
 import registro
 import sanear as sanear_modulo
 import telegram_cliente
+import textos
 import voz
 
 registro_log = logging.getLogger("orquestador")
@@ -154,6 +155,97 @@ def tarea_inactividad(reloj, publicar, parando) -> None:
         except Exception as error:  # noqa: BLE001
             registro_log.error("fallo en el ciclo de inactividad: %s", error)
         parando.wait(config.SEGUNDOS_CICLO_INACTIVIDAD)
+
+
+def tarea_conversacion(base, publicar, remitente, satelites, parando) -> None:
+    """Procesa los mensajes nuevos de la conversacion (Paso 6)."""
+    while not parando.is_set():
+        try:
+            for fila in base.mensajes_pendientes_conversacion():
+                id_conv = fila["id"]
+                texto = (fila["texto"] or "").strip()
+                origen = fila["origen"]
+                autor = fila["autor"] or "Familiar"
+                autor_chat = fila["autor_chat_id"]
+                hay_sat = (satelites is not None and satelites.hay_conectado())
+                if hay_sat:
+                    try:
+                        publicar(config.TOPICO_SATELITE_DECIR,
+                                 {"texto": "Mensaje de %s: %s. Si quiere responder, mantenga presionado el botón y hable."
+                                  % (autor, texto), "tipo": "chat",
+                                  "ts": int(time.time())},
+                                 qos=1)
+                        base.actualizar_estado_conversacion(id_conv, "se_dijo")
+                        voz.abrir_ventana_respuesta()
+                    except Exception as error:  # noqa: BLE001
+                        registro_log.error("no se pudo decir el mensaje %s: %s",
+                                           id_conv, error)
+                        base.actualizar_estado_conversacion(id_conv, "no_se_pudo_decir")
+                else:
+                    base.actualizar_estado_conversacion(id_conv, "no_se_pudo_decir")
+
+                # Fan out por Telegram.
+                estado_final = base.obtener_conversacion(id_conv)["estado"]
+                if origen == "panel":
+                    for fam in base.familiares_activos():
+                        chat = str(fam["chat_id"])
+                        try:
+                            mensaje = remitente.enviar(
+                                textos.CHAT_DESDE_PANEL.format(
+                                    nombre=autor, texto=texto),
+                                chat_id=chat,
+                            )
+                            base.crear_envio_conversacion(
+                                id_conv, chat, mensaje_id=getattr(mensaje, "message_id", None))
+                        except Exception as error:  # noqa: BLE001
+                            registro_log.warning("no se pudo mandar el mensaje del chat a %s: %s",
+                                                 db.enmascarar_chat(chat),
+                                                 telegram_cliente.sanear(error))
+                    # Editar todos cuando el estado sea final.
+                    if estado_final in ("se_dijo", "no_se_pudo_decir"):
+                        for envio in base.envios_conversacion_a_editar(id_conv):
+                            nuevo_texto = (textos.CHAT_CONFIRMACION_SE_DJO if estado_final == "se_dijo"
+                                           else textos.CHAT_CONFIRMACION_NO_SE_PUDO).format(texto=texto)
+                            try:
+                                remitente.editar_mensaje(envio["chat_id"], envio["mensaje_id"],
+                                                         nuevo_texto)
+                            except Exception as error:  # noqa: BLE001
+                                registro_log.warning("no se pudo editar el mensaje del chat: %s",
+                                                     telegram_cliente.sanear(error))
+                            base.marcar_envio_conversacion_editado(id_conv, envio["chat_id"])
+                else:
+                    # origen telegram: el autor ya recibio confirmacion en bot.py;
+                    # aqui solo se asegura que este marcada como notificada. Los demas
+                    # ya se notificaron desde bot.py.
+                    pass
+
+                # Marcar notificado para el panel (polling) - no hace falta, panel lee por id.
+                base.marcar_conversacion_notificada(id_conv)
+        except Exception as error:  # noqa: BLE001
+            registro_log.error("fallo en el ciclo de conversacion: %s", error)
+        # Respuestas de la sala: notificar por Telegram.
+        try:
+            for fila in base.mensajes_enviados_sin_notificar():
+                if fila["tipo"] != "respuesta":
+                    # alertas ya se notifican por su pipeline; solo marcar.
+                    base.marcar_conversacion_notificada(fila["id"])
+                    continue
+                texto = fila["texto"] or ""
+                for fam in base.familiares_activos():
+                    chat = str(fam["chat_id"])
+                    try:
+                        remitente.enviar(
+                            textos.CHAT_RESPUESTA_SALA.format(texto=texto),
+                            chat_id=chat,
+                        )
+                    except Exception as error:  # noqa: BLE001
+                        registro_log.warning("no se pudo mandar la respuesta de la sala a %s: %s",
+                                             db.enmascarar_chat(chat),
+                                             telegram_cliente.sanear(error))
+                base.marcar_conversacion_notificada(fila["id"])
+        except Exception as error:  # noqa: BLE001
+            registro_log.error("fallo notificando respuestas: %s", error)
+        parando.wait(1.0)
 
 
 def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
@@ -354,6 +446,12 @@ def main() -> int:
             target=tarea_inactividad, args=(reloj, cliente.publicar, parando),
             name="inactividad", daemon=True)
         hilo_inactividad.start()
+
+        hilo_conversacion = threading.Thread(
+            target=tarea_conversacion, args=(base, cliente.publicar, remitente,
+                                             satelites, parando),
+            name="conversacion", daemon=True)
+        hilo_conversacion.start()
 
         conteo = base.contar_por_estado()
         registro_log.info("alertas ya en la base: %s",

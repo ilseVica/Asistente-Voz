@@ -10,6 +10,9 @@ class Textos {
   static const String alertas = 'Alertas';
   static const String recordatorios = 'Recordatorios';
   static const String mensajes = 'Mensajes';
+  static const String barraAgenda = 'Agenda';
+  static const String barraFamilia = 'Familia';
+  static const String verLaConversacion = 'Ver la conversación';
 
   static const String panelDeLaSala = 'Panel de la sala';
 
@@ -122,7 +125,6 @@ class Textos {
       'la atendió desde Telegram, aquí se refleja.';
   static const String alertasBorradoAuto =
       'Las alertas se borran automáticamente después de 30 días.';
-  static const String yaLoAtendi = 'Ya lo atendí';
   static const String atendida = 'Atendida';
   static const String descartada = 'Descartada';
   static const String enviada = 'Enviada';
@@ -221,6 +223,15 @@ class Textos {
   static const String mensajesVacio =
       'Esta función estará disponible próximamente.';
   static const String proximamente = 'Próximamente';
+
+  // Chat
+  static const String chatPlaceholder = 'Escriba un mensaje para la sala';
+  static const String chatEnviar = 'Enviar a la sala';
+  static const String chatDemasiadoLargo = 'El mensaje no puede pasar de 200 caracteres.';
+  static const String chatDemasiadoRapido = 'Solo puede enviar un mensaje cada 5 segundos.';
+  static const String verMasAntiguos = 'Ver más antiguos';
+  static const String cargando = 'Cargando...';
+  static const String yaLoAtendi = 'Ya lo atendí';
   static const String volverAlInicio = 'Volver al inicio';
 
   static const String luzEnviadaEncender = 'Se envió la orden de encender la '

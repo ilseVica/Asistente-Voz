@@ -95,7 +95,7 @@ from telegram import (CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
                       Update)
 from telegram.constants import ParseMode
 from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
-                          CommandHandler, ContextTypes)
+                          CommandHandler, ContextTypes, filters, MessageHandler)
 
 import alertas as alertas_modulo
 import config
@@ -192,6 +192,10 @@ class ClienteBot:
             )
             self.aplicacion.add_handler(
                 CallbackQueryHandler(self.cmd_atendi, pattern="^" + PREFIJO_CODIGO)
+            )
+            self.aplicacion.add_handler(
+                MessageHandler(filters.TEXT & ~filters.COMMAND,
+                               self.cmd_texto_libre)
             )
             self.aplicacion.add_error_handler(self._error)
             registro.info("bot de comandos arrancando")
@@ -532,6 +536,55 @@ class ClienteBot:
             await consulta.answer(
                 textos.YA_ATENDIDA if fresca else textos.YA_ESTABA_ATENDIDA
             )
+
+
+    async def cmd_texto_libre(self, update: Update,
+                              contexto: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._es_privado(update):
+            return
+        if update.effective_message is None:
+            return
+        chat_id = str(update.effective_chat.id)
+        if not self.base.familiar_activo(chat_id):
+            await update.effective_message.reply_text(
+                texto_pedir_registro(self.base))
+            return
+        texto = (update.effective_message.text or "").strip()
+        if not texto:
+            return
+        if len(texto) > config.LIMITE_CHAT_CARACTERES:
+            await update.effective_message.reply_text(textos.CHAT_DEMASIADO_LARGO)
+            return
+        ahora = int(time.time())
+        ultima = self.base.ultimo_mensaje_de(chat_id)
+        if ultima is not None and ahora - int(ultima["creado_en"]) < config.PAUSA_CHAT_S:
+            await update.effective_message.reply_text(textos.CHAT_DEMASIADO_RAPIDO)
+            return
+
+        nombre = self.base.nombre_de(chat_id) or "Familiar"
+        id_conv = self.base.crear_mensaje_conversacion(
+            nombre, chat_id, "telegram", texto, ahora=ahora)
+
+        # Confirmacion al autor (se edita cuando cambia el estado).
+        confirmacion = await update.effective_message.reply_text(
+            textos.CHAT_CONFIRMACION_ENVIADO.format(texto=texto))
+        self.base.crear_envio_conversacion(
+            id_conv, chat_id, mensaje_id=confirmacion.message_id)
+
+        # Reenvio a los demas familiares.
+        for fila in self.base.familiares_activos():
+            otro = str(fila["chat_id"])
+            if otro == chat_id:
+                continue
+            try:
+                await self.remitente.enviar(
+                    textos.CHAT_DE_OTRO.format(nombre=nombre, texto=texto),
+                    chat_id=otro,
+                )
+            except Exception as error:  # noqa: BLE001
+                registro.warning("no se pudo reenviar el mensaje del chat a %s: %s",
+                                 db_modulo.enmascarar_chat(otro),
+                                 telegram_cliente.sanear(error))
 
     # --- Utilidades --------------------------------------------------------
 

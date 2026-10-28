@@ -178,8 +178,13 @@ class ClienteMQTT:
         except UnicodeDecodeError:
             registro.warning("descartado de %s: no es UTF-8", mensaje.topic)
             return
-        registro.info("mensaje en %s%s: %s", mensaje.topic,
-                      " (retenido)" if mensaje.retain else "", cuerpo)
+        if mensaje.topic == config.TOPICO_VOZ_TEXTO:
+            registro.info("mensaje en %s%s: voz/texto (payload omitido, %d bytes)",
+                          mensaje.topic, " (retenido)" if mensaje.retain else "",
+                          len(cuerpo))
+        else:
+            registro.info("mensaje en %s%s: %s", mensaje.topic,
+                          " (retenido)" if mensaje.retain else "", cuerpo)
         # El `try` NO es opcional, y esto es de lo más importante del archivo.
         #
         # `on_message` se llama DENTRO del hilo de red de paho. Si la función de
@@ -245,11 +250,19 @@ class ClienteMQTT:
         en_callback = threading.current_thread() is self._hilo_red
         if esperar and not en_callback:
             resultado.wait_for_publish(timeout=5)
-            registro.info("publicado en %s: %s", topico, cuerpo)
+            if topico == config.TOPICO_SATELITE_DECIR:
+                registro.info("publicado en %s: satelite/decir (payload omitido, %d bytes)",
+                              topico, len(cuerpo))
+            else:
+                registro.info("publicado en %s: %s", topico, cuerpo)
         else:
             motivo = ("encolado desde el hilo de red de paho"
                       if en_callback else "encolado sin esperar el PUBACK")
-            registro.info("%s en %s: %s", motivo, topico, cuerpo)
+            if topico == config.TOPICO_SATELITE_DECIR:
+                registro.info("%s en %s: satelite/decir (payload omitido, %d bytes)",
+                              motivo, topico, len(cuerpo))
+            else:
+                registro.info("%s en %s: %s", motivo, topico, cuerpo)
 
     def publicar_config_nodo(self) -> None:
         """Publica la configuración del umbral de gas en `nodo/config`.

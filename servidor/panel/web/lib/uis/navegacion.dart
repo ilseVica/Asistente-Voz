@@ -258,6 +258,11 @@ class CabeceraEscritorio extends StatelessWidget {
                       cuenta: 0,
                     ),
                     _Pestana(
+                      destino: Destino.mensajes,
+                      rotulo: Textos.mensajes,
+                      cuenta: 0,
+                    ),
+                    _Pestana(
                       destino: Destino.familiares,
                       rotulo: Textos.familiares,
                       cuenta: 0,
@@ -408,15 +413,23 @@ class BarraInferior extends StatelessWidget {
               _DestinoBarra(
                 icono: Icons.schedule_outlined,
                 activo: Icons.schedule,
-                rotulo: Textos.recordatorios,
+                rotulo: Textos.barraAgenda,
                 seleccionado: estado.destino == Destino.recordatorios,
                 cuenta: 0,
                 alPulsar: () => estado.irA(Destino.recordatorios),
               ),
               _DestinoBarra(
+                icono: Icons.chat_bubble_outline,
+                activo: Icons.chat_bubble,
+                rotulo: Textos.mensajes,
+                seleccionado: estado.destino == Destino.mensajes,
+                cuenta: 0,
+                alPulsar: () => estado.irA(Destino.mensajes),
+              ),
+              _DestinoBarra(
                 icono: Icons.people_outline,
                 activo: Icons.people,
-                rotulo: Textos.familiares,
+                rotulo: Textos.barraFamilia,
                 seleccionado: estado.destino == Destino.familiares,
                 cuenta: 0,
                 alPulsar: () => estado.irA(Destino.familiares),
@@ -481,18 +494,13 @@ class _DestinoBarra extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 3),
-              // «Recordatorios» no cabe siempre en una celda a 390 px: con
-              // FittedBox se achica la letra en vez de partirse en dos líneas,
-              // que es lo que hacía el contenedor saltar por 13 px.
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(rotulo,
-                    maxLines: 1,
-                    style: TextStyle(
-                        color: color,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700)),
-              ),
+              Text(rotulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                  style: TextStyle(
+                      color: color,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700)),
             ],
           ),
         ),

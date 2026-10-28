@@ -453,3 +453,48 @@ String cuandoSeDijo(int epochSegundos, {DateTime? hoy}) {
   if (dias == 1) return 'ayer a las $hora';
   return 'el ${fecha.day}/${fecha.month}/${fecha.year} a las $hora';
 }
+
+
+class EntradaConversacion {
+  const EntradaConversacion({
+    required this.id,
+    required this.creadoEn,
+    required this.tipo,
+    this.autor,
+    this.origen,
+    this.texto,
+    this.estado,
+    this.estadoTexto,
+    this.alerta,
+  });
+
+  final int id;
+  final int creadoEn;
+  final String tipo;
+  final String? autor;
+  final String? origen;
+  final String? texto;
+  final String? estado;
+  final String? estadoTexto;
+  final Alerta? alerta;
+
+  bool get esMensaje => tipo == 'mensaje';
+  bool get esRespuesta => tipo == 'respuesta';
+  bool get esAlerta => tipo == 'alerta';
+
+  factory EntradaConversacion.desde(Map<String, dynamic> json) =>
+      EntradaConversacion(
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        creadoEn: (json['creado_en'] as num?)?.toInt() ?? 0,
+        tipo: json['tipo'] as String? ?? '',
+        autor: json['autor'] as String?,
+        origen: json['origen'] as String?,
+        texto: json['texto'] as String?,
+        estado: json['estado'] as String?,
+        estadoTexto: json['estado_texto'] as String?,
+        alerta: json['alerta'] == null
+            ? null
+            : Alerta.desde(
+                (json['alerta'] as Map).cast<String, dynamic>()),
+      );
+}

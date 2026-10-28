@@ -200,6 +200,26 @@ class ClienteApi {
         .toList();
   }
 
+  Future<Map<String, dynamic>> conversacion({int limite = 50, int? antesId}) async {
+    final Map<String, String> q = <String, String>{'limite': '$limite'};
+    if (antesId != null && antesId > 0) q['antes_id'] = '$antesId';
+    final http.Response respuesta = await _cliente
+        .get(_ruta('/api/conversacion', q), headers: _cabeceras)
+        .timeout(const Duration(seconds: 15));
+    return (await _json(respuesta) as Map).cast<String, dynamic>();
+  }
+
+  Future<EntradaConversacion> enviarMensaje(String texto) async {
+    final http.Response respuesta = await _cliente
+        .post(_ruta('/api/conversacion'),
+            headers: _cabeceras, body: jsonEncode({'texto': texto}))
+        .timeout(const Duration(seconds: 15));
+    final Map<String, dynamic> datos =
+        (await _json(respuesta) as Map).cast<String, dynamic>();
+    // El POST devuelve la entrada directamente.
+    return EntradaConversacion.desde(datos);
+  }
+
   /// Crea un recordatorio. `fecha` sólo en los de una sola vez y `dias` sólo en
   /// los semanales: el servidor rechaza con 422 si se cuelan en los demás.
   Future<Recordatorio> crearRecordatorio({

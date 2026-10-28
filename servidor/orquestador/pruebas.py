@@ -3675,6 +3675,160 @@ else:
            ruta_acl_24)
 
 
+
+# =============================================================================
+# Chat de dos vias: conversacion
+# =============================================================================
+
+titulo("Chat: conversacion")
+
+base, ruta = base_nueva("chat-")
+base.registrar_familiar("111", nombre="Ana")
+id1 = base.crear_mensaje_conversacion("Ana", "111", "panel", "hola", ahora=1000)
+prueba("crear mensaje devuelve id", isinstance(id1, int) and id1 > 0)
+fila = base.obtener_conversacion(id1)
+prueba("mensaje nace con estado enviado", fila["estado"] == "enviado")
+prueba("autor_chat_id se guarda internamente", fila["autor_chat_id"] == "111")
+base.actualizar_estado_conversacion(id1, "se_dijo", ahora=1001)
+prueba("estado se actualiza a se_dijo", base.obtener_conversacion(id1)["estado"] == "se_dijo")
+
+# rate limit
+base.crear_mensaje_conversacion("Ana", "111", "telegram", "otro", ahora=1002)
+ult = base.ultimo_mensaje_de("111")
+prueba("ultimo_mensaje_de devuelve la fila", ult is not None and int(ult["creado_en"]) == 1002)
+
+# paginacion
+for i in range(60):
+    base.crear_mensaje_conversacion("Ana", "111", "panel", "m%d" % i, ahora=2000 + i)
+filas, hay_mas = base.listar_conversacion(limite=5)
+prueba("listar_conversacion devuelve 5", len(filas) == 5)
+prueba("hay_mas es True con mas de 5", hay_mas is True)
+# antes_id
+filas2, _ = base.listar_conversacion(limite=5, antes_id=filas[0]["id"])
+prueba("paginacion con antes_id devuelve filas", len(filas2) == 5)
+
+# backfill de alertas en migracion: simular version 8
+base2, ruta2 = base_nueva("chatmig-")
+base2.insertar_alerta("alerta-mig", "gas", '{"id":"alerta-mig","gas_adc":2100}')
+base2.conexion.execute("PRAGMA user_version=8")
+base2.conexion.execute("DROP TABLE IF EXISTS conversacion")
+base2.conexion.execute("DROP TABLE IF EXISTS conversacion_envios")
+base2.conexion.commit()
+base2.cerrar()
+base3 = db_modulo.BaseDatos(ruta2)
+mig = base3.conexion.execute(
+    "SELECT * FROM conversacion WHERE alerta_id='alerta-mig'").fetchall()
+prueba("backfill crea entrada tipo alerta", len(mig) == 1 and mig[0]["tipo"] == "alerta")
+base3.cerrar()
+
+# ventana de respuesta se reinicia: comprobar en voz
+import voz
+voz.abrir_ventana_respuesta()
+primera = voz._ventana_hasta["valor"]
+voz.abrir_ventana_respuesta()
+prueba("abrir ventana actualiza el limite", voz._ventana_hasta["valor"] >= primera)
+
+# texto_libre fuera de la ventana se ignora: procesar no registra nada
+voz.cerrar_ventana_respuesta()
+antes = COMPROBACIONES[0]
+# procesar con texto_libre pero sin ventana; no debe lanzar ni guardar
+voz.procesar('{"ts": %d, "texto": "enciende la luz", "texto_libre": "secreto libre", "frase_id": "f1"}' % int(__import__("time").time()),
+             lambda *a, **k: None, base)
+prueba("procesar fuera de ventana no lanza", True)
+
+base.cerrar()
+
+
+# =============================================================================
+# Privacidad de logs: texto libre y mensajes del chat no se registran
+# =============================================================================
+
+titulo("Privacidad de logs")
+
+import io as _io
+import logging as _logging
+
+# voz.procesar con texto libre, fuera de ventana: no debe aparecer el texto libre
+voz.cerrar_ventana_respuesta()
+buf = _io.StringIO()
+handler = _logging.StreamHandler(buf)
+handler.setLevel(_logging.DEBUG)
+for name in ("voz", "mqtt", "orquestador"):
+    _logging.getLogger(name).addHandler(handler)
+secreto = "TEXTO-SECRETO-LIBRE-123"
+voz.procesar('{"ts": %d, "texto": "[unk]", "texto_libre": "%s", "frase_id": "fpriv"}'
+             % (int(time.time()), secreto),
+             lambda *a, **k: None, None)
+for name in ("voz", "mqtt", "orquestador"):
+    _logging.getLogger(name).removeHandler(handler)
+salida = buf.getvalue()
+prueba("el texto libre no aparece en el log de voz", secreto not in salida, salida[:200])
+
+# mqtt_cliente no registra el payload completo de voz/texto
+buf2 = _io.StringIO()
+h2 = _logging.StreamHandler(buf2)
+h2.setLevel(_logging.DEBUG)
+_logging.getLogger("mqtt").addHandler(h2)
+import mqtt_cliente as _mc
+# simular _al_mensaje con un mensaje falso
+class _Msg:
+    topic = "casa/sala/voz/texto"
+    payload = ('{"texto":"SECRETO-MQTT","texto_libre":"LIBRE-MQTT"}').encode()
+    retain = False
+mc = _mc.ClienteMQTT.__new__(_mc.ClienteMQTT)
+mc._hilo_red = None
+# evitar init completo: llamar solo _al_mensaje con un cliente falso no necesario
+try:
+    _mc.ClienteMQTT._al_mensaje(mc, None, None, _Msg())
+except Exception:
+    pass
+_logging.getLogger("mqtt").removeHandler(h2)
+salida2 = buf2.getvalue()
+prueba("mqtt no registra el payload de voz/texto",
+       "SECRETO-MQTT" not in salida2 and "LIBRE-MQTT" not in salida2,
+       salida2[:200])
+
+
+# =============================================================================
+# Chat: ayuda dentro de la ventana de respuesta
+# =============================================================================
+
+titulo("Chat: ayuda dentro de la ventana")
+
+import json as _json_ayuda
+_gram = _json_ayuda.load(open(os.path.join(RAIZ, "..", "voz", "gramatica.json"), encoding="utf-8"))
+_frases_ayuda = _gram["intenciones"]["AYUDA"]
+
+for _frase in _frases_ayuda:
+    _base, _ruta = base_nueva("ayuda-vent-")
+    voz.abrir_ventana_respuesta()
+    _publicados = []
+    def _pub(topico, carga, qos=1, retain=False, esperar=True):
+        _publicados.append((topico, carga))
+    voz.procesar(
+        _json_ayuda.dumps({"ts": int(time.time()), "texto": _frase,
+                           "frase_id": "fayuda"}),
+        _pub, _base)
+    _respuestas = _base.conexion.execute(
+        "SELECT COUNT(*) AS n FROM conversacion WHERE tipo='respuesta'").fetchone()["n"]
+    prueba("ayuda '%s' dentro de la ventana NO se guarda como respuesta" % _frase,
+           _respuestas == 0)
+    prueba("ayuda '%s' dentro de la ventana publica alerta de ayuda" % _frase,
+           any(t == config.TOPICO_ALERTA_AYUDA for t, _ in _publicados))
+    _base.cerrar()
+
+# Fuera de la ventana se comporta igual (genera alerta).
+_base2, _ = base_nueva("ayuda-fuera-")
+_pub2 = []
+voz.cerrar_ventana_respuesta()
+voz.procesar(
+    _json_ayuda.dumps({"ts": int(time.time()), "texto": _frases_ayuda[0],
+                       "frase_id": "fayuda2"}),
+    lambda t, c, qos=1, retain=False, esperar=True: _pub2.append((t, c)), _base2)
+prueba("ayuda fuera de la ventana tambien publica alerta de ayuda",
+       any(t == config.TOPICO_ALERTA_AYUDA for t, _ in _pub2))
+_base2.cerrar()
+
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))

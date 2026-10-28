@@ -36,6 +36,8 @@ NO_PUDO_APAGAR_LUZ = "No pude apagar la luz."
 RESPUESTA_AYUDA = "No se preocupe, ya avisé a su familia."
 RESPUESTA_AYUDA_RECIENTE = "Ya avisé a su familia hace un momento. Alguien se comunicará con usted pronto."
 RESPUESTA_CANCELAR = "De acuerdo, cancelado."
+RESPUESTA_CHAT_ENVIADA = "Listo, le envié su respuesta."
+PERDON_NO_ESCUCHO = "Perdón, no le escuché bien. ¿Me lo repite?"
 
 # El eco de prueba (se queda hasta el Paso 3).
 ECO = "Usted dijo: {texto}."
@@ -395,6 +397,17 @@ SOLO_REGISTRADOS = "Solo los familiares registrados pueden usar este botón."
 ANOTADO_SIN_EDITAR = "Anotado. No se pudo actualizar el mensaje anterior."
 YA_ATENDIDA = "Ya está atendida."
 YA_ESTABA_ATENDIDA = "Esta alerta ya estaba atendida."
+
+# --- Chat de dos vias ------------------------------------------------------
+CHAT_CONFIRMACION_ENVIADO = "Se envió a la sala: «{texto}»\nEstado: Enviado."
+CHAT_CONFIRMACION_SE_DJO = "Se envió a la sala: «{texto}»\nEstado: Se dijo en la sala."
+CHAT_CONFIRMACION_NO_SE_PUDO = "Se envió a la sala: «{texto}»\nEstado: No se pudo decir (satélite desconectado)."
+CHAT_DE_OTRO = "{nombre} a la sala: {texto}"
+CHAT_DESDE_PANEL = "{nombre} a la sala (desde el panel): {texto}"
+CHAT_RESPUESTA_SALA = "La sala respondió: «{texto}»"
+CHAT_DEMASIADO_RAPIDO = "Solo puede enviar un mensaje cada 5 segundos."
+CHAT_DEMASIADO_LARGO = "El mensaje no puede pasar de 200 caracteres."
+
 ERROR_BOTON = "Ocurrió un error. Por favor, inténtelo de nuevo."
 ERROR_COMANDO = "Ocurrió un error al procesar el comando. Por favor, inténtelo de nuevo."
 

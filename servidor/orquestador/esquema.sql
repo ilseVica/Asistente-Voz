@@ -479,3 +479,53 @@ CREATE INDEX IF NOT EXISTS idx_codigos_acceso_expira
 
 CREATE INDEX IF NOT EXISTS idx_codigos_acceso_chat
     ON codigos_acceso (chat_id);
+
+
+-- --- conversacion (Paso 6, chat de dos vias) -------------------------------
+--
+-- Fuente unica de la conversacion de la sala. Un fila por entrada, en orden de
+-- tiempo. Los mensajes del bot (/registro, /panel, ...) NO entran aqui.
+--
+-- `alerta_id` enlaza con `alertas.id` sin duplicar datos: el estado (pendiente /
+-- atendida por <nombre>) se lee de ahi. Las demas columnas son NULL en ese caso.
+--
+-- `autor_chat_id` es interno y nunca sale por la API ni por el WebSocket.
+
+CREATE TABLE IF NOT EXISTS conversacion (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    creado_en       INTEGER NOT NULL,
+    tipo            TEXT NOT NULL CHECK(tipo IN ('mensaje','respuesta','alerta')),
+    autor           TEXT,
+    origen          TEXT CHECK(origen IS NULL OR origen IN ('panel','telegram')),
+    autor_chat_id   TEXT,
+    texto           TEXT,
+    estado          TEXT CHECK(estado IS NULL OR estado IN ('enviado','se_dijo','no_se_pudo_decir')),
+    estado_en       INTEGER,
+    alerta_id       TEXT,
+    notificado_en   INTEGER,
+    purgable_en     INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversacion_creado
+    ON conversacion (creado_en);
+CREATE INDEX IF NOT EXISTS idx_conversacion_alerta
+    ON conversacion (alerta_id);
+CREATE INDEX IF NOT EXISTS idx_conversacion_estado
+    ON conversacion (estado, creado_en);
+
+-- --- conversacion_envios ---------------------------------------------------
+--
+-- Un mensaje de Telegram por destinatario, para poder editarlo cuando cambia el
+-- estado (igual que `envios` para las alertas).
+
+CREATE TABLE IF NOT EXISTS conversacion_envios (
+    conversacion_id INTEGER NOT NULL,
+    chat_id         TEXT NOT NULL,
+    mensaje_id      INTEGER,
+    editado_en      INTEGER,
+    creado_en       INTEGER NOT NULL,
+    PRIMARY KEY (conversacion_id, chat_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_conv_envios_pendientes
+    ON conversacion_envios (editado_en, mensaje_id);

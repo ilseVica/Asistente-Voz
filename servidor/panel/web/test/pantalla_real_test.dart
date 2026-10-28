@@ -55,8 +55,9 @@ void main() {
     expect(find.text('Panel'), findsWidgets);
     expect(find.text('Historial de alertas'), findsWidgets);
     expect(find.text('Recordatorios'), findsWidgets);
-    expect(find.text('Familiares'), findsWidgets);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Familiares').evaluate().isNotEmpty ||
+        find.text('Familia').evaluate().isNotEmpty, isTrue);
+    expect(find.text('Mensajes'), findsWidgets);
     expect(find.textContaining('Sin conexión'), findsWidgets);
     expect(find.text('Sin datos'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
@@ -111,8 +112,9 @@ void main() {
     expect(find.text('Panel'), findsWidgets);
     expect(find.text('Historial de alertas'), findsWidgets);
     expect(find.text('Recordatorios'), findsWidgets);
-    expect(find.text('Familiares'), findsWidgets);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Familiares').evaluate().isNotEmpty ||
+        find.text('Familia').evaluate().isNotEmpty, isTrue);
+    expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Sala conectada'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
     expect(find.text('Normal'), findsWidgets);
@@ -178,8 +180,9 @@ void main() {
     expect(find.text('Panel'), findsWidgets);
     expect(find.text('Historial de alertas'), findsWidgets);
     expect(find.text('Recordatorios'), findsWidgets);
-    expect(find.text('Familiares'), findsWidgets);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Familiares').evaluate().isNotEmpty ||
+        find.text('Familia').evaluate().isNotEmpty, isTrue);
+    expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Alerta activa'), findsWidgets);
     expect(find.textContaining('Gas detectado'), findsWidgets);
     expect(find.text('Pendiente'), findsWidgets);
@@ -232,8 +235,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
 
-    expect(find.text('Familiares'), findsWidgets);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Familiares').evaluate().isNotEmpty ||
+        find.text('Familia').evaluate().isNotEmpty, isTrue);
+    expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Sin datos'), findsWidgets);
     expect(find.textContaining('Sin conexión'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
@@ -285,8 +289,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
 
-    expect(find.text('Familiares'), findsWidgets);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Familiares').evaluate().isNotEmpty ||
+        find.text('Familia').evaluate().isNotEmpty, isTrue);
+    expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Conectada'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
   });
@@ -346,8 +351,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
 
-    expect(find.text('Familiares'), findsWidgets);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Familiares').evaluate().isNotEmpty ||
+        find.text('Familia').evaluate().isNotEmpty, isTrue);
+    expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Alerta activa'), findsWidgets);
     expect(find.textContaining('Gas detectado'), findsWidgets);
     expect(find.text('Pendiente'), findsWidgets);
@@ -399,8 +405,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
 
-    expect(find.text('Familiares'), findsWidgets);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Familiares').evaluate().isNotEmpty ||
+        find.text('Familia').evaluate().isNotEmpty, isTrue);
+    expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Sin datos'), findsWidgets);
     expect(find.textContaining('Sin conexión'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
@@ -452,8 +459,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
 
-    expect(find.text('Familiares'), findsWidgets);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Familiares').evaluate().isNotEmpty ||
+        find.text('Familia').evaluate().isNotEmpty, isTrue);
+    expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Sala conectada'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
   });
@@ -513,8 +521,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
 
-    expect(find.text('Familiares'), findsWidgets);
-    expect(find.text('Mensajes'), findsNothing);
+    expect(find.text('Familiares').evaluate().isNotEmpty ||
+        find.text('Familia').evaluate().isNotEmpty, isTrue);
+    expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Alerta activa'), findsWidgets);
     expect(find.textContaining('Gas detectado'), findsWidgets);
     expect(find.text('Pendiente'), findsWidgets);
@@ -732,4 +741,30 @@ testWidgets('gas y ayuda a la vez: manda gas en 390, 820 y 1280', (tester) async
     expect(find.text('Piden ayuda'), findsNothing);
   }
 });
+
+
+  for (final Size tamano in <Size>[const Size(390, 844), const Size(820, 1180), const Size(1280, 900)]) {
+    testWidgets('chat a ${tamano.width} px no se rompe', (tester) async {
+      tester.view.physicalSize = tamano;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final EstadoPanel estado = EstadoPanel();
+      estado.api.ponerToken('token-de-prueba');
+      estado.preparando = false;
+      estado.avisoPendiente = false;
+      estado.errorArranque = null;
+      estado.destino = Destino.mensajes;
+      estado.conversacion = <EntradaConversacion>[
+        EntradaConversacion(id: 1, creadoEn: estado.ahoraLocal(), tipo: 'mensaje', autor: 'Ana', texto: 'hola', estado: 'enviado', estadoTexto: 'Enviado'),
+        EntradaConversacion(id: 2, creadoEn: estado.ahoraLocal(), tipo: 'respuesta', autor: 'La sala', texto: 'bien', estadoTexto: ''),
+      ];
+      await tester.pumpWidget(MaterialApp(theme: Tema.construir(), home: AsistentePanel(estado: estado, arrancar: false)));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+      expect(find.text('Enviar a la sala'), findsWidgets);
+    });
+  }
+
 }

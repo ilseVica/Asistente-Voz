@@ -283,6 +283,7 @@ def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
                                    satelites=satelites)
     elif reloj is not None and topico == config.TOPICO_SENSORES:
         reloj.registrar_sensores(cuerpo)
+        voz.actualizar_sensores(cuerpo)
     elif reloj is not None and topico == config.TOPICO_NODO_ESTADO:
         reloj.registrar_nodo(cuerpo)
         voz.actualizar_nodo(cuerpo)

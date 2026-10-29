@@ -455,3 +455,9 @@ Al cierre de la semana 7, la fase entrega lo siguiente:
 - [ ] Documentos de las Etapas 3 y 5 actualizados.
 - [ ] Guion de la demostración, con su variante 100 % local.
 - [ ] Diagrama de arquitectura general del sistema, actualizado con la versión final (Paso 5).
+
+## Trabajo futuro: «busca un video»
+
+El satélite no recibe voz/texto. Sería el orquestador quien publicase la búsqueda
+en un tópico propio del satélite, con la consulta pasada a yt-dlp como argumento
+(nunca por shell). El satélite arma la URL localmente.

@@ -15,6 +15,8 @@ import re
 import threading
 import time
 import unicodedata
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import config
 import textos
@@ -26,6 +28,7 @@ CONTADOR_AYUDA = [0]
 
 # Estado en memoria que actualizan los mensajes MQTT (orquestador.enrutar).
 _estado_luz = {"valor": None}   # "on" | "off" | None
+_ultimos_sensores = {"temperatura": None, "humedad": None, "ts": None}
 _nodo_conectado = {"valor": None}  # True | False | None
 _ventana_hasta = {"valor": 0.0}
 _ventana_reintentos = {"valor": 0}
@@ -121,6 +124,18 @@ def actualizar_nodo(cuerpo: str) -> None:
             _nodo_conectado["valor"] = True
         elif carga.get("conectado") is False:
             _nodo_conectado["valor"] = False
+
+def actualizar_sensores(cuerpo: str) -> None:
+    try:
+        carga = json.loads(cuerpo)
+    except (TypeError, ValueError):
+        return
+    if isinstance(carga, dict):
+        if "temperatura_c" in carga:
+            _ultimos_sensores["temperatura"] = carga.get("temperatura_c")
+        if "humedad_pct" in carga:
+            _ultimos_sensores["humedad"] = carga.get("humedad_pct")
+        _ultimos_sensores["ts"] = int(time.time())
 
 
 def _publicar_respuesta(publicar, texto, frase_id=None):
@@ -288,6 +303,107 @@ def procesar(cuerpo: str, publicar, base=None) -> bool:
         _publicar_respuesta(publicar, textos.RESPUESTA_CANCELAR, frase_id)
         registro.info("voz turno: texto=%r intencion=CANCELAR accion=cancelar "
                       "latencia_ms=%d", texto, latencia)
+        return True
+
+    if intencion == "HORA":
+        ahora = datetime.now(ZoneInfo("America/Mazatlan"))
+        hora = ahora.hour
+        minuto = ahora.minute
+        if minuto == 0:
+            if hora == 0:
+                frase_hora = "Es medianoche."
+            elif hora == 12:
+                frase_hora = "Son las doce del día."
+            elif hora < 12:
+                frase_hora = "Son las %d en punto." % hora
+            else:
+                h = hora - 12
+                frase_hora = "Son las %d de la noche." % h if h != 12 else "Son las doce de la noche."
+        else:
+            if hora == 0:
+                frase_hora = "Es la una y %d de la madrugada." % minuto if hora == 1 else "Son las %d y %d de la madrugada." % (hora, minuto)
+            elif hora < 12:
+                if hora == 1:
+                    frase_hora = "Es la una y %d." % minuto
+                else:
+                    frase_hora = "Son las %d y %d." % (hora, minuto)
+            elif hora == 12:
+                frase_hora = "Son las doce y %d del día." % minuto
+            else:
+                h = hora - 12
+                if h == 1:
+                    frase_hora = "Es la una y %d de la tarde." % minuto
+                elif h < 6:
+                    frase_hora = "Son las %d y %d de la tarde." % (h, minuto)
+                else:
+                    if h == 1:
+                        frase_hora = "Es la una y %d de la noche." % minuto
+                    else:
+                        frase_hora = "Son las %d y %d de la noche." % (h, minuto)
+        _publicar_respuesta(publicar, frase_hora, frase_id)
+        return True
+
+    if intencion == "FECHA":
+        ahora = datetime.now(ZoneInfo("America/Mazatlan"))
+        dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+        meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                 "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+        texto_fecha = "Hoy es %s %d de %s." % (
+            dias[ahora.weekday()], ahora.day, meses[ahora.month - 1])
+        _publicar_respuesta(publicar, texto_fecha, frase_id)
+        return True
+
+    if intencion == "TEMPERATURA":
+        ts = _ultimos_sensores.get("ts")
+        if ts is None or (int(time.time()) - int(ts)) > 300:
+            _publicar_respuesta(publicar, textos.RESPUESTA_SIN_TEMPERATURA, frase_id)
+            return True
+        temp = _ultimos_sensores.get("temperatura")
+        hum = _ultimos_sensores.get("humedad")
+        try:
+            temp_txt = str(int(round(float(temp)))) if temp is not None else None
+        except (TypeError, ValueError):
+            temp_txt = None
+        try:
+            hum_txt = str(int(round(float(hum)))) if hum is not None else None
+        except (TypeError, ValueError):
+            hum_txt = None
+        if temp_txt is None:
+            _publicar_respuesta(publicar, textos.RESPUESTA_SIN_TEMPERATURA, frase_id)
+            return True
+        if hum_txt is not None:
+            respuesta = "En la sala hay %s grados y %s por ciento de humedad." % (temp_txt, hum_txt)
+        else:
+            respuesta = "En la sala hay %s grados." % temp_txt
+        _publicar_respuesta(publicar, respuesta, frase_id)
+        return True
+
+    if intencion == "RECORDATORIOS":
+        if base is None or not hasattr(base, "listar_recordatorios"):
+            _publicar_respuesta(publicar, textos.RESPUESTA_SIN_RECORDATORIOS, frase_id)
+            return True
+        hoy = datetime.now(ZoneInfo("America/Mazatlan")).date()
+        pendientes = []
+        for fila in base.listar_recordatorios():
+            if not fila["activo"]:
+                continue
+            prox = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan")).date()
+            if prox == hoy:
+                hora = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan")).strftime("%H:%M")
+                pendientes.append((hora, fila["texto"]))
+        if not pendientes:
+            _publicar_respuesta(publicar, textos.RESPUESTA_SIN_RECORDATORIOS, frase_id)
+            return True
+        pendientes.sort()
+        partes = ["a las %s, %s" % (h, t) for h, t in pendientes]
+        _publicar_respuesta(publicar, "Hoy tiene: " + "; ".join(partes) + ".", frase_id)
+        return True
+
+    if intencion == "ESTOY_BIEN":
+        if base is not None and hasattr(base, "crear_aviso_conversacion"):
+            base.crear_aviso_conversacion("La sala", "0", "panel",
+                                          "La sala avisa que está bien")
+        _publicar_respuesta(publicar, textos.RESPUESTA_ESTOY_BIEN, frase_id)
         return True
 
     # Intencion desconocida (no deberia ocurrir).

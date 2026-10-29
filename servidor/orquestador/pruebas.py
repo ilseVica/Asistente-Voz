@@ -4087,6 +4087,71 @@ base.cerrar()
 
 
 
+
+
+# =============================================================================
+# Nuevas frases del asistente (parte A)
+# =============================================================================
+
+titulo("Nuevas frases del asistente")
+
+AHORA2 = int(time.time())
+publicador_nuevo = []
+
+def _pub(topico, carga, qos=1):
+    publicador_nuevo.append((topico, carga))
+
+# HORA
+voz.procesar('{"frase_id":"h1","texto":"que hora es","modo":"comandos","ts":%d}' % AHORA2, _pub)
+resp_hora = [c for t,c in publicador_nuevo if t == config.TOPICO_SATELITE_DECIR]
+prueba("HORA publica respuesta hablada",
+       len(resp_hora) >= 1 and ("Son las" in resp_hora[-1]["texto"] or "Es la" in resp_hora[-1]["texto"] or "medianoche" in resp_hora[-1]["texto"]),
+       resp_hora)
+publicador_nuevo.clear()
+
+# FECHA
+voz.procesar('{"frase_id":"f1","texto":"que fecha es hoy","modo":"comandos","ts":%d}' % AHORA2, _pub)
+resp_fecha = [c for t,c in publicador_nuevo if t == config.TOPICO_SATELITE_DECIR]
+prueba("FECHA publica 'Hoy es ...'",
+       len(resp_fecha) >= 1 and str(resp_fecha[-1]["texto"]).startswith("Hoy es"),
+       resp_fecha)
+publicador_nuevo.clear()
+
+# TEMPERATURA sin sensor -> sin dato
+voz.procesar('{"frase_id":"t1","texto":"que temperatura hace","modo":"comandos","ts":%d}' % AHORA2, _pub)
+resp_temp = [c for t,c in publicador_nuevo if t == config.TOPICO_SATELITE_DECIR]
+prueba("TEMPERATURA sin sensor dice sin dato",
+       len(resp_temp) >= 1 and resp_temp[-1]["texto"] == textos.RESPUESTA_SIN_TEMPERATURA,
+       resp_temp)
+publicador_nuevo.clear()
+
+# RECORDATORIOS sin pendientes
+base_nr, _ = base_nueva("nuevasfrases-")
+voz.procesar('{"frase_id":"r1","texto":"tengo recordatorios","modo":"comandos","ts":%d}' % AHORA2, _pub, base=base_nr)
+resp_rec = [c for t,c in publicador_nuevo if t == config.TOPICO_SATELITE_DECIR]
+prueba("RECORDATORIOS sin pendientes dice sin recordatorios",
+       len(resp_rec) >= 1 and resp_rec[-1]["texto"] == textos.RESPUESTA_SIN_RECORDATORIOS,
+       resp_rec)
+base_nr.cerrar()
+publicador_nuevo.clear()
+
+# ESTOY_BIEN no genera alerta y va a Telegram (conversacion aviso)
+base_eb, _ = base_nueva("estoybien-")
+antes_alertas = base_eb.conexion.execute("SELECT COUNT(*) FROM alertas").fetchone()[0]
+voz.procesar('{"frase_id":"e1","texto":"avisa a mi familia que estoy bien","modo":"comandos","ts":%d}' % AHORA2, _pub, base=base_eb)
+resp_eb = [c for t,c in publicador_nuevo if t == config.TOPICO_SATELITE_DECIR]
+prueba("ESTOY_BIEN responde listo",
+       len(resp_eb) >= 1 and resp_eb[-1]["texto"] == textos.RESPUESTA_ESTOY_BIEN,
+       resp_eb)
+despues_alertas = base_eb.conexion.execute("SELECT COUNT(*) FROM alertas").fetchone()[0]
+prueba("ESTOY_BIEN no genera alerta",
+       antes_alertas == despues_alertas, (antes_alertas, despues_alertas))
+avisos_eb = [r for r in base_eb.conexion.execute("SELECT * FROM conversacion WHERE tipo='aviso'").fetchall()]
+prueba("ESTOY_BIEN crea aviso en la conversacion",
+       len(avisos_eb) >= 1, [r["texto"] for r in avisos_eb])
+base_eb.cerrar()
+publicador_nuevo.clear()
+
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))
@@ -4174,6 +4239,13 @@ motivo11 = registro_modulo.comprobar_codigo(codigo10)
 prueba("codigo del comando sigue venciendo a los 10 min",
        motivo11 is not None, motivo11)
 registro_modulo.time.time = _tiempo_original
+
+print("\n" + "=" * 66)
+print("comprobaciones: %d" % COMPROBACIONES[0])
+print("fallos: %d" % len(FALLOS))
+for nombre in FALLOS:
+    print("  - " + nombre)
+sys.exit(1 if FALLOS else 0)
 
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])

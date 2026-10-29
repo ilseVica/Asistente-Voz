@@ -72,7 +72,6 @@
       "cancela la cita",
       "olvidalo todo",
       "hola buenos dias",
-      "que hora es",
       "la luz",
       "la luz esta bonita",
       "gracias por todo",
@@ -85,6 +84,25 @@
       "prende por favor",
       "apaga por favor",
       "por favor"
+    ],
+    "HORA": [
+      "que hora es",
+      "dime la hora"
+    ],
+    "FECHA": [
+      "que dia es hoy",
+      "que fecha es hoy"
+    ],
+    "TEMPERATURA": [
+      "que temperatura hace",
+      "como esta el clima"
+    ],
+    "RECORDATORIOS": [
+      "tengo recordatorios",
+      "que tengo hoy"
+    ],
+    "ESTOY_BIEN": [
+      "avisa a mi familia que estoy bien"
     ]
   }
 }

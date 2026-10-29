@@ -36,6 +36,11 @@ NO_PUDO_APAGAR_LUZ = "No pude apagar la luz."
 RESPUESTA_AYUDA = "No se preocupe, ya avisé a su familia."
 RESPUESTA_AYUDA_RECIENTE = "Ya avisé a su familia hace un momento. Alguien se comunicará con usted pronto."
 RESPUESTA_CANCELAR = "De acuerdo, cancelado."
+
+RESPUESTA_SIN_TEMPERATURA = "Por ahora no tengo la temperatura de la sala."
+RESPUESTA_ESTOY_BIEN = "Listo, ya le avisé a su familia."
+RESPUESTA_SIN_RECORDATORIOS = "Hoy no tiene recordatorios pendientes."
+
 RESPUESTA_CHAT_ENVIADA = "Listo, le envié su respuesta."
 PERDON_NO_ESCUCHO = "Perdón, no le escuché bien. ¿Me lo repite?"
 

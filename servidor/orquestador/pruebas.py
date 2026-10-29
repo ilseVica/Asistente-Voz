@@ -4152,6 +4152,98 @@ prueba("ESTOY_BIEN crea aviso en la conversacion",
 base_eb.cerrar()
 publicador_nuevo.clear()
 
+
+
+# =============================================================================
+from zoneinfo import ZoneInfo
+# Nuevas frases: reloj fijo y casos
+# =============================================================================
+
+titulo("Nuevas frases: reloj fijo")
+
+class _RelojFijo:
+    def __init__(self, dt):
+        self._dt = dt
+    def now(self, tz=None):
+        return self._dt
+    @staticmethod
+    def fromtimestamp(ts, tz=None):
+        return datetime.fromtimestamp(ts, tz) if tz else datetime.fromtimestamp(ts)
+
+# HORA casos
+casos_hora = [
+    ("Es la una y cinco de la tarde.", datetime(2026,10,28,13,5,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce del día.", datetime(2026,10,28,12,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Es medianoche.", datetime(2026,10,28,0,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las ocho y media de la noche.", datetime(2026,10,28,20,30,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las siete de la mañana.", datetime(2026,10,28,7,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+]
+for esperado, dt in casos_hora:
+    voz.datetime = _RelojFijo(dt)
+    voz.ZoneInfo = ZoneInfo
+    pub = []
+    voz.procesar('{"frase_id":"hf","texto":"que hora es","modo":"comandos","ts":%d}' % int(time.time()), lambda t,c,qos=1: pub.append((t,c)))
+    resp = [c for t,c in pub if t == config.TOPICO_SATELITE_DECIR]
+    prueba(esperado, len(resp) >= 1 and resp[-1]["texto"] == esperado, resp)
+
+# restaurar datetime
+import datetime as _dtmod
+voz.datetime = _dtmod.datetime
+voz.ZoneInfo = ZoneInfo
+
+# FECHA con dia de semana y mes en espanol
+voz.datetime = _RelojFijo(datetime(2026,10,28,10,0,0, tzinfo=ZoneInfo("America/Mazatlan")))
+pub = []
+voz.procesar('{"frase_id":"ff","texto":"que fecha es hoy","modo":"comandos","ts":%d}' % int(time.time()), lambda t,c,qos=1: pub.append((t,c)))
+resp = [c for t,c in pub if t == config.TOPICO_SATELITE_DECIR]
+prueba("fecha con dia de la semana y mes en espanol",
+       len(resp) >= 1 and resp[-1]["texto"] == "Hoy es miércoles 28 de octubre.", resp)
+voz.datetime = _dtmod.datetime
+
+# TEMPERATURA con lectura reciente
+voz._ultimos_sensores = {"temperatura": 26.4, "humedad": 40.2, "ts": int(time.time())}
+pub = []
+voz.procesar('{"frase_id":"tf","texto":"que temperatura hace","modo":"comandos","ts":%d}' % int(time.time()), lambda t,c,qos=1: pub.append((t,c)))
+resp = [c for t,c in pub if t == config.TOPICO_SATELITE_DECIR]
+prueba("TEMPERATURA con lectura reciente",
+       len(resp) >= 1 and resp[-1]["texto"] == "En la sala hay 26 grados y 40 por ciento de humedad.", resp)
+
+# TEMPERATURA con lectura de mas de 5 minutos
+voz._ultimos_sensores = {"temperatura": 26.4, "humedad": 40.2, "ts": int(time.time()) - 400}
+pub = []
+voz.procesar('{"frase_id":"tf2","texto":"que temperatura hace","modo":"comandos","ts":%d}' % int(time.time()), lambda t,c,qos=1: pub.append((t,c)))
+resp = [c for t,c in pub if t == config.TOPICO_SATELITE_DECIR]
+prueba("TEMPERATURA con lectura de mas de 5 minutos",
+       len(resp) >= 1 and resp[-1]["texto"] == textos.RESPUESTA_SIN_TEMPERATURA, resp)
+
+# RECORDATORIOS con dos pendientes hoy
+base_rec, _ = base_nueva("rec-")
+from datetime import datetime, time as dtime, timedelta, timezone
+from zoneinfo import ZoneInfo
+tz = ZoneInfo("America/Mazatlan")
+hoy_dt = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+h8 = int(hoy_dt.replace(hour=8).timestamp())
+h9 = int(hoy_dt.replace(hour=9).timestamp())
+base_rec.crear_recordatorio("r1", "tomar medicina", 8*60, "una_vez", None, None, "1", h8, ahora=int(time.time()))
+base_rec.crear_recordatorio("r2", "llamar", 9*60, "una_vez", None, None, "1", h9, ahora=int(time.time()))
+pub = []
+voz.procesar('{"frase_id":"rf","texto":"tengo recordatorios","modo":"comandos","ts":%d}' % int(time.time()), lambda t,c,qos=1: pub.append((t,c)), base=base_rec)
+resp = [c for t,c in pub if t == config.TOPICO_SATELITE_DECIR]
+prueba("RECORDATORIOS con dos pendientes hoy dice ambos",
+       len(resp) >= 1 and "tomar medicina" in resp[-1]["texto"] and "llamar" in resp[-1]["texto"], resp)
+base_rec.cerrar()
+
+# RECORDATORIOS con uno ya hecho (no lo dice)
+base_rec2, _ = base_nueva("rec2-")
+ayer = int(time.time()) - 86400
+base_rec2.crear_recordatorio("r3", "viejo", 8*60, "una_vez", None, None, "1", ayer, ahora=ayer)
+pub = []
+voz.procesar('{"frase_id":"rf2","texto":"tengo recordatorios","modo":"comandos","ts":%d}' % int(time.time()), lambda t,c,qos=1: pub.append((t,c)), base=base_rec2)
+resp = [c for t,c in pub if t == config.TOPICO_SATELITE_DECIR]
+prueba("RECORDATORIOS con uno ya hecho no lo dice",
+       len(resp) >= 1 and resp[-1]["texto"] == textos.RESPUESTA_SIN_RECORDATORIOS, resp)
+base_rec2.cerrar()
+
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))
@@ -4247,9 +4339,19 @@ for nombre in FALLOS:
     print("  - " + nombre)
 sys.exit(1 if FALLOS else 0)
 
+
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))
 for nombre in FALLOS:
     print("  - " + nombre)
+
+
+
+print("\n" + "=" * 66)
+print("comprobaciones: %d" % COMPROBACIONES[0])
+print("fallos: %d" % len(FALLOS))
+for nombre in FALLOS:
+    print("  - " + nombre)
+
 sys.exit(1 if FALLOS else 0)

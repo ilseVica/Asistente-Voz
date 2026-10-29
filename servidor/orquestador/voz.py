@@ -174,6 +174,78 @@ def ventana_respuesta_abierta() -> bool:
     return time.time() < _ventana_hasta["valor"]
 
 
+
+def _numero_a_palabras(n: int) -> str:
+    unidades = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis",
+                "siete", "ocho", "nueve", "diez", "once", "doce", "trece",
+                "catorce", "quince", "dieciseis", "diecisiete", "dieciocho",
+                "diecinueve", "veinte"]
+    if n <= 20:
+        return unidades[n]
+    if n < 30:
+        return "veinti" + unidades[n - 20]
+    decenas = ["", "", "veinte", "treinta", "cuarenta", "cincuenta"]
+    d = n // 10
+    u = n % 10
+    if u == 0:
+        return decenas[d]
+    return decenas[d] + " y " + unidades[u]
+
+
+def _hora_en_palabras(ahora) -> str:
+    hora = ahora.hour
+    minuto = ahora.minute
+    if minuto == 0:
+        if hora == 0:
+            return "Es medianoche."
+        if hora == 12:
+            return "Son las doce del día."
+        if hora < 12:
+            if hora == 1:
+                return "Es la una de la mañana."
+            return "Son las %s de la mañana." % _numero_a_palabras(hora)
+        h = hora - 12
+        if h == 1:
+            return "Es la una de la tarde." if hora < 18 else "Es la una de la noche."
+        if hora < 18:
+            return "Son las %s de la tarde." % _numero_a_palabras(h)
+        return "Son las %s de la noche." % _numero_a_palabras(h)
+    if minuto == 30:
+        minuto_txt = "media"
+    else:
+        minuto_txt = _numero_a_palabras(minuto)
+    if hora == 0:
+        if minuto == 30:
+            return "Es la una y media de la madrugada."
+        return "Es la una y %s de la madrugada." % minuto_txt
+    if hora < 12:
+        if hora == 1:
+            if minuto == 30:
+                return "Es la una y media."
+            return "Es la una y %s." % minuto_txt
+        if minuto == 30:
+            return "Son las %s y media." % _numero_a_palabras(hora)
+        return "Son las %s y %s." % (_numero_a_palabras(hora), minuto_txt)
+    if hora == 12:
+        if minuto == 30:
+            return "Son las doce y media del día."
+        return "Son las doce y %s del día." % minuto_txt
+    h = hora - 12
+    if h == 1:
+        if minuto == 30:
+            return "Es la una y media de la tarde." if hora < 18 else "Es la una y media de la noche."
+        if hora < 18:
+            return "Es la una y %s de la tarde." % minuto_txt
+        return "Es la una y %s de la noche." % minuto_txt
+    if hora < 18:
+        if minuto == 30:
+            return "Son las %s y media de la tarde." % _numero_a_palabras(h)
+        return "Son las %s y %s de la tarde." % (_numero_a_palabras(h), minuto_txt)
+    if minuto == 30:
+        return "Son las %s y media de la noche." % _numero_a_palabras(h)
+    return "Son las %s y %s de la noche." % (_numero_a_palabras(h), minuto_txt)
+
+
 def procesar(cuerpo: str, publicar, base=None) -> bool:
     try:
         carga = json.loads(cuerpo)
@@ -306,41 +378,7 @@ def procesar(cuerpo: str, publicar, base=None) -> bool:
         return True
 
     if intencion == "HORA":
-        ahora = datetime.now(ZoneInfo("America/Mazatlan"))
-        hora = ahora.hour
-        minuto = ahora.minute
-        if minuto == 0:
-            if hora == 0:
-                frase_hora = "Es medianoche."
-            elif hora == 12:
-                frase_hora = "Son las doce del día."
-            elif hora < 12:
-                frase_hora = "Son las %d en punto." % hora
-            else:
-                h = hora - 12
-                frase_hora = "Son las %d de la noche." % h if h != 12 else "Son las doce de la noche."
-        else:
-            if hora == 0:
-                frase_hora = "Es la una y %d de la madrugada." % minuto if hora == 1 else "Son las %d y %d de la madrugada." % (hora, minuto)
-            elif hora < 12:
-                if hora == 1:
-                    frase_hora = "Es la una y %d." % minuto
-                else:
-                    frase_hora = "Son las %d y %d." % (hora, minuto)
-            elif hora == 12:
-                frase_hora = "Son las doce y %d del día." % minuto
-            else:
-                h = hora - 12
-                if h == 1:
-                    frase_hora = "Es la una y %d de la tarde." % minuto
-                elif h < 6:
-                    frase_hora = "Son las %d y %d de la tarde." % (h, minuto)
-                else:
-                    if h == 1:
-                        frase_hora = "Es la una y %d de la noche." % minuto
-                    else:
-                        frase_hora = "Son las %d y %d de la noche." % (h, minuto)
-        _publicar_respuesta(publicar, frase_hora, frase_id)
+        _publicar_respuesta(publicar, _hora_en_palabras(datetime.now(ZoneInfo("America/Mazatlan"))), frase_id)
         return True
 
     if intencion == "FECHA":

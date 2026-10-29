@@ -228,6 +228,9 @@ class Textos {
 
   // Chat
   static const String chatPlaceholder = 'Escriba un mensaje para la sala';
+  static const String mantenerParaHablar = 'Mantener para hablar';
+  static const String escuchando = 'Escuchando…';
+  static const String sateliteNoConectado = 'El satélite no está conectado';
   static const String enviarYDecirEnVozAlta = 'Enviar y decir en voz alta';
   static const String enviar = 'Enviar';
   static const String chatEnviar = 'Enviar a la sala';

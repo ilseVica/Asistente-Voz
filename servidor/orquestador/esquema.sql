@@ -494,7 +494,7 @@ CREATE INDEX IF NOT EXISTS idx_codigos_acceso_chat
 CREATE TABLE IF NOT EXISTS conversacion (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     creado_en       INTEGER NOT NULL,
-    tipo            TEXT NOT NULL CHECK(tipo IN ('mensaje','respuesta','alerta')),
+    tipo            TEXT NOT NULL CHECK(tipo IN ('mensaje','respuesta','alerta','aviso')),
     autor           TEXT,
     origen          TEXT CHECK(origen IS NULL OR origen IN ('panel','telegram')),
     autor_chat_id   TEXT,

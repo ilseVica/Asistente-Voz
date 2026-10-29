@@ -71,7 +71,13 @@ class Sensores {
 /// Un componente que sólo dice si está vivo y cuándo se le vio: nodo, satélite y
 /// sitio. Los tres tienen la misma forma en la API y por eso comparten clase.
 class Componente {
-  const Componente({required this.estado, this.recibidoEn, this.fuente});
+  const Componente({
+    required this.estado,
+    this.recibidoEn,
+    this.fuente,
+    this.satelites,
+    this.satelitesHablar,
+  });
 
   final String estado;
   final int? recibidoEn;
@@ -80,10 +86,20 @@ class Componente {
   /// respuesta, y no es lo mismo que la ruta del propio sitio, que siempre existe.
   final String? fuente;
 
+  /// Sólo el bloque del satélite: `{client_id: conectado}`.
+  final Map<String, bool>? satelites;
+
+  /// Sólo el bloque del satélite: `{client_id: puede hablar}`.
+  final Map<String, bool>? satelitesHablar;
+
   factory Componente.desde(Map<String, dynamic> json) => Componente(
         estado: json['estado'] as String? ?? sinDatos,
         recibidoEn: json['recibido_en'] as int?,
         fuente: json['fuente'] as String?,
+        satelites: (json['satelites'] as Map?)?.map(
+            (k, v) => MapEntry(k.toString(), v == true)),
+        satelitesHablar: (json['satelites_hablar'] as Map?)?.map(
+            (k, v) => MapEntry(k.toString(), v == true)),
       );
 }
 

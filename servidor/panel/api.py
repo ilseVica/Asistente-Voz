@@ -83,6 +83,8 @@ limite_token = seguridad.LimiteAccesos(config.INTENTOS_TOKEN_POR_IP,
 CLAVE_GLOBAL = "global"
 base: db.BaseDatos = None
 mqtt: ClienteEstado = None
+_hablar_hasta: float = 0.0
+_hablar_lock = __import__('threading').Lock()
 _ultimo_id_conversacion: int = 0
 
 
@@ -1087,6 +1089,47 @@ async def pagina_acceso(codigo: str):
 
 
 # --- La conversacion ---------------------------------------------------------
+
+
+class Hablar(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    accion: str = Field(pattern="^(inicio|fin)$")
+
+
+@app.post("/api/hablar", status_code=202)
+async def hablar(cuerpo: Hablar, sesion: dict = Depends(sesion_requerida)):
+    """Botón «Mantener para hablar» del panel: avisa al satélite por MQTT."""
+    global _hablar_hasta
+    import threading as _threading
+    ahora = int(time.time())
+    nombre = _nombre_de(sesion) or "Familiar"
+    client_id = config.SATELITE_HABLAR
+    satelites = estados.instantanea(base).get("satelite", {}).get("satelites", {})
+    if not satelites.get(client_id, False):
+        raise HTTPException(409, "El satélite no está conectado.")
+    with _hablar_lock:
+        if cuerpo.accion == "inicio":
+            if time.time() < _hablar_hasta:
+                raise HTTPException(409, "Ya hay una pulsación activa.")
+            _hablar_hasta = time.time() + 10.0
+            _threading.Timer(10.0, _limpiar_hablar).start()
+        else:
+            _hablar_hasta = 0.0
+    topico = "casa/sala/satelite/%s/hablar" % client_id
+    mqtt.publicar(topico, {"accion": cuerpo.accion, "ts": ahora}, qos=1,
+                  retain=False)
+    if cuerpo.accion == "inicio":
+        base.crear_aviso_conversacion(
+            nombre, sesion["chat_id"], "panel",
+            "%s activó el micrófono de la sala" % nombre, ahora=ahora)
+    return {"ok": True}
+
+
+def _limpiar_hablar() -> None:
+    global _hablar_hasta
+    with _hablar_lock:
+        _hablar_hasta = 0.0
 
 
 @app.get("/api/conversacion")

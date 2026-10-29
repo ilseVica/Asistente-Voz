@@ -3736,6 +3736,39 @@ voz.procesar('{"ts": %d, "texto": "enciende la luz", "texto_libre": "secreto lib
              lambda *a, **k: None, base)
 prueba("procesar fuera de ventana no lanza", True)
 
+# Migracion 9->10 con filas en conversacion_envios: las filas se conservan y
+# foreign_key_check queda vacio.
+base_mig, ruta_mig = base_nueva("mig9a10-")
+base_mig.insertar_alerta("alerta-mig9", "gas", '{"id":"alerta-mig9","gas_adc":2100}')
+base_mig.conexion.execute("PRAGMA user_version=9")
+# simular una tabla conversacion v9 (sin 'aviso') con una fila
+base_mig.conexion.execute("DROP TABLE IF EXISTS conversacion")
+base_mig.conexion.execute("""CREATE TABLE conversacion (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, creado_en INTEGER NOT NULL,
+    tipo TEXT NOT NULL CHECK(tipo IN ('mensaje','respuesta','alerta')),
+    autor TEXT, origen TEXT, autor_chat_id TEXT, texto TEXT,
+    estado TEXT, estado_en INTEGER, alerta_id TEXT, notificado_en INTEGER,
+    purgable_en INTEGER NOT NULL)""")
+base_mig.conexion.execute("""INSERT INTO conversacion (id, creado_en, tipo, alerta_id, purgable_en)
+    VALUES (1, 100, 'alerta', 'alerta-mig9', 200)""")
+base_mig.conexion.execute("""CREATE TABLE IF NOT EXISTS conversacion_envios (
+    conversacion_id INTEGER NOT NULL, chat_id TEXT NOT NULL,
+    mensaje_id INTEGER, editado_en INTEGER, creado_en INTEGER NOT NULL,
+    PRIMARY KEY (conversacion_id, chat_id))""")
+base_mig.conexion.execute("""INSERT INTO conversacion_envios (conversacion_id, chat_id, creado_en)
+    VALUES (1, '111', 100)""")
+base_mig.conexion.commit()
+base_mig.cerrar()
+base_mig2 = db_modulo.BaseDatos(ruta_mig)
+envios_mig = base_mig2.conexion.execute(
+    "SELECT count(*) FROM conversacion_envios").fetchone()[0]
+fk_mig = base_mig2.conexion.execute("PRAGMA foreign_key_check").fetchall()
+prueba("migracion 9->10 conserva filas de conversacion_envios",
+       envios_mig == 1, envios_mig)
+prueba("migracion 9->10 deja foreign_key_check vacio",
+       fk_mig == [], fk_mig)
+base_mig2.cerrar()
+
 base.cerrar()
 
 
@@ -3997,6 +4030,58 @@ prueba("Ya lo atendi borra los envios pendientes (incluido el fallido)",
        base.conexion.execute(
            "SELECT COUNT(*) FROM envios WHERE alerta_id='000000-pe-0001' AND enviado_en IS NULL"
        ).fetchone()[0] == 0)
+base.cerrar()
+
+
+
+# =============================================================================
+# 14. Aviso del microfono (tipo aviso en conversacion)
+# =============================================================================
+
+titulo("14. Aviso del microfono")
+
+base, _ = base_nueva("aviso-")
+base.registrar_familiar("111", nombre="Marta")
+id_aviso = base.crear_aviso_conversacion("Marta", "111", "panel",
+                                         "Marta activo el microfono de la sala")
+prueba("crear_aviso_conversacion crea tipo aviso",
+       base.obtener_conversacion(id_aviso)["tipo"] == "aviso")
+
+# El aviso no se dice en la sala ni abre la ventana de respuesta, pero va a Telegram.
+import threading as _threading
+_parando = _threading.Event()
+_publicados = []
+_enviados_telegram = []
+
+class RemAviso:
+    def __init__(self):
+        self.token = "x"
+        self.disponible = True
+        self.enviados = _enviados_telegram
+    def enviar(self, texto, teclado=None, chat_id=None):
+        self.enviados.append((str(chat_id), texto))
+        return len(texto)
+    def editar_mensaje(self, *a, **k):
+        return True
+
+_satelites = type("S", (), {"hay_conectado": lambda self: True})()
+_hilo = _threading.Thread(
+    target=orquestador_modulo.tarea_conversacion,
+    args=(base, lambda t, c, qos=1, retain=False: _publicados.append((t, c)),
+          RemAviso(), _satelites, _parando),
+    daemon=True)
+_hilo.start()
+time.sleep(1.5)
+_parando.set()
+_hilo.join(timeout=5)
+
+prueba("el aviso NO se publica en satelite/decir",
+       not any(t == config.TOPICO_SATELITE_DECIR for t, _ in _publicados),
+       [t for t, _ in _publicados])
+prueba("el aviso NO abre la ventana de respuesta",
+       not voz.ventana_respuesta_abierta())
+prueba("el aviso va a Telegram",
+       len(_enviados_telegram) >= 1, _enviados_telegram)
 base.cerrar()
 
 

@@ -822,6 +822,25 @@ class _BurbujaCompacta extends StatelessWidget {
         ),
       );
     }
+    if (entrada.tipo == 'aviso') {
+      final String texto = (entrada.texto ?? Textos.sinTexto).trim();
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Tema.caja,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            texto,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, color: Tema.secundario),
+          ),
+        ),
+      );
+    }
     final bool esRespuesta = entrada.esRespuesta;
     final Color fondo = esRespuesta ? Tema.suave : Tema.caja;
     final String autor = esRespuesta

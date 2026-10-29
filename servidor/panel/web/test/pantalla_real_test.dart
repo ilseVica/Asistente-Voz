@@ -1002,6 +1002,110 @@ testWidgets('gas y ayuda a la vez: manda gas en 390, 820 y 1280', (tester) async
     expect(find.text(Textos.chatDemasiadoRapido), findsWidgets);
   });
 
+  testWidgets('boton hablar visible si el satelite reporta hablar true', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final EstadoPanel estado = EstadoPanel();
+    estado.api.ponerToken('token-de-prueba');
+    estado.preparando = false;
+    estado.avisoPendiente = false;
+    estado.errorArranque = null;
+    final int ahora = estado.ahoraLocal();
+    estado.estado = Estado(
+      servidorHora: ahora,
+      luz: Luz(estado: sinDatos, encendida: null, origen: null, recibidoEn: null),
+      sensores: Sensores(
+          estado: sinDatos,
+          temperaturaC: null,
+          humedadPct: null,
+          movimiento: null,
+          gasAdc: null,
+          recibidoEn: null),
+      nodo: Componente(estado: conectado, recibidoEn: ahora),
+      satelite: Componente(
+          estado: conectado,
+          recibidoEn: ahora,
+          satelites: const <String, bool>{'satelite-sala': true},
+          satelitesHablar: const <String, bool>{'satelite-sala': true}),
+      sitio: Componente(estado: conectado, recibidoEn: ahora),
+      inactividad: Inactividad(ultimoMovimiento: null, tiempoMin: 120, minimo: 2, maximo: 720),
+      modo: 'instalacion',
+      alertas: const <String, int>{},
+      familiares: 2,
+      conexiones: 0,
+      gasOnAdc: 1800,
+    );
+    estado.alertas = <Alerta>[];
+    estado.conectadoAlServidor = true;
+    estado.anotarMensajeVivo(ahora);
+    estado.destino = Destino.inicio;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: Tema.construir(),
+        home: AsistentePanel(estado: estado, arrancar: false),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Mantener para hablar'), findsOneWidget);
+  });
+
+  testWidgets('boton hablar oculto si el satelite no reporta hablar', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final EstadoPanel estado = EstadoPanel();
+    estado.api.ponerToken('token-de-prueba');
+    estado.preparando = false;
+    estado.avisoPendiente = false;
+    estado.errorArranque = null;
+    final int ahora = estado.ahoraLocal();
+    estado.estado = Estado(
+      servidorHora: ahora,
+      luz: Luz(estado: sinDatos, encendida: null, origen: null, recibidoEn: null),
+      sensores: Sensores(
+          estado: sinDatos,
+          temperaturaC: null,
+          humedadPct: null,
+          movimiento: null,
+          gasAdc: null,
+          recibidoEn: null),
+      nodo: Componente(estado: conectado, recibidoEn: ahora),
+      satelite: Componente(
+          estado: conectado,
+          recibidoEn: ahora,
+          satelites: const <String, bool>{'satelite-sala': true},
+          satelitesHablar: const <String, bool>{'satelite-sala': false}),
+      sitio: Componente(estado: conectado, recibidoEn: ahora),
+      inactividad: Inactividad(ultimoMovimiento: null, tiempoMin: 120, minimo: 2, maximo: 720),
+      modo: 'instalacion',
+      alertas: const <String, int>{},
+      familiares: 2,
+      conexiones: 0,
+      gasOnAdc: 1800,
+    );
+    estado.alertas = <Alerta>[];
+    estado.conectadoAlServidor = true;
+    estado.anotarMensajeVivo(ahora);
+    estado.destino = Destino.inicio;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: Tema.construir(),
+        home: AsistentePanel(estado: estado, arrancar: false),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Mantener para hablar'), findsNothing);
+  });
+
 }
 
 

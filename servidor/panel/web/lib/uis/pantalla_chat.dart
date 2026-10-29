@@ -165,6 +165,17 @@ class _Burbuja extends StatelessWidget {
     // chat_id; se alinea por autor != 'La sala' a la derecha por simplicidad.
     final bool derecha = entrada.tipo == 'mensaje';
 
+    if (entrada.tipo == 'aviso') {
+      return Card(
+        color: Tema.caja,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Text(entrada.texto ?? '',
+              style: const TextStyle(color: Tema.secundario)),
+        ),
+      );
+    }
+
     if (entrada.esAlerta) {
       final PresentacionAlerta pres = presentacionAlerta(
         entrada.alerta?.tipo ?? 'aviso',

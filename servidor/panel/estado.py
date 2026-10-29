@@ -351,20 +351,25 @@ class EstadoSala:
             # nadie a quien esperar, así que no es un fallo y no lleva cartel.
             return {"estado": NO_INSTALADO, "recibido_en": None, "satelites": {}}
         por_satelite = {}
+        hablar_satelite = {}
         recibidos = []
         for client_id, entrada in satelites.items():
             carga = entrada["carga"] if isinstance(entrada["carga"], dict) else {}
             por_satelite[client_id] = carga.get("conectado") is True
+            hablar_satelite[client_id] = (carga.get("conectado") is True
+                                          and carga.get("hablar") is True)
             r = entrada.get("recibido_en")
             if r is not None:
                 recibidos.append(r)
         if not recibidos:
             return {"estado": CONECTADO if any(por_satelite.values()) else SIN_DATOS,
-                    "recibido_en": None, "satelites": por_satelite}
+                    "recibido_en": None, "satelites": por_satelite,
+                    "satelites_hablar": hablar_satelite}
         return {
             "estado": CONECTADO if any(por_satelite.values()) else DESCONECTADO,
             "recibido_en": max(recibidos),
             "satelites": por_satelite,
+            "satelites_hablar": hablar_satelite,
         }
 
     def bloque_inactividad(self, base) -> dict:

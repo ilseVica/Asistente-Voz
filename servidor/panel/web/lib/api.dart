@@ -220,6 +220,14 @@ class ClienteApi {
     return EntradaConversacion.desde(datos);
   }
 
+  Future<void> hablar(String accion) async {
+    final http.Response respuesta = await _cliente
+        .post(_ruta('/api/hablar'),
+            headers: _cabeceras, body: jsonEncode({'accion': accion}))
+        .timeout(const Duration(seconds: 15));
+    await _json(respuesta);
+  }
+
   /// Crea un recordatorio. `fecha` sólo en los de una sola vez y `dias` sólo en
   /// los semanales: el servidor rechaza con 422 si se cuelan en los demás.
   Future<Recordatorio> crearRecordatorio({

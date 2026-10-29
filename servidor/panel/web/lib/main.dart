@@ -53,6 +53,8 @@ class EstadoPanel extends ChangeNotifier {
   bool cargandoConversacion = false;
   String? errorConversacion;
   bool enviandoMensaje = false;
+  bool hablandoPanel = false;
+  Timer? _timerHablar;
   String nombre = '';
 
   /// Los nombres de los familiares activos, para la pantalla «Familiares».
@@ -801,6 +803,44 @@ class EstadoPanel extends ChangeNotifier {
       enviandoMensaje = false;
       notifyListeners();
       return false;
+    }
+  }
+
+  Future<void> iniciarHablar() async {
+    if (hablandoPanel) return;
+    hablandoPanel = true;
+    notifyListeners();
+    try {
+      await api.hablar('inicio');
+    } on ErrorApi catch (error) {
+      hablandoPanel = false;
+      notifyListeners();
+      aviso = error.mensaje;
+      notifyListeners();
+      return;
+    } catch (_) {
+      hablandoPanel = false;
+      notifyListeners();
+      aviso = Textos.errorDeRed;
+      notifyListeners();
+      return;
+    }
+    _timerHablar?.cancel();
+    _timerHablar = Timer(const Duration(seconds: 10), () {
+      if (hablandoPanel) terminarHablar();
+    });
+  }
+
+  Future<void> terminarHablar() async {
+    if (!hablandoPanel) return;
+    hablandoPanel = false;
+    _timerHablar?.cancel();
+    _timerHablar = null;
+    notifyListeners();
+    try {
+      await api.hablar('fin');
+    } catch (_) {
+      // Se ignora: el servidor ya cortó a los 10 s.
     }
   }
 

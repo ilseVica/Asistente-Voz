@@ -521,3 +521,6 @@ def resumen() -> dict:
         "ubicacion_gas": UBICACION_GAS,
         "db": RUTA_DB,
     }
+
+# Satelite al que el panel manda "mantener para hablar" (Fase del boton de voz).
+SATELITE_HABLAR = os.environ.get("PANEL_SATELITE_HABLAR", "satelite-sala")

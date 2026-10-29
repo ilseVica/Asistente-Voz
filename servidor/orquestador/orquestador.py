@@ -168,7 +168,8 @@ def tarea_conversacion(base, publicar, remitente, satelites, parando) -> None:
                 autor = fila["autor"] or "Familiar"
                 autor_chat = fila["autor_chat_id"]
                 hay_sat = (satelites is not None and satelites.hay_conectado())
-                if hay_sat:
+                es_aviso = (fila["tipo"] == "aviso")
+                if (not es_aviso) and hay_sat:
                     try:
                         publicar(config.TOPICO_SATELITE_DECIR,
                                  {"texto": "Mensaje de %s: %s. Si quiere responder, mantenga presionado el botón y hable."
@@ -181,8 +182,10 @@ def tarea_conversacion(base, publicar, remitente, satelites, parando) -> None:
                         registro_log.error("no se pudo decir el mensaje %s: %s",
                                            id_conv, error)
                         base.actualizar_estado_conversacion(id_conv, "no_se_pudo_decir")
-                else:
+                elif not es_aviso:
                     base.actualizar_estado_conversacion(id_conv, "no_se_pudo_decir")
+                else:
+                    base.actualizar_estado_conversacion(id_conv, "se_dijo")
 
                 # Fan out por Telegram.
                 estado_final = base.obtener_conversacion(id_conv)["estado"]

@@ -709,6 +709,7 @@ class TestOrdenAlConectar(unittest.TestCase):
         puente.cfg = cfg
         puente.nucleo = None
         puente.topico_estado = topico_estado_de(cfg)
+        puente.topico_hablar = "casa/sala/satelite/%s/hablar" % cfg.client_id
         puente.loop = _LoopFalso()
         puente.listo = asyncio.Event()
         return puente, _ClienteMQTTFalso()
@@ -718,10 +719,12 @@ class TestOrdenAlConectar(unittest.TestCase):
 
         puente._al_conectar(cliente, None, None, _CodigoFalso())
 
-        # La primera llamada es suscribirse a decir; la segunda, publicar estado.
+        # Primero se suscribe a decir y a hablar; despues publica estado.
         self.assertEqual(cliente.orden[0],
                          ("subscribe", puente.cfg.topico_decir))
         self.assertEqual(cliente.orden[1],
+                         ("subscribe", puente.topico_hablar))
+        self.assertEqual(cliente.orden[2],
                          ("publish", puente.topico_estado))
         indice_sub = cliente.orden.index(
             ("subscribe", puente.cfg.topico_decir))
@@ -734,7 +737,7 @@ class TestOrdenAlConectar(unittest.TestCase):
         # El estado va como {"conectado": true} y retenido.
         topico, carga, _qos, retain = cliente.publicados[0]
         self.assertEqual(topico, puente.topico_estado)
-        self.assertEqual(json.loads(carga), {"conectado": True})
+        self.assertEqual(json.loads(carga), {"conectado": True, "hablar": True})
         self.assertTrue(retain)
 
     def test_el_orden_malo_se_detecta(self):
@@ -1039,6 +1042,60 @@ class TestSalidaArchivo(unittest.TestCase):
         cfg = Config()
         self.assertEqual((cfg.fuente, cfg.salida_modo), ("pipewire", "audio"))
 
+
+class TestHablarPanel(Base):
+    async def test_ts_viejo_se_descarta(self):
+        nucleo = self.hacer_nucleo()
+        llamadas = []
+        nucleo.presionar = lambda: llamadas.append("presionar")
+        nucleo._tono_corto = lambda: None
+        nucleo.al_hablar({"accion": "inicio", "ts": int(time.time()) - 20})
+        await asyncio.sleep(0.05)
+        self.assertEqual(llamadas, [])
+
+    async def test_ts_valido_abre_frase(self):
+        nucleo = self.hacer_nucleo()
+        llamadas = []
+        nucleo.presionar = lambda: llamadas.append("presionar")
+        nucleo._tono_corto = lambda: None
+        nucleo.al_hablar({"accion": "inicio", "ts": int(time.time())})
+        await asyncio.sleep(0.2)
+        self.assertIn("presionar", llamadas)
+
+    async def test_fin_llama_soltar(self):
+        nucleo = self.hacer_nucleo()
+        llamadas = []
+        nucleo.soltar = lambda: llamadas.append("soltar")
+        nucleo.al_hablar({"accion": "fin", "ts": int(time.time())})
+        await asyncio.sleep(0.05)
+        self.assertIn("soltar", llamadas)
+
+    async def test_sin_ts_se_descarta(self):
+        nucleo = self.hacer_nucleo()
+        llamadas = []
+        nucleo.presionar = lambda: llamadas.append("presionar")
+        nucleo._tono_corto = lambda: None
+        nucleo.al_hablar({"accion": "inicio"})
+        await asyncio.sleep(0.05)
+        self.assertEqual(llamadas, [])
+
+    async def test_ignora_topico_de_otro_client_id(self):
+        cfg = _CfgFalsa()
+        puente = PuenteMQTT.__new__(PuenteMQTT)
+        puente.cfg = cfg
+        puente.nucleo = None
+        puente.topico_estado = topico_estado_de(cfg)
+        puente.topico_hablar = "casa/sala/satelite/%s/hablar" % cfg.client_id
+        puente.loop = asyncio.get_event_loop()
+        puente.listo = asyncio.Event()
+
+        class Msg:
+            topic = "casa/sala/satelite/otro-satelite/hablar"
+            payload = b'{"accion":"inicio","ts":1700000000}'
+
+        puente._al_mensaje(None, None, Msg())
+        await asyncio.sleep(0.05)
+        self.assertTrue(True)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

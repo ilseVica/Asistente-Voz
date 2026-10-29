@@ -61,6 +61,10 @@ import struct
 import sys
 import time
 import wave
+import threading
+import math
+import tempfile
+import subprocess
 from dataclasses import dataclass
 
 import paho.mqtt.client as mqtt
@@ -845,6 +849,7 @@ class PuenteMQTT:
         self.loop = loop
         self.listo = asyncio.Event()
         self.topico_estado = topico_estado_de(cfg)
+        self.topico_hablar = "casa/sala/satelite/%s/hablar" % cfg.client_id
         self.cliente = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=cfg.client_id,
@@ -873,8 +878,9 @@ class PuenteMQTT:
         registro.info("MQTT conectado como %s (client_id=%s, estado en %s)",
                       self.cfg.mqtt_usuario, self.cfg.client_id, self.topico_estado)
         cliente.subscribe(self.cfg.topico_decir, qos=1)
+        cliente.subscribe(self.topico_hablar, qos=1)
         cliente.publish(self.topico_estado,
-                        json.dumps({"conectado": True}, separators=(",", ":")),
+                        json.dumps({"conectado": True, "hablar": True}, separators=(",", ":")),
                         qos=0, retain=True)
         self.loop.call_soon_threadsafe(self.listo.set)
 
@@ -882,9 +888,14 @@ class PuenteMQTT:
         try:
             carga = json.loads(mensaje.payload.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
-            registro.warning("satelite/decir no es JSON; se ignora")
+            registro.warning("satelite/%s no es JSON; se ignora", mensaje.topic)
             return
-        self.loop.call_soon_threadsafe(self.nucleo.al_decir, carga)
+        if mensaje.topic == self.topico_hablar:
+            self.loop.call_soon_threadsafe(self.nucleo.al_hablar, carga)
+        elif mensaje.topic == self.cfg.topico_decir:
+            self.loop.call_soon_threadsafe(self.nucleo.al_decir, carga)
+        else:
+            registro.debug("satelite: topico ignorado %s", mensaje.topic)
 
     def cerrar(self) -> None:
         try:
@@ -941,6 +952,7 @@ class Nucleo:
         self.primer_turno_ms: int | None = None
         self._primer_turno_hecho = False
         self.segundos_sin_respuesta = SEGUNDOS_SIN_RESPUESTA
+        self._timer_hablar = None
 
     # --- tecla ---
     def presionar(self) -> None:
@@ -963,6 +975,86 @@ class Nucleo:
     def soltar(self) -> None:
         if self.frase is not None:
             self.cerrar_frase(motivo="soltar")
+
+    def al_hablar(self, carga: dict) -> None:
+        """Inicio/fin del microfono desde el panel (topico .../hablar)."""
+        try:
+            ts = carga.get("ts")
+        except AttributeError:
+            ts = None
+        if not isinstance(ts, (int, float)):
+            registro.warning("hablar: mensaje sin ts, descartado")
+            return
+        if abs(time.time() - float(ts)) > 10:
+            registro.warning("hablar: mensaje antiguo (ts=%s), descartado", ts)
+            return
+        accion = carga.get("accion") if isinstance(carga, dict) else None
+        if accion == "inicio":
+            if self.frase is not None or self.hablando:
+                registro.info("hablar ignorado: ya hay una frase o se esta hablando")
+                return
+            if self._timer_hablar is not None:
+                try:
+                    self._timer_hablar.cancel()
+                except Exception:  # noqa: BLE001
+                    pass
+            def _corte():
+                try:
+                    if not self.loop.is_closed():
+                        self.loop.call_soon_threadsafe(self.soltar)
+                except RuntimeError:
+                    pass
+            self._timer_hablar = threading.Timer(10.0, _corte)
+            self._timer_hablar.start()
+
+            def _run() -> None:
+                self._tono_corto()
+                self.loop.call_soon_threadsafe(self.presionar)
+
+            threading.Thread(target=_run, daemon=True).start()
+        elif accion == "fin":
+            if self._timer_hablar is not None:
+                try:
+                    self._timer_hablar.cancel()
+                except Exception:  # noqa: BLE001
+                    pass
+                self._timer_hablar = None
+            self.soltar()
+        else:
+            registro.warning("hablar: accion desconocida %r", accion)
+
+    def _tono_corto(self) -> None:
+        """Tono breve por la bocina antes de abrir la frase del panel."""
+        try:
+            fd, ruta = tempfile.mkstemp(suffix=".wav")
+            os.close(fd)
+            frecuencia = 44100
+            duracion = 0.15
+            n = int(frecuencia * duracion)
+            with wave.open(ruta, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(frecuencia)
+                frames = bytearray()
+                for i in range(n):
+                    valor = int(32767 * 0.3 *
+                                math.sin(2 * math.pi * 880 * i / frecuencia))
+                    frames += struct.pack("<h", valor)
+                w.writeframes(frames)
+            for cmd in (["pw-play", ruta], ["aplay", "-q", ruta]):
+                try:
+                    subprocess.run(cmd, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, check=False)
+                    break
+                except FileNotFoundError:
+                    continue
+        except Exception as error:  # noqa: BLE001
+            registro.warning("tono corto: %s", error)
+        finally:
+            try:
+                os.unlink(ruta)
+            except OSError:
+                pass
 
     def enviar_archivo(self, pcm: bytes) -> tuple:
         """Manda un PCM ya validado como una frase completa. `(frase_id, error)`.

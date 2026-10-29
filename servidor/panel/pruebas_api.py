@@ -1364,6 +1364,86 @@ prueba("GET conversacion no contiene chat_id", "chat_id" not in serializado and 
 # Se cierra el lifespan, que es lo que cierra la base del `finally` de `ciclo`. Sin
 # esto el proceso acaba igual (el fichero SQLite es temporal y se borra), pero el
 # `TestClient` avisa con un `ResourceWarning` si se le deja el portal abierto.
+# =============================================================================
+# 14. Boton "Mantener para hablar" (/api/hablar)
+# =============================================================================
+
+titulo("14. /api/hablar")
+
+# Satelite conectado para que el endpoint no rechace por desconectado.
+api_modulo.estados.recibir(
+    "casa/sala/satelite/satelite-sala/estado",
+    json.dumps({"conectado": True}),
+)
+
+# 401 sin sesion.
+r = cliente.post("/api/hablar", json={"accion": "inicio"})
+prueba("hablar sin sesion devuelve 401", r.status_code == 401, r.status_code)
+
+# Publica en el topico correcto con ts.
+publicados = len(publicador.publicado)
+r = cliente.post("/api/hablar", json={"accion": "inicio"},
+                 headers=cab(token_marta))
+prueba("hablar con sesion devuelve 202", r.status_code == 202, r.status_code)
+publicados_hablar = [p for p in publicador.publicado
+                     if p[0] == "casa/sala/satelite/satelite-sala/hablar"]
+prueba("hablar publica en el topico del satelite",
+       len(publicados_hablar) == len([p for p in publicador.publicado
+                                      if p[0] == "casa/sala/satelite/satelite-sala/hablar"]) >= 1,
+       publicados_hablar)
+if publicados_hablar:
+    prueba("hablar manda accion inicio",
+           publicados_hablar[-1][1].get("accion") == "inicio",
+           publicados_hablar[-1][1])
+    prueba("hablar manda ts",
+           isinstance(publicados_hablar[-1][1].get("ts"), int),
+           publicados_hablar[-1][1])
+# crea entrada tipo aviso en la conversacion
+entradas = api_modulo.base.listar_conversacion(limite=5)[0]
+avisos = [e for e in entradas if e["tipo"] == "aviso"]
+prueba("hablar crea entrada tipo aviso",
+       len(avisos) >= 1, [e["tipo"] for e in entradas])
+
+# 409 si ya hay una pulsacion activa.
+r = cliente.post("/api/hablar", json={"accion": "inicio"},
+                 headers=cab(token_marta))
+prueba("segunda pulsacion simultanea devuelve 409", r.status_code == 409,
+       r.status_code)
+
+# corte del servidor a los 10 s: marcar hasta en el pasado y comprobar que un fin
+# (o un inicio tras expirar) no queda bloqueado. Se fuerza el corte llamando a
+# la funcion de limpieza.
+api_modulo._limpiar_hablar()
+r = cliente.post("/api/hablar", json={"accion": "inicio"},
+                 headers=cab(token_marta))
+prueba("tras el corte de 10 s vuelve a aceptar inicio",
+       r.status_code == 202, r.status_code)
+
+# fin publica accion fin.
+r = cliente.post("/api/hablar", json={"accion": "fin"},
+                 headers=cab(token_marta))
+prueba("fin devuelve 202", r.status_code == 202, r.status_code)
+publicados_fin = [p for p in publicador.publicado
+                  if p[0] == "casa/sala/satelite/satelite-sala/hablar"
+                  and p[1].get("accion") == "fin"]
+prueba("fin publica accion fin", len(publicados_fin) >= 1, publicados_fin)
+
+# satelite desconectado -> 409.
+api_modulo.estados.recibir(
+    "casa/sala/satelite/satelite-sala/estado",
+    json.dumps({"conectado": False}),
+)
+r = cliente.post("/api/hablar", json={"accion": "inicio"},
+                 headers=cab(token_marta))
+prueba("satelite desconectado devuelve 409", r.status_code == 409,
+       r.status_code)
+# restaurar
+api_modulo.estados.recibir(
+    "casa/sala/satelite/satelite-sala/estado",
+    json.dumps({"conectado": True}),
+)
+
+
 cliente.__exit__(None, None, None)
 
 print("\n" + "=" * 66)

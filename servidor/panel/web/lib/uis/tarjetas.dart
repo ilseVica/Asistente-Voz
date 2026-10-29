@@ -87,6 +87,45 @@ class TarjetaLuz extends StatelessWidget {
                           ? Textos.apagarLaLuz
                           : Textos.encenderLaLuz),
             ),
+            const SizedBox(height: 12),
+            Builder(builder: (BuildContext contexto) {
+              final bool sateliteConectado =
+                  estado.estado?.satelite.satelites?['satelite-sala'] == true &&
+                  (estado.estado?.satelite.satelitesHablar?['satelite-sala'] ??
+                      false);
+              return Listener(
+                onPointerDown: sateliteConectado
+                    ? (_) => estado.iniciarHablar()
+                    : null,
+                onPointerUp: sateliteConectado
+                    ? (_) => estado.terminarHablar()
+                    : null,
+                onPointerCancel: sateliteConectado
+                    ? (_) => estado.terminarHablar()
+                    : null,
+                child: Container(
+                  height: Tema.altoMinimo,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: sateliteConectado
+                        ? Tema.primario
+                        : Tema.borde,
+                    borderRadius: BorderRadius.circular(movil ? 14 : 12),
+                  ),
+                  child: Text(
+                    !sateliteConectado
+                        ? Textos.sateliteNoConectado
+                        : estado.hablandoPanel
+                            ? Textos.escuchando
+                            : Textos.mantenerParaHablar,
+                    style: TextStyle(
+                      color: sateliteConectado ? Tema.tarjeta : Tema.secundario,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              );
+            }),
           ],
         ),
       ),

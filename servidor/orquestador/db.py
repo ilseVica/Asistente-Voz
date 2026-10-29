@@ -114,7 +114,7 @@ ENVIO_FALLIDO_PERMANENTE = 2147483647
 # antes, y rellenarlo con un nombre inventado seria peor que dejarlo vacio. Otra
 # columna nueva en una tabla vieja, asi que otra vez el `ALTER TABLE` idempotente
 # de la 2->3 y de la 4.
-VERSION_ESQUEMA = 9
+VERSION_ESQUEMA = 10
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -206,6 +206,7 @@ class BaseDatos:
             self.conexion.execute("PRAGMA synchronous=NORMAL")
             self.conexion.execute("PRAGMA busy_timeout=30000")
             self.conexion.executescript(leer_esquema())
+            self.conexion.commit()
             self._migrar()
             self.conexion.commit()
 
@@ -342,7 +343,7 @@ class BaseDatos:
                 CREATE TABLE IF NOT EXISTS conversacion (
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
                     creado_en       INTEGER NOT NULL,
-                    tipo            TEXT NOT NULL CHECK(tipo IN ('mensaje','respuesta','alerta')),
+                    tipo            TEXT NOT NULL CHECK(tipo IN ('mensaje','respuesta','alerta','aviso')),
                     autor           TEXT,
                     origen          TEXT CHECK(origen IS NULL OR origen IN ('panel','telegram')),
                     autor_chat_id   TEXT,
@@ -397,6 +398,51 @@ class BaseDatos:
                          fila["purgable_en"] if fila["purgable_en"] else
                          fila["creado_en"] + 30 * 86400),
                     )
+
+        # De la 9 a la 10: `conversacion` admite el tipo `aviso` (microfono de la
+        # sala desde el panel). SQLite no permite ALTER de un CHECK, asi que se
+        # reconstruye la tabla una sola vez. Idempotente: solo si la version es < 10.
+        if version < 10:
+            self.conexion.commit()
+            # Migración segura: no se renombra la tabla vieja antes de crear la
+            # nueva. Si el proceso muriera entre el RENAME y el CREATE, la base
+            # quedaría sin `conversacion` y sin datos que recuperar.
+            self.conexion.execute("PRAGMA foreign_keys=OFF")
+            self.conexion.execute("BEGIN")
+            self.conexion.execute("""
+                CREATE TABLE conversacion_nueva (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    creado_en       INTEGER NOT NULL,
+                    tipo            TEXT NOT NULL CHECK(tipo IN ('mensaje','respuesta','alerta','aviso')),
+                    autor           TEXT,
+                    origen          TEXT CHECK(origen IS NULL OR origen IN ('panel','telegram')),
+                    autor_chat_id   TEXT,
+                    texto           TEXT,
+                    estado          TEXT CHECK(estado IS NULL OR estado IN ('enviado','se_dijo','no_se_pudo_decir')),
+                    estado_en       INTEGER,
+                    alerta_id       TEXT,
+                    notificado_en   INTEGER,
+                    purgable_en     INTEGER NOT NULL
+                )
+            """)
+            self.conexion.execute("""
+                INSERT INTO conversacion_nueva (id, creado_en, tipo, autor, origen,
+                    autor_chat_id, texto, estado, estado_en, alerta_id,
+                    notificado_en, purgable_en)
+                SELECT id, creado_en, tipo, autor, origen, autor_chat_id, texto,
+                    estado, estado_en, alerta_id, notificado_en, purgable_en
+                FROM conversacion
+            """)
+            self.conexion.execute("DROP TABLE conversacion")
+            self.conexion.execute("ALTER TABLE conversacion_nueva RENAME TO conversacion")
+            self.conexion.execute("CREATE INDEX IF NOT EXISTS idx_conversacion_creado ON conversacion (creado_en)")
+            self.conexion.execute("CREATE INDEX IF NOT EXISTS idx_conversacion_alerta ON conversacion (alerta_id)")
+            self.conexion.execute("CREATE INDEX IF NOT EXISTS idx_conversacion_estado ON conversacion (estado, creado_en)")
+            filas_fk = self.conexion.execute("PRAGMA foreign_key_check").fetchall()
+            if filas_fk:
+                raise RuntimeError("foreign_key_check no esta vacio: %r" % filas_fk)
+            self.conexion.execute("COMMIT")
+            self.conexion.execute("PRAGMA foreign_keys=ON")
 
         self.conexion.execute("PRAGMA user_version = %d" % VERSION_ESQUEMA)
         registro.info("base de datos migrada a la versión %d del esquema",
@@ -1852,6 +1898,22 @@ class BaseDatos:
     # --- Purgas ------------------------------------------------------------
 
     # --- Conversacion (chat de dos vias) -----------------------------------
+
+    def crear_aviso_conversacion(self, autor: str, autor_chat_id: str,
+                                 origen: str, texto: str,
+                                 ahora: int = None) -> int:
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            cursor = self.conexion.execute(
+                "INSERT INTO conversacion (creado_en, tipo, autor, origen, "
+                "autor_chat_id, texto, estado, estado_en, purgable_en) "
+                "VALUES (?, 'aviso', ?, ?, ?, ?, 'enviado', ?, ?)",
+                (ahora, autor, origen, str(autor_chat_id), texto, ahora,
+                 ahora + 30 * 86400),
+            )
+            self.conexion.commit()
+            return cursor.lastrowid
 
     def crear_mensaje_conversacion(self, autor: str, autor_chat_id: str,
                                    origen: str, texto: str,

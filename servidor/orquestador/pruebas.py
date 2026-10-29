@@ -4256,6 +4256,14 @@ for nombre in FALLOS:
 # Familiares: invitados, administración y códigos
 # =============================================================================
 
+# cambiar nombre de familiar
+base_cn, _ = base_nueva("cambiarnombre-")
+base_cn.registrar_familiar("99", nombre="Viejo")
+ok_cn = base_cn.cambiar_nombre_familiar("99", "Nuevo")
+prueba("cambiar_nombre_familiar actualiza el nombre",
+       ok_cn and base_cn.nombre_de("99") == "Nuevo", base_cn.nombre_de("99"))
+base_cn.cerrar()
+
 titulo("Familiares: invitados y códigos")
 
 # migracion 10->11 sobre datos existentes: familiares actuales con tiene_telegram=1

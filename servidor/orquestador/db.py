@@ -1005,6 +1005,16 @@ class BaseDatos:
             self.conexion.commit()
             return cursor.rowcount == 1
 
+    def cambiar_nombre_familiar(self, chat_id: str, nombre: str) -> bool:
+        chat = str(chat_id)
+        with _candado:
+            cursor = self.conexion.execute(
+                "UPDATE familiares SET nombre = ? WHERE chat_id = ?",
+                (nombre or "", chat),
+            )
+            self.conexion.commit()
+            return cursor.rowcount == 1
+
     def nombre_de(self, chat_id: str) -> str:
         """El nombre de un familiar, o una cadena vacía.
 

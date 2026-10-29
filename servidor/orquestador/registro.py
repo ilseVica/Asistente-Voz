@@ -413,6 +413,7 @@ USO = """Uso:
   python -m registro baja CHAT_ID     da de baja a un familiar
   python -m registro inactivar CHAT_ID  deja de avisarle SIN borrarlo
   python -m registro activar CHAT_ID    vuelve a avisarle
+  python -m registro nombre CHAT_ID "Nombre"  cambia el nombre del familiar
 """
 
 
@@ -527,6 +528,24 @@ def _cambiar_activo(base, chat_id: str, activo: bool) -> int:
     return 0
 
 
+def _cambiar_nombre(base, chat_id: str, nombre: str) -> int:
+    chat_id = chat_id.strip()
+    if not chat_id:
+        print("Falta el chat_id.", file=sys.stderr)
+        return 2
+    if not base.familiar_registrado(chat_id):
+        print("Ese chat_id no esta registrado.", file=sys.stderr)
+        return 1
+    nombre = (nombre or "").strip()
+    if not (1 <= len(nombre) <= 40):
+        print("El nombre debe tener entre 1 y 40 caracteres.", file=sys.stderr)
+        return 2
+    base.cambiar_nombre_familiar(chat_id, nombre)
+    print("Nombre actualizado: %s" % nombre)
+    return 0
+
+
+
 def main(argumentos) -> int:
     if not argumentos:
         print(USO, file=sys.stderr)
@@ -572,6 +591,17 @@ def main(argumentos) -> int:
         base = _abrir_base()
         try:
             return _cambiar_activo(base, argumentos[1], activo=orden == "activar")
+        finally:
+            base.cerrar()
+
+    if orden == "nombre":
+        if len(argumentos) < 3:
+            print("Falta el chat_id o el nombre.", file=sys.stderr)
+            print(USO, file=sys.stderr)
+            return 2
+        base = _abrir_base()
+        try:
+            return _cambiar_nombre(base, argumentos[1], " ".join(argumentos[2:]))
         finally:
             base.cerrar()
 

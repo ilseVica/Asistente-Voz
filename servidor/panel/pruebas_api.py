@@ -1510,6 +1510,15 @@ entradas = base.listar_conversacion(limite=20)[0]
 avisos = [e for e in entradas if e["tipo"] == "aviso"
           and "agreg" in (e["texto"] or "")]
 prueba("alta agrega aviso en la conversacion", len(avisos) >= 1, [e["texto"] for e in entradas])
+# alerta cancelada por voz llega distinguible
+id_falsa = "000000-falsa-0001"
+base.insertar_alerta(id_falsa, "ayuda", json.dumps({"origen": "voz"}))
+base.marcar_resuelta(id_falsa, int(time.time()), quien="sala:falsa_alarma")
+r = cliente.get("/api/alertas/%s" % id_falsa, headers=cab(token_marta))
+prueba("alerta cancelada por voz llega con resuelto_por reservado",
+       r.status_code == 200 and r.json()["alerta"].get("resuelto_por") == "sala:falsa_alarma",
+       r.json().get("alerta", {}).get("resuelto_por"))
+
 # invitado excluido de Telegram sin error
 base.registrar_familiar("inv-excl", nombre="Excluido", tiene_telegram=0)
 base.insertar_alerta("alerta-excl", "gas", json.dumps({"gas_adc": 2500}))

@@ -175,15 +175,17 @@ class _FilaHistorial extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: (alerta.estado == 'pendiente' || alerta.estado == 'enviada')
-                    ? Tema.peligro
-                    : (alerta.estado == 'descartada')
-                        ? Tema.caja
-                        : Tema.suave,
+                color: (alerta.resueltoPor == 'sala:falsa_alarma')
+                    ? Tema.caja
+                    : (alerta.estado == 'pendiente' || alerta.estado == 'enviada')
+                        ? Tema.peligro
+                        : (alerta.estado == 'descartada')
+                            ? Tema.caja
+                            : Tema.suave,
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
-                pastillaEstadoTexto(alerta.estado),
+                pastillaEstadoTexto(alerta.estado, resueltoPor: alerta.resueltoPor),
                 style: TextStyle(
                     color: (alerta.estado == 'pendiente' ||
                             alerta.estado == 'enviada')
@@ -234,7 +236,8 @@ class _FilaHistorial extends StatelessWidget {
   }
 }
 
-String pastillaEstadoTexto(String estado) {
+String pastillaEstadoTexto(String estado, {String? resueltoPor}) {
+  if (resueltoPor == 'sala:falsa_alarma') return Textos.falsaAlarma;
   if (estado == 'resuelta' || estado == 'atendida') return Textos.atendida;
   if (estado == 'pendiente' || estado == 'enviada') return Textos.pendiente;
   if (estado == 'descartada') return Textos.descartada;

@@ -278,8 +278,11 @@ class TrabajadorTelegram:
         segundos para siempre no lo arregla y tapa el log.
         """
         for fila in self.base.envios_a_editar(limite=10):
-            texto = alertas.texto_atendido(fila["tipo"], fila["resuelto_en"],
-                                           fila["alerta_id"])
+            if fila["resuelto_por"] == "sala:falsa_alarma":
+                texto = textos.aviso_falsa_alarma(fila["resuelto_en"])
+            else:
+                texto = alertas.texto_atendido(fila["tipo"], fila["resuelto_en"],
+                                               fila["alerta_id"])
             quien = db_modulo.enmascarar_chat(fila["chat_id"])
             try:
                 self.remitente.editar_mensaje(fila["chat_id"], fila["mensaje_id"],

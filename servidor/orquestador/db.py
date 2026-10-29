@@ -1455,7 +1455,7 @@ class BaseDatos:
         with _candado:
             return list(self.conexion.execute(
                 "SELECT e.alerta_id, e.chat_id, e.mensaje_id, a.tipo, "
-                "       a.resuelto_en "
+                "       a.resuelto_en, a.resuelto_por "
                 "FROM envios e JOIN alertas a ON a.id = e.alerta_id "
                 "WHERE a.resuelto_en IS NOT NULL AND e.mensaje_id IS NOT NULL "
                 "  AND e.editado_en IS NULL "

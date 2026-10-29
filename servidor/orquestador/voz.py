@@ -18,6 +18,7 @@ import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import alertas
 import config
 import textos
 
@@ -372,8 +373,36 @@ def procesar(cuerpo: str, publicar, base=None) -> bool:
         return True
 
     if intencion == "CANCELAR":
-        _publicar_respuesta(publicar, textos.RESPUESTA_CANCELAR, frase_id)
-        registro.info("voz turno: texto=%r intencion=CANCELAR accion=cancelar "
+        ahora = int(time.time())
+        recientes = []
+        if base is not None and hasattr(base, "listar_recientes"):
+            for fila in base.listar_recientes(limite=100, tipo="ayuda"):
+                carga = {}
+                try:
+                    carga = json.loads(fila["carga_json"])
+                except (TypeError, ValueError):
+                    carga = {}
+                if not (isinstance(carga, dict) and carga.get("origen") == "voz"):
+                    continue
+                recientes.append(fila)
+        activas = [f for f in recientes
+                   if f["resuelto_en"] is None
+                   and ahora - int(f["creado_en"]) <= 120]
+        if activas:
+            elegida = max(activas, key=lambda f: int(f["creado_en"]))
+            alertas.resolver(base, publicar, elegida["id"], ahora,
+                             quien="La sala", origen="voz",
+                             nombre_quien="sala:falsa_alarma")
+            _publicar_respuesta(publicar, textos.RESPUESTA_CANCELAR_FALSA_ALARMA,
+                               frase_id)
+            registro.info("voz turno: texto=%r intencion=CANCELAR accion=cancelar_ayuda "
+                          "id=%s latencia_ms=%d", texto, elegida["id"], latencia)
+            return True
+        if recientes:
+            _publicar_respuesta(publicar, textos.RESPUESTA_CANCELAR_TARDE, frase_id)
+        else:
+            _publicar_respuesta(publicar, textos.RESPUESTA_CANCELAR_NADA, frase_id)
+        registro.info("voz turno: texto=%r intencion=CANCELAR accion=sin_cancelar "
                       "latencia_ms=%d", texto, latencia)
         return True
 

@@ -2171,8 +2171,8 @@ prueba("ayuda responde texto de ayuda",
 # --- Cancelar ---
 apuntes, publicar = publicar_que_recoge()
 voz.procesar('{"frase_id":"f","texto":"cancela","ts":%d}' % AHORA, publicar)
-prueba("cancelar responde cancelado",
-       len(apuntes) == 1 and apuntes[0][1].get("texto") == textos.RESPUESTA_CANCELAR, apuntes)
+prueba("cancelar sin ayuda responde no hay aviso",
+       len(apuntes) == 1 and apuntes[0][1].get("texto") == textos.RESPUESTA_CANCELAR_NADA, apuntes)
 
 # --- Ayuda antirrebote con base ---
 base_ar, _ = base_nueva("voz-ar-")
@@ -4244,6 +4244,8 @@ prueba("RECORDATORIOS con uno ya hecho no lo dice",
        len(resp) >= 1 and resp[-1]["texto"] == textos.RESPUESTA_SIN_RECORDATORIOS, resp)
 base_rec2.cerrar()
 
+
+
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))
@@ -4337,7 +4339,7 @@ print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))
 for nombre in FALLOS:
     print("  - " + nombre)
-sys.exit(1 if FALLOS else 0)
+
 
 
 print("\n" + "=" * 66)
@@ -4347,6 +4349,126 @@ for nombre in FALLOS:
     print("  - " + nombre)
 
 
+
+print("\n" + "=" * 66)
+print("comprobaciones: %d" % COMPROBACIONES[0])
+print("fallos: %d" % len(FALLOS))
+for nombre in FALLOS:
+    print("  - " + nombre)
+
+
+
+# =============================================================================
+# CANCELAR (falsa alarma)
+# =============================================================================
+
+titulo("CANCELAR falsa alarma")
+
+import json as _json
+
+# cancela una ayuda reciente
+base_ca, _ = base_nueva("cancel-")
+aid = "ayuda-voz-1"
+base_ca.insertar_alerta(aid, "ayuda", _json.dumps({"origen": "voz"}))
+pub_ca = []
+AHORA_CA = int(time.time())
+voz.procesar('{"frase_id":"c1","texto":"cancela","modo":"comandos","ts":%d}' % AHORA_CA,
+             lambda t, c, qos=1: pub_ca.append((t, c)), base=base_ca)
+resp_ca = [c for t, c in pub_ca if t == config.TOPICO_SATELITE_DECIR]
+prueba("cancela una ayuda reciente: respuesta",
+       len(resp_ca) >= 1 and resp_ca[-1]["texto"] == textos.RESPUESTA_CANCELAR_FALSA_ALARMA,
+       resp_ca)
+fila_ca = base_ca.conexion.execute("SELECT resuelto_en FROM alertas WHERE id=?", (aid,)).fetchone()
+prueba("cancela una ayuda reciente: estado resuelto",
+       fila_ca is not None and fila_ca["resuelto_en"] is not None, fila_ca)
+prueba("cancela una ayuda reciente: resuelto_por reservado",
+       base_ca.conexion.execute("SELECT resuelto_por FROM alertas WHERE id=?", (aid,)).fetchone()[0]
+       == "sala:falsa_alarma", None)
+prueba("aviso_falsa_alarma no contiene el valor crudo",
+       "sala:falsa_alarma" not in textos.aviso_falsa_alarma(int(time.time())),
+       textos.aviso_falsa_alarma(int(time.time())))
+base_ca.cerrar()
+
+# no cancela una ayuda de hace 3 minutos
+base_ca2, _ = base_nueva("cancel2-")
+aid2 = "ayuda-voz-2"
+base_ca2.insertar_alerta(aid2, "ayuda", _json.dumps({"origen": "voz"}))
+base_ca2.conexion.execute("UPDATE alertas SET creado_en = ? WHERE id = ?",
+                          (int(time.time()) - 180, aid2))
+base_ca2.conexion.commit()
+pub_ca2 = []
+voz.procesar('{"frase_id":"c2","texto":"cancela","modo":"comandos","ts":%d}' % int(time.time()),
+             lambda t, c, qos=1: pub_ca2.append((t, c)), base=base_ca2)
+resp_ca2 = [c for t, c in pub_ca2 if t == config.TOPICO_SATELITE_DECIR]
+prueba("no cancela una ayuda de hace 3 minutos",
+       len(resp_ca2) >= 1 and resp_ca2[-1]["texto"] == textos.RESPUESTA_CANCELAR_TARDE,
+       resp_ca2)
+fila_ca2 = base_ca2.conexion.execute("SELECT resuelto_en FROM alertas WHERE id=?", (aid2,)).fetchone()
+prueba("ayuda de hace 3 minutos no se toca",
+       fila_ca2 is not None and fila_ca2["resuelto_en"] is None, fila_ca2)
+base_ca2.cerrar()
+
+# no cancela gas
+base_gas, _ = base_nueva("cancelgas-")
+gid = "gas-voz-1"
+base_gas.insertar_alerta(gid, "gas", _json.dumps({"gas_adc": 2500}))
+pub_gas = []
+voz.procesar('{"frase_id":"cg","texto":"cancela","modo":"comandos","ts":%d}' % int(time.time()),
+             lambda t, c, qos=1: pub_gas.append((t, c)), base=base_gas)
+resp_gas = [c for t, c in pub_gas if t == config.TOPICO_SATELITE_DECIR]
+prueba("no cancela gas: respuesta honesta",
+       len(resp_gas) >= 1 and resp_gas[-1]["texto"] == textos.RESPUESTA_CANCELAR_NADA,
+       resp_gas)
+fila_gas = base_gas.conexion.execute("SELECT resuelto_en FROM alertas WHERE id=?", (gid,)).fetchone()
+prueba("gas no se toca",
+       fila_gas is not None and fila_gas["resuelto_en"] is None, fila_gas)
+base_gas.cerrar()
+
+# sin alertas -> respuesta honesta
+base_sa, _ = base_nueva("cancelsa-")
+pub_sa = []
+voz.procesar('{"frase_id":"cs","texto":"cancela","modo":"comandos","ts":%d}' % int(time.time()),
+             lambda t, c, qos=1: pub_sa.append((t, c)), base=base_sa)
+resp_sa = [c for t, c in pub_sa if t == config.TOPICO_SATELITE_DECIR]
+prueba("sin alertas responde honesto",
+       len(resp_sa) >= 1 and resp_sa[-1]["texto"] == textos.RESPUESTA_CANCELAR_NADA,
+       resp_sa)
+base_sa.cerrar()
+
+# ya atendida -> no la toca
+base_ya, _ = base_nueva("cancel ya-")
+aid_ya = "ayuda-voz-ya"
+base_ya.insertar_alerta(aid_ya, "ayuda", _json.dumps({"origen": "voz"}))
+base_ya.conexion.execute("UPDATE alertas SET resuelto_en = ? WHERE id = ?",
+                        (int(time.time()), aid_ya))
+base_ya.conexion.commit()
+pub_ya = []
+voz.procesar('{"frase_id":"cy","texto":"cancela","modo":"comandos","ts":%d}' % int(time.time()),
+             lambda t, c, qos=1: pub_ya.append((t, c)), base=base_ya)
+resp_ya = [c for t, c in pub_ya if t == config.TOPICO_SATELITE_DECIR]
+prueba("ya atendida no se toca",
+       len(resp_ya) >= 1 and resp_ya[-1]["texto"] == textos.RESPUESTA_CANCELAR_TARDE,
+       resp_ya)
+base_ya.cerrar()
+
+# dos ayudas -> solo la mas reciente
+base_dos, _ = base_nueva("canceldos-")
+aid_old = "ayuda-old"
+aid_new = "ayuda-new"
+base_dos.insertar_alerta(aid_old, "ayuda", _json.dumps({"origen": "voz"}))
+base_dos.conexion.execute("UPDATE alertas SET creado_en = ? WHERE id = ?",
+                          (int(time.time()) - 60, aid_old))
+base_dos.conexion.commit()
+base_dos.insertar_alerta(aid_new, "ayuda", _json.dumps({"origen": "voz"}))
+pub_dos = []
+voz.procesar('{"frase_id":"cd","texto":"cancela","modo":"comandos","ts":%d}' % int(time.time()),
+             lambda t, c, qos=1: pub_dos.append((t, c)), base=base_dos)
+fila_old = base_dos.conexion.execute("SELECT resuelto_en FROM alertas WHERE id=?", (aid_old,)).fetchone()
+fila_new = base_dos.conexion.execute("SELECT resuelto_en FROM alertas WHERE id=?", (aid_new,)).fetchone()
+prueba("dos ayudas cancela solo la mas reciente",
+       fila_old["resuelto_en"] is None and fila_new["resuelto_en"] is not None,
+       (fila_old["resuelto_en"], fila_new["resuelto_en"]))
+base_dos.cerrar()
 
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])

@@ -37,6 +37,13 @@ RESPUESTA_AYUDA = "No se preocupe, ya avisé a su familia."
 RESPUESTA_AYUDA_RECIENTE = "Ya avisé a su familia hace un momento. Alguien se comunicará con usted pronto."
 RESPUESTA_CANCELAR = "De acuerdo, cancelado."
 
+RESPUESTA_CANCELAR_FALSA_ALARMA = ("Listo, avisé a su familia que fue una "
+                                    "falsa alarma.")
+RESPUESTA_CANCELAR_NADA = "No hay ningún aviso que cancelar."
+RESPUESTA_CANCELAR_TARDE = ("Su familia ya recibió el aviso; ellos lo marcarán "
+                            "como atendido.")
+
+
 RESPUESTA_SIN_TEMPERATURA = "Por ahora no tengo la temperatura de la sala."
 RESPUESTA_ESTOY_BIEN = "Listo, ya le avisé a su familia."
 RESPUESTA_SIN_RECORDATORIOS = "Hoy no tiene recordatorios pendientes."
@@ -61,6 +68,14 @@ def eco(texto: str) -> str:
 
 def aviso_atendida(tipo: str) -> str:
     return AVISO_ATENDIDA.get(tipo, AVISO_ATENDIDA_OTRO)
+
+def aviso_falsa_alarma(cuando: int) -> str:
+    from datetime import datetime, timezone
+    try:
+        hora = datetime.fromtimestamp(int(cuando)).strftime("%H:%M")
+    except (TypeError, ValueError, OSError):
+        hora = ""
+    return "Falsa alarma: cancelada desde la sala a las %s." % hora
 
 
 # Las alertas habladas (Fase 2C): las dice el satelite en cuanto el orquestador

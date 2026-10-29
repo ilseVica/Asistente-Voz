@@ -149,6 +149,9 @@ void main() {
       expect(atendidaCuando('hoy, 09:12', null), 'Atendida hoy, 09:12');
       expect(atendidaCuando('hoy, 09:12', '   '), 'Atendida hoy, 09:12');
     });
+  test('con sala:falsa_alarma muestra Falsa alarma', () {
+    expect(atendidaCuando('hoy, 09:12', 'sala:falsa_alarma'), 'Falsa alarma hoy, 09:12');
+  });
   });
 
   group('eventoAlerta', () {

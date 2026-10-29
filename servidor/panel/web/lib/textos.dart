@@ -133,6 +133,7 @@ class Textos {
   static const String alertasBorradoAuto =
       'Las alertas se borran automáticamente después de 30 días.';
   static const String atendida = 'Atendida';
+  static const String falsaAlarma = 'Falsa alarma';
   static const String sinAutor = 'Sin autor';
   static const String sinTexto = 'Sin texto';
   static const String descartada = 'Descartada';
@@ -460,6 +461,9 @@ String avisoInactividadAlos(int minutosMin) =>
 /// sería dar un nombre a alguien que no lo tiene.
 String atendidaCuando(String cuando, String? quien) {
   final String nombre = (quien ?? '').trim();
+  if (nombre == 'sala:falsa_alarma') {
+    return '${Textos.falsaAlarma} $cuando';
+  }
   return nombre.isEmpty
       ? '${Textos.atendida} $cuando'
       : '${Textos.atendida} $cuando por $nombre';
@@ -491,6 +495,9 @@ String eventoAlerta(String tipo, String? nombre) {
           ? 'El aviso por Telegram sigue pendiente de envío.'
           : 'El aviso para $quien sigue pendiente de envío.';
     case 'atendida':
+      if (quien == 'sala:falsa_alarma') {
+        return 'Cancelada desde la sala (falsa alarma).';
+      }
       return quien.isEmpty ? Textos.seAtendioLaAlerta : '$quien la atendió.';
     case 'descartada':
       return Textos.seDescartoLaAlerta;

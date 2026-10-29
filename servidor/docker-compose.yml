@@ -325,6 +325,7 @@ services:
       MQTT_SESION_LIMPIA: "true"
       ORQUESTADOR_DB: /datos/orquestador.sqlite3
       PANEL_URL: ${PANEL_URL:-}
+      PANEL_ADMINS: ${PANEL_ADMINS:-}
       # Tailscale y, si hace falta en modo instalacion, la IP de casa. Nunca
       # 0.0.0.0: esa no la escribe nadie, y con ella el panel de la familia se
       # abriria a cualquiera que llegara al puerto.

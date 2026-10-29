@@ -169,16 +169,38 @@ class ClienteApi {
   ///
   /// Devuelve la lista de nombres tal cual; un nombre vacío (alguien sin apodo
   /// guardado) lo deja vacío aquí y la pantalla lo pinta «Familiar».
-  Future<List<String>> familiares() async {
+  Future<List<Map<String, dynamic>>> familiares() async {
     final http.Response respuesta = await _cliente
         .get(_ruta('/api/familiares'), headers: _cabeceras)
         .timeout(const Duration(seconds: 15));
     final Map<String, dynamic> datos =
         (await _json(respuesta) as Map).cast<String, dynamic>();
     return (datos['familiares'] as List)
-        .map((dynamic f) =>
-            ((f as Map)['nombre'] as String? ?? '').trim())
+        .map((dynamic f) => (f as Map).cast<String, dynamic>())
         .toList();
+  }
+
+  Future<Map<String, dynamic>> agregarFamiliar({
+    required String nombre,
+    required bool conTelegram,
+  }) async {
+    final http.Response respuesta = await _cliente
+        .post(_ruta('/api/familiares'),
+            headers: _cabeceras,
+            body: jsonEncode(<String, dynamic>{
+              'nombre': nombre,
+              'con_telegram': conTelegram,
+            }))
+        .timeout(const Duration(seconds: 15));
+    return (await _json(respuesta) as Map).cast<String, dynamic>();
+  }
+
+  Future<void> desactivarFamiliar(String identificador) async {
+    final http.Response respuesta = await _cliente
+        .post(_ruta('/api/familiares/$identificador/desactivar'),
+            headers: _cabeceras)
+        .timeout(const Duration(seconds: 15));
+    await _json(respuesta);
   }
 
   Future<void> luz({required bool encender}) async {

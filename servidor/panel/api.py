@@ -377,7 +377,11 @@ async def acceso(cuerpo: Canje, request: Request):
         raise HTTPException(429, "Se han hecho demasiados intentos. Espere "
                                  "unos minutos y vuelva a intentarlo.")
 
-    exito, fila = panel_acceso.tomar_codigo_acceso(base, cuerpo.codigo)
+    codigo = cuerpo.codigo.strip()
+    if len(codigo) >= 22:
+        exito, fila = panel_acceso.tomar_codigo_invitado(base, codigo)
+    else:
+        exito, fila = panel_acceso.tomar_codigo_acceso(base, codigo)
     if not exito:
         limite_acceso.anotar_fallo(ip)
         limite_codigo_global.anotar_fallo(CLAVE_GLOBAL)
@@ -414,7 +418,8 @@ async def yo(sesion: dict = Depends(sesion_requerida)):
     lo necesita y no tiene por qué tenerlo.
     """
     return {"nombre": _nombre_de(sesion), "caduca_en": sesion["caduca_en"],
-            "caduca_dias": config.DIAS_TOKEN_PANEL}
+            "caduca_dias": config.DIAS_TOKEN_PANEL,
+            "admin": str(sesion["chat_id"]) in (config.PANEL_ADMINS or [])}
 
 
 @app.get("/api/familiares")
@@ -431,10 +436,84 @@ async def familiares(sesion: dict = Depends(sesion_requerida)):
     """
     del sesion
     filas = base.familiares_activos()
-    nombres = [(fila["nombre"] or "").strip() for fila in filas]
-    return {"total": len(nombres),
-            "familiares": [{"nombre": nombre} for nombre in nombres]}
+    items = [{"nombre": (fila["nombre"] or "").strip(),
+              "tiene_telegram": bool(fila["tiene_telegram"])}
+             for fila in filas]
+    return {"total": len(items), "familiares": items}
 
+
+
+def _es_admin(sesion: dict) -> bool:
+    return str(sesion["chat_id"]) in (config.PANEL_ADMINS or [])
+
+
+def _exigir_admin(sesion: dict) -> None:
+    if not _es_admin(sesion):
+        raise HTTPException(403, "Solo un administrador puede hacer esto.")
+
+
+class NuevoFamiliar(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    nombre: str = Field(min_length=1, max_length=40)
+    con_telegram: bool = True
+
+
+@app.post("/api/familiares")
+async def agregar_familiar(cuerpo: NuevoFamiliar,
+                          sesion: dict = Depends(sesion_requerida)):
+    _exigir_admin(sesion)
+    nombre = cuerpo.nombre.strip()
+    if not (1 <= len(nombre) <= 40):
+        raise HTTPException(422, "El nombre debe tener entre 1 y 40 caracteres.")
+    admin = _nombre_de(sesion) or "Ilse"
+    if cuerpo.con_telegram:
+        import registro as registro_modulo
+        codigo = registro_modulo.generar_codigo(
+            registro_modulo._ruta_por_defecto(), minutos=24 * 60)
+        base.crear_aviso_conversacion(
+            admin, sesion["chat_id"], "panel",
+            "%s agregó a %s" % (admin, nombre))
+        return {"ok": True, "tipo": "telegram", "nombre": nombre,
+                "codigo": codigo,
+                "instruccion": "Envíe al bot: /registro %s" % codigo}
+    # Sin Telegram: familiar invitado.
+    import uuid
+    chat_id = "invitado:" + uuid.uuid4().hex
+    base.registrar_familiar(chat_id, nombre=nombre, tiene_telegram=0)
+    codigo = panel_acceso.crear_codigo_invitado(base, chat_id)
+    enlace = "https://asistente.tail722206.ts.net/#codigo=%s" % codigo
+    base.crear_aviso_conversacion(
+        admin, sesion["chat_id"], "panel",
+        "%s agregó a %s" % (admin, nombre))
+    return {"ok": True, "tipo": "invitado", "nombre": nombre,
+            "chat_id": chat_id, "codigo": codigo, "enlace": enlace}
+
+
+@app.post("/api/familiares/{identificador}/desactivar")
+async def desactivar_familiar(identificador: str,
+                              sesion: dict = Depends(sesion_requerida)):
+    _exigir_admin(sesion)
+    # Buscar por chat_id sintético o por nombre.
+    objetivo = None
+    for fila in base.familiares_registrados():
+        if str(fila["chat_id"]) == identificador or (fila["nombre"] or "").strip() == identificador.strip():
+            objetivo = fila
+            break
+    if objetivo is None:
+        raise HTTPException(404, "No se encontró ese familiar.")
+    chat_id = str(objetivo["chat_id"])
+    if chat_id == str(sesion["chat_id"]):
+        raise HTTPException(403, "No puede desactivarse a sí mismo.")
+    if not base.marcar_familiar_inactivo(chat_id):
+        raise HTTPException(409, "Ese familiar ya estaba desactivado.")
+    base.revocar_tokens_panel_de(chat_id)
+    admin = _nombre_de(sesion) or "Ilse"
+    nombre = (objetivo["nombre"] or "").strip() or "Familiar"
+    base.crear_aviso_conversacion(
+        admin, sesion["chat_id"], "panel",
+        "%s desactivó a %s" % (admin, nombre))
+    return {"ok": True, "nombre": nombre}
 
 @app.post("/api/salir")
 async def salir(sesion: dict = Depends(sesion_requerida)):
@@ -1246,6 +1325,8 @@ def principal() -> None:
 
     registro.info("panel en modo %s; url declarada %s", config.MODO_SITIO,
                   config.PANEL_URL or "(vacia)")
+    if not (config.PANEL_ADMINS or []):
+        registro.warning("PANEL_ADMINS vacio: el panel arranca sin administradores")
     registro.info("sin log de accesos a proposito: el token del websocket viaja en la "
                   "query y no debe acabar en un archivo")
 

@@ -40,7 +40,7 @@ class PantallaFamiliares extends StatelessWidget {
         mensaje: estado.errorFamiliares!,
         alReintentar: estado.cargarFamiliares,
       );
-    } else if (estado.nombresFamiliares.isEmpty) {
+    } else if (estado.familiaresLista.isEmpty) {
       cuerpo = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -53,7 +53,7 @@ class PantallaFamiliares extends StatelessWidget {
       cuerpo = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          for (final String nombre in estado.nombresFamiliares)
+          for (final Map<String, dynamic> f in estado.familiaresLista)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
@@ -65,7 +65,9 @@ class PantallaFamiliares extends StatelessWidget {
                         color: Tema.suave, shape: BoxShape.circle),
                     alignment: Alignment.center,
                     child: Text(
-                      nombre.isEmpty ? '?' : nombre[0].toUpperCase(),
+                      ((f['nombre'] as String?) ?? '').isEmpty
+                          ? '?'
+                          : (f['nombre'] as String)[0].toUpperCase(),
                       style: TextStyle(
                           fontSize: movil ? 20 : 22,
                           fontWeight: FontWeight.w700,
@@ -76,15 +78,35 @@ class PantallaFamiliares extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      nombre.isEmpty
+                      (f['nombre'] as String?)?.trim().isEmpty ?? true
                           ? Textos.nombreSinDefinir
-                          : nombre,
+                          : '${(f['nombre'] as String).trim()}${(f['tiene_telegram'] == true) ? '' : ' (sin Telegram)'}',
                       style: TextStyle(
                           fontSize: movil ? 18 : 19,
                           fontWeight: FontWeight.w700,
                           fontFamily: Tema.familia),
                     ),
                   ),
+                  if (estado.esAdmin)
+                    TextButton(
+                      onPressed: () async {
+                        final bool? seguro = await showDialog<bool>(
+                          context: contexto,
+                          builder: (BuildContext c) => AlertDialog(
+                            title: Text(Textos.desactivarFamiliar),
+                            content: Text(Textos.confirmacionDesactivar),
+                            actions: <Widget>[
+                              TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text(Textos.cancelar)),
+                              FilledButton(onPressed: () => Navigator.of(c).pop(true), child: Text(Textos.desactivarFamiliar)),
+                            ],
+                          ),
+                        );
+                        if (seguro == true) {
+                          await estado.desactivarFamiliar((f['nombre'] as String).trim());
+                        }
+                      },
+                      child: Text(Textos.desactivarFamiliar),
+                    ),
                 ],
               ),
             ),
@@ -109,6 +131,71 @@ class PantallaFamiliares extends StatelessWidget {
                   color: Tema.secundario,
                   fontFamily: Tema.familia)),
           const SizedBox(height: 16),
+          if (estado.esAdmin) ...<Widget>[
+            FilledButton.icon(
+              onPressed: () async {
+                final TextEditingController nombreCtrl = TextEditingController();
+                bool conTelegram = true;
+                final bool? ok = await showDialog<bool>(
+                  context: contexto,
+                  builder: (BuildContext c) => StatefulBuilder(
+                    builder: (BuildContext c, void Function(void Function()) setSt) => AlertDialog(
+                      title: Text(Textos.agregarFamiliar),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre')),
+                          const SizedBox(height: 8),
+                          SwitchListTile(
+                            title: const Text('Con Telegram'),
+                            value: conTelegram,
+                            onChanged: (bool v) => setSt(() => conTelegram = v),
+                          ),
+                        ],
+                      ),
+                      actions: <Widget>[
+                        TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text(Textos.cancelar)),
+                        FilledButton(onPressed: () => Navigator.of(c).pop(true), child: const Text('Agregar')),
+                      ],
+                    ),
+                  ),
+                );
+                if (ok == true) {
+                  final String nombre = nombreCtrl.text.trim();
+                  if (nombre.isNotEmpty) {
+                    final Map<String, dynamic>? r = await estado.agregarFamiliar(nombre, conTelegram);
+                    if (r != null && r['enlace'] != null) {
+                      // mostrar enlace una vez
+                      await showDialog<void>(
+                        context: contexto,
+                        builder: (BuildContext c) => AlertDialog(
+                          title: Text(Textos.enlaceInvitacion),
+                          content: SelectableText(r['enlace'] as String),
+                          actions: <Widget>[
+                            TextButton(onPressed: () => Navigator.of(c).pop(), child: const Text('Cerrar')),
+                          ],
+                        ),
+                      );
+                    } else if (r != null && r['codigo'] != null) {
+                      await showDialog<void>(
+                        context: contexto,
+                        builder: (BuildContext c) => AlertDialog(
+                          title: Text(Textos.codigoRegistro),
+                          content: Text('Envíe al bot: /registro ${r['codigo']}'),
+                          actions: <Widget>[
+                            TextButton(onPressed: () => Navigator.of(c).pop(), child: const Text('Cerrar')),
+                          ],
+                        ),
+                      );
+                    }
+                  }
+                }
+              },
+              icon: const Icon(Icons.person_add),
+              label: Text(Textos.agregarFamiliar),
+            ),
+            const SizedBox(height: 12),
+          ],
           Card(
             child: Padding(
               padding: const EdgeInsets.all(18),
@@ -119,7 +206,7 @@ class PantallaFamiliares extends StatelessWidget {
               estado.errorFamiliares == null) ...<Widget>[
             const SizedBox(height: 12),
             Text(
-              '${familiares(estado.nombresFamiliares.length)} · ${Textos.avisoFamiliares}',
+              '${familiares(estado.familiaresLista.length)} · ${Textos.avisoFamiliares}',
               style: TextStyle(
                   fontSize: movil ? 14 : 16,
                   color: Tema.secundario,

@@ -32,6 +32,13 @@ class Textos {
   static const String codigoNoReconocido =
       'Ese código no tiene seis caracteres. Cópielo del mensaje del bot y '
       'vuelva a intentarlo.';
+  static const String agregarFamiliar = 'Agregar familiar';
+  static const String desactivarFamiliar = 'Desactivar';
+  static const String confirmacionDesactivar = '¿Desactivar a este familiar?';
+  static const String codigoRegistro = 'Código de registro';
+  static const String enlaceInvitacion = 'Enlace de invitación';
+  static const String copiar = 'Copiar';
+
   static const String errorDeRed = 'No se pudo contactar con el servidor. '
       'Compruebe la conexión e inténtelo de nuevo.';
 

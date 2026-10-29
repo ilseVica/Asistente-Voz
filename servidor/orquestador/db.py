@@ -114,7 +114,7 @@ ENVIO_FALLIDO_PERMANENTE = 2147483647
 # antes, y rellenarlo con un nombre inventado seria peor que dejarlo vacio. Otra
 # columna nueva en una tabla vieja, asi que otra vez el `ALTER TABLE` idempotente
 # de la 2->3 y de la 4.
-VERSION_ESQUEMA = 10
+VERSION_ESQUEMA = 11
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -443,6 +443,24 @@ class BaseDatos:
                 raise RuntimeError("foreign_key_check no esta vacio: %r" % filas_fk)
             self.conexion.execute("COMMIT")
             self.conexion.execute("PRAGMA foreign_keys=ON")
+
+        # De la 10 a la 11: `familiares` gana `tiene_telegram` (1 = recibe avisos
+        # por Telegram, 0 = invitado sin Telegram). Los familiares existentes quedan
+        # en 1. Es una columna nueva en una tabla vieja, asi que ALTER idempotente.
+        if version < 11:
+            columnas = {fila["name"] for fila in
+                        self.conexion.execute("PRAGMA table_info(familiares)").fetchall()}
+            if "tiene_telegram" not in columnas:
+                self.conexion.execute(
+                    "ALTER TABLE familiares ADD COLUMN tiene_telegram "
+                    "INTEGER NOT NULL DEFAULT 1")
+        # asegurar columna en bases ya creadas
+        columnas = {fila["name"] for fila in
+                    self.conexion.execute("PRAGMA table_info(familiares)").fetchall()}
+        if "tiene_telegram" not in columnas:
+            self.conexion.execute(
+                "ALTER TABLE familiares ADD COLUMN tiene_telegram "
+                "INTEGER NOT NULL DEFAULT 1")
 
         self.conexion.execute("PRAGMA user_version = %d" % VERSION_ESQUEMA)
         registro.info("base de datos migrada a la versión %d del esquema",
@@ -779,7 +797,8 @@ class BaseDatos:
 
     # --- Familiares ---------------------------------------------------------
 
-    def registrar_familiar(self, chat_id: str, nombre: str = "") -> bool:
+    def registrar_familiar(self, chat_id: str, nombre: str = "",
+                          tiene_telegram: int = 1) -> bool:
         """Da de alta un familiar. Devuelve si era nuevo.
 
         `False` significa que ese chat ya estaba, y no es un error: es el caso
@@ -789,9 +808,9 @@ class BaseDatos:
         """
         with _candado:
             cursor = self.conexion.execute(
-                "INSERT OR IGNORE INTO familiares (chat_id, nombre, registrado_en) "
-                "VALUES (?, ?, ?)",
-                (str(chat_id), nombre or "", int(time.time())),
+                "INSERT OR IGNORE INTO familiares (chat_id, nombre, registrado_en, "
+                "tiene_telegram) VALUES (?, ?, ?, ?)",
+                (str(chat_id), nombre or "", int(time.time()), int(tiene_telegram)),
             )
             self.conexion.commit()
             return cursor.rowcount == 1
@@ -855,6 +874,68 @@ class BaseDatos:
                 "SELECT * FROM familiares WHERE activo = 1 "
                 "ORDER BY registrado_en, chat_id"
             ))
+
+    def familiares_con_telegram(self) -> list:
+        """Familiares activos que reciben avisos por Telegram (tiene_telegram=1)."""
+        with _candado:
+            return list(self.conexion.execute(
+                "SELECT * FROM familiares WHERE activo = 1 AND tiene_telegram = 1 "
+                "ORDER BY registrado_en, chat_id"
+            ))
+
+    def contar_familiares_con_telegram(self) -> int:
+        with _candado:
+            return self.conexion.execute(
+                "SELECT COUNT(*) AS total FROM familiares "
+                "WHERE activo = 1 AND tiene_telegram = 1"
+            ).fetchone()["total"]
+
+    def revocar_tokens_panel_de(self, chat_id: str) -> int:
+        with _candado:
+            filas = self.conexion.execute(
+                "SELECT token_hash FROM panel_tokens WHERE chat_id = ? "
+                "AND revocado_en IS NULL", (str(chat_id),)).fetchall()
+            ahora = int(time.time())
+            total = 0
+            for fila in filas:
+                cur = self.conexion.execute(
+                    "UPDATE panel_tokens SET revocado_en = ? "
+                    "WHERE token_hash = ? AND revocado_en IS NULL",
+                    (ahora, fila["token_hash"]))
+                total += cur.rowcount
+            self.conexion.commit()
+            return total
+
+    def tomar_codigo_invitado(self, codigo_hash: str, ahora: int = None) -> dict:
+        import hmac
+        import registro as registro_modulo
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            fila = self.conexion.execute(
+                "SELECT * FROM codigos_acceso WHERE codigo_hash = ?",
+                (codigo_hash,)).fetchone()
+            if fila is None:
+                return None
+            if not hmac.compare_digest(str(fila["codigo_hash"]), str(codigo_hash)):
+                return None
+            if fila["usado_en"] is not None:
+                return None
+            if fila["expira_en"] <= ahora:
+                return None
+            if fila["intentos"] >= registro_modulo.MAX_INTENTOS_CODIGO:
+                return None
+            self.conexion.execute(
+                "UPDATE codigos_acceso SET intentos = intentos + 1 "
+                "WHERE codigo_hash = ?", (codigo_hash,))
+            cursor = self.conexion.execute(
+                "UPDATE codigos_acceso SET usado_en = ? "
+                "WHERE codigo_hash = ? AND usado_en IS NULL",
+                (ahora, codigo_hash))
+            self.conexion.commit()
+            if cursor.rowcount != 1:
+                return None
+            return dict(fila)
 
     def contar_familiares(self) -> int:
         """Cuantos chats hay en la tabla, ACTIVOS O NO.
@@ -1248,7 +1329,7 @@ class BaseDatos:
         ahora = int(time.time())
         purgable = ahora + config.DIAS_PURGA_ALERTAS * 86400
         if chat_ids is None:
-            chat_ids = [fila["chat_id"] for fila in self.familiares_activos()]
+            chat_ids = [fila["chat_id"] for fila in self.familiares_con_telegram()]
 
         with _candado:
             cursor = self.conexion.execute(

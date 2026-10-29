@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS familiares (
     chat_id        TEXT NOT NULL PRIMARY KEY,
     nombre         TEXT NOT NULL DEFAULT '',
     registrado_en  INTEGER NOT NULL,
-    activo         INTEGER NOT NULL DEFAULT 1
+    activo         INTEGER NOT NULL DEFAULT 1,
+    tiene_telegram INTEGER NOT NULL DEFAULT 1
 );
 
 

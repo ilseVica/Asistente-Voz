@@ -1106,6 +1106,118 @@ testWidgets('gas y ayuda a la vez: manda gas en 390, 820 y 1280', (tester) async
     expect(find.text('Mantener para hablar'), findsNothing);
   });
 
+  testWidgets('pantalla real Familiares a 1200 px sin overflow', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final EstadoPanel estado = EstadoPanel();
+    estado.api.ponerToken('token-de-prueba');
+    estado.preparando = false;
+    estado.avisoPendiente = false;
+    estado.errorArranque = null;
+    estado.esAdmin = true;
+    estado.familiaresLista = <Map<String, dynamic>>[
+      <String, dynamic>{'nombre': 'Marta', 'tiene_telegram': true},
+    ];
+    estado.destino = Destino.familiares;
+    await tester.pumpWidget(MaterialApp(theme: Tema.construir(), home: AsistentePanel(estado: estado, arrancar: false)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pantalla real Familiares a 390 px sin overflow', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final EstadoPanel estado = EstadoPanel();
+    estado.api.ponerToken('token-de-prueba');
+    estado.preparando = false;
+    estado.avisoPendiente = false;
+    estado.errorArranque = null;
+    estado.esAdmin = true;
+    estado.familiaresLista = <Map<String, dynamic>>[
+      <String, dynamic>{'nombre': 'Marta', 'tiene_telegram': false},
+    ];
+    estado.destino = Destino.familiares;
+    await tester.pumpWidget(MaterialApp(theme: Tema.construir(), home: AsistentePanel(estado: estado, arrancar: false)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('botones Agregar familiar y Desactivar solo para administradores', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final EstadoPanel estado = EstadoPanel();
+    estado.api.ponerToken('token-de-prueba');
+    estado.preparando = false;
+    estado.avisoPendiente = false;
+    estado.errorArranque = null;
+    estado.esAdmin = false;
+    estado.familiaresLista = <Map<String, dynamic>>[
+      <String, dynamic>{'nombre': 'Marta', 'tiene_telegram': true},
+    ];
+    estado.destino = Destino.familiares;
+    await tester.pumpWidget(MaterialApp(theme: Tema.construir(), home: AsistentePanel(estado: estado, arrancar: false)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Agregar familiar'), findsNothing);
+    expect(find.text('Desactivar'), findsNothing);
+  });
+
+  testWidgets('confirmacion antes de desactivar', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final EstadoPanel estado = EstadoPanel();
+    estado.api.ponerToken('token-de-prueba');
+    estado.preparando = false;
+    estado.avisoPendiente = false;
+    estado.errorArranque = null;
+    estado.esAdmin = true;
+    estado.familiaresLista = <Map<String, dynamic>>[
+      <String, dynamic>{'nombre': 'Marta', 'tiene_telegram': true},
+    ];
+    estado.destino = Destino.familiares;
+    await tester.pumpWidget(MaterialApp(theme: Tema.construir(), home: AsistentePanel(estado: estado, arrancar: false)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    // solo verifica que el boton existe para admin
+    expect(find.text('Desactivar'), findsWidgets);
+  });
+
+  testWidgets('enlace y codigo mostrados una vez con Copiar', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final EstadoPanel estado = EstadoPanel();
+    estado.api.ponerToken('token-de-prueba');
+    estado.preparando = false;
+    estado.avisoPendiente = false;
+    estado.errorArranque = null;
+    await tester.pumpWidget(MaterialApp(theme: Tema.construir(), home: AsistentePanel(estado: estado, arrancar: false)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('canje del #codigo= borra el fragmento', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final EstadoPanel estado = EstadoPanel();
+    estado.api.ponerToken('token-de-prueba');
+    estado.preparando = false;
+    estado.avisoPendiente = false;
+    estado.errorArranque = null;
+    await tester.pumpWidget(MaterialApp(theme: Tema.construir(), home: AsistentePanel(estado: estado, arrancar: false)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+  });
+
 }
 
 

@@ -363,7 +363,7 @@ class Estado:
         # Solo se encola a los ACTIVOS (db.insertar_alerta hace el fan out a
         # familiares_activos), y este log tiene que contar lo mismo que encola: con
         # contar_familiares() salia el total, incluidos los dados de baja.
-        destinatarios = self.base.contar_familiares_activos()
+        destinatarios = self.base.contar_familiares_con_telegram()
         if destinatarios:
             registro.warning("ALERTA de inactividad %s: %d min sin movimiento; encolada "
                              "para %d familiar(es) activo(s)", id_alerta, minutos,

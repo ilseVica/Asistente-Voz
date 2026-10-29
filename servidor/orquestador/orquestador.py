@@ -190,7 +190,7 @@ def tarea_conversacion(base, publicar, remitente, satelites, parando) -> None:
                 # Fan out por Telegram.
                 estado_final = base.obtener_conversacion(id_conv)["estado"]
                 if origen == "panel":
-                    for fam in base.familiares_activos():
+                    for fam in base.familiares_con_telegram():
                         chat = str(fam["chat_id"])
                         try:
                             mensaje = remitente.enviar(
@@ -234,7 +234,7 @@ def tarea_conversacion(base, publicar, remitente, satelites, parando) -> None:
                     base.marcar_conversacion_notificada(fila["id"])
                     continue
                 texto = fila["texto"] or ""
-                for fam in base.familiares_activos():
+                for fam in base.familiares_con_telegram():
                     chat = str(fam["chat_id"])
                     try:
                         remitente.enviar(

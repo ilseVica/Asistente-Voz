@@ -550,7 +550,7 @@ def procesar(topico: str, cuerpo: str, base, publicar=None) -> bool:
     # siguen en la base para el historial pero no reciben nada). Que no haya ninguno
     # activo no es un error: el aviso queda pendiente a la espera de que se active
     # alguien, y en ese momento se le hace fan out (`db.fan_out_sin_destino`).
-    destinatarios = base.contar_familiares_activos()
+    destinatarios = base.contar_familiares_con_telegram()
     if destinatarios:
         registro.warning("ALERTA %s de %s encolada para %d familiar(es) activo(s)",
                          tipo.upper(), id_alerta, destinatarios)

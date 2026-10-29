@@ -244,7 +244,7 @@ def _escribir_archivo() -> None:
     _firma_archivo = _firma(ruta)
 
 
-def generar_codigo(ruta: str) -> str:
+def generar_codigo(ruta: str, minutos: int = MINUTOS_CODIGO) -> str:
     """Crea un código de un solo uso y lo guarda con su caducidad.
 
     No escribe el código en el log. Sale por la salida estándar del comando, que
@@ -267,7 +267,7 @@ def generar_codigo(ruta: str) -> str:
         codigo = "".join(secrets.choice(ALFABETO) for _ in range(LONGITUD_CODIGO))
         CODIGOS[codigo] = {
             "creado_en": ahora,
-            "expira_en": ahora + SEGUNDOS_CODIGO,
+            "expira_en": ahora + int(minutos) * 60,
             "intentos": 0,
             "usado_en": None,
         }

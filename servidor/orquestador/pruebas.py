@@ -4085,6 +4085,96 @@ prueba("el aviso va a Telegram",
 base.cerrar()
 
 
+
+
+print("\n" + "=" * 66)
+print("comprobaciones: %d" % COMPROBACIONES[0])
+print("fallos: %d" % len(FALLOS))
+for nombre in FALLOS:
+    print("  - " + nombre)
+
+# =============================================================================
+# Familiares: invitados, administración y códigos
+# =============================================================================
+
+titulo("Familiares: invitados y códigos")
+
+# migracion 10->11 sobre datos existentes: familiares actuales con tiene_telegram=1
+base_m11, ruta_m11 = base_nueva("mig10a11-")
+base_m11.registrar_familiar("777", nombre="Fam")
+base_m11.conexion.execute("PRAGMA user_version=10")
+# simular ausencia de la columna en v10
+cols = {r["name"] for r in base_m11.conexion.execute("PRAGMA table_info(familiares)").fetchall()}
+if "tiene_telegram" in cols:
+    pass
+base_m11.conexion.commit()
+base_m11.cerrar()
+# forzar version 10 sin columna: recrear tabla sin columna
+conn = sqlite3.connect(ruta_m11)
+conn.execute("PRAGMA foreign_keys=OFF")
+conn.execute("BEGIN")
+conn.execute("""CREATE TABLE familiares_v10 (chat_id TEXT NOT NULL PRIMARY KEY, nombre TEXT NOT NULL DEFAULT '',
+    registrado_en INTEGER NOT NULL, activo INTEGER NOT NULL DEFAULT 1)""")
+conn.execute("INSERT INTO familiares_v10 (chat_id,nombre,registrado_en,activo) SELECT chat_id,nombre,registrado_en,activo FROM familiares")
+conn.execute("DROP TABLE familiares")
+conn.execute("ALTER TABLE familiares_v10 RENAME TO familiares")
+conn.commit()
+conn.close()
+base_m11b = db_modulo.BaseDatos(ruta_m11)
+tg = base_m11b.conexion.execute("SELECT tiene_telegram FROM familiares WHERE chat_id='777'").fetchone()[0]
+prueba("migracion 10->11 deja tiene_telegram=1 en familiares actuales",
+       tg == 1, tg)
+base_m11b.cerrar()
+
+# familiares_con_telegram excluye invitados e inactivos
+base_ft, _ = base_nueva("ft-")
+base_ft.registrar_familiar("1", nombre="Tg", tiene_telegram=1)
+base_ft.registrar_familiar("2", nombre="Inv", tiene_telegram=0)
+base_ft.registrar_familiar("3", nombre="Inact", tiene_telegram=1)
+base_ft.marcar_familiar_inactivo("3")
+ids_ft = [f["chat_id"] for f in base_ft.familiares_con_telegram()]
+prueba("familiares_con_telegram excluye invitados e inactivos",
+       ids_ft == ["1"], ids_ft)
+base_ft.cerrar()
+
+# una prueba que falle si algun envio toma un familiar con tiene_telegram=0
+# (comprobacion estatica del codigo fuente)
+import re as _re
+codigo_fuente = open(os.path.join(RAIZ, "db.py")).read() + open(os.path.join(RAIZ, "orquestador.py")).read() + open(os.path.join(RAIZ, "bot.py")).read() + open(os.path.join(RAIZ, "inactividad.py")).read()
+prueba("ningun envio usa familiares_activos en lugar de familiares_con_telegram",
+       "familiares_activos()" not in codigo_fuente.replace("familiares_con_telegram()", ""),
+       "familiares_activos() residual")
+
+# codigo de registro desde el panel: vigente a las 23 h, vencido a las 25 h
+import registro as registro_modulo
+_tiempo_original = time.time
+ruta_cod = os.path.join(tempfile.mkdtemp(), "codigos.json")
+codigo24 = registro_modulo.generar_codigo(ruta_cod, minutos=24 * 60)
+ahora = int(time.time())
+# vigente a las 23 h
+registro_modulo.time.time = lambda: ahora + 23 * 3600
+motivo23 = registro_modulo.comprobar_codigo(codigo24)
+prueba("codigo de registro del panel vigente a las 23 h",
+       motivo23 is None, motivo23)
+registro_modulo.marcar_codigo_usado(codigo24)
+registro_modulo.time.time = _tiempo_original
+# vencido a las 25 h: generar otro
+codigo24b = registro_modulo.generar_codigo(ruta_cod, minutos=24 * 60)
+registro_modulo.time.time = lambda: ahora + 25 * 3600
+motivo25 = registro_modulo.comprobar_codigo(codigo24b)
+prueba("codigo de registro del panel vencido a las 25 h",
+       motivo25 is not None, motivo25)
+# restaurar time.time
+registro_modulo.time.time = _tiempo_original
+
+# el comando sigue en 10 min
+codigo10 = registro_modulo.generar_codigo(ruta_cod)
+registro_modulo.time.time = lambda: int(_tiempo_original()) + 11 * 60
+motivo11 = registro_modulo.comprobar_codigo(codigo10)
+prueba("codigo del comando sigue venciendo a los 10 min",
+       motivo11 is not None, motivo11)
+registro_modulo.time.time = _tiempo_original
+
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))

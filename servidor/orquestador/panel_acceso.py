@@ -217,6 +217,30 @@ def crear_codigo_acceso(base, chat_id: str, ahora: int = None) -> str:
     return codigo
 
 
+
+def crear_codigo_invitado(base, chat_id: str, ahora: int = None) -> str:
+    """Crea un código de invitado (>=22 chars, token_urlsafe) con vigencia 72 h.
+
+    Se guarda solo su hash en `codigos_acceso`, igual que los códigos de 6
+    caracteres. Devuelve el código en claro una sola vez.
+    """
+    if ahora is None:
+        ahora = int(time.time())
+    import secrets as _secrets
+    codigo = _secrets.token_urlsafe(24)
+    base.invalidar_codigos_acceso(chat_id, ahora)
+    base.crear_codigo_acceso(hash_de_codigo(codigo), chat_id,
+                             ahora + 72 * 3600, ahora)
+    return codigo
+
+
+def tomar_codigo_invitado(base, codigo: str, ahora: int = None) -> tuple:
+    if ahora is None:
+        ahora = int(time.time())
+    codigo_limpio = (codigo or "").strip()
+    fila = base.tomar_codigo_invitado(hash_de_codigo(codigo_limpio), ahora)
+    return (fila is not None), (fila or {})
+
 def tomar_codigo_acceso(base, codigo: str, ahora: int = None) -> tuple:
     """Canjea un código de acceso. Devuelve `(ok, fila)`.
 

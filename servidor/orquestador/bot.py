@@ -572,7 +572,7 @@ class ClienteBot:
             id_conv, chat_id, mensaje_id=confirmacion.message_id)
 
         # Reenvio a los demas familiares.
-        for fila in self.base.familiares_activos():
+        for fila in self.base.familiares_con_telegram():
             otro = str(fila["chat_id"])
             if otro == chat_id:
                 continue

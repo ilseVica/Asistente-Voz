@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'web_utils_stub.dart' if (dart.library.html) 'web_utils_web.dart';
 
 import 'package:flutter/material.dart';
 
@@ -58,7 +59,8 @@ class EstadoPanel extends ChangeNotifier {
   String nombre = '';
 
   /// Los nombres de los familiares activos, para la pantalla «Familiares».
-  List<String> nombresFamiliares = const <String>[];
+  List<Map<String, dynamic>> familiaresLista = const <Map<String, dynamic>>[];
+  bool esAdmin = false;
   bool cargandoFamiliares = false;
   String? errorFamiliares;
 
@@ -144,6 +146,21 @@ class EstadoPanel extends ChangeNotifier {
 
     final String? guardado = await sesion.leerToken();
     if (guardado == null || guardado.isEmpty) {
+      // Canje por fragmento #codigo=...
+      final String fragmento = Uri.base.fragment;
+      if (fragmento.startsWith('codigo=')) {
+        final String codigo = fragmento.substring('codigo='.length);
+        try {
+          await borrarFragmento();
+        } catch (_) {}
+        try {
+          await _canjearFragmento(codigo);
+        } catch (_) {}
+        preparando = false;
+        avisoPendiente = await sesion.avisoVisto();
+        notifyListeners();
+        return;
+      }
       preparando = false;
       avisoPendiente = await sesion.avisoVisto();
       notifyListeners();
@@ -156,6 +173,7 @@ class EstadoPanel extends ChangeNotifier {
     try {
       final Map<String, dynamic> yo = await api.yo();
       nombre = yo['nombre'] as String? ?? '';
+      esAdmin = yo['admin'] == true;
       preparando = false;
       notifyListeners();
       _empezar();
@@ -178,6 +196,26 @@ class EstadoPanel extends ChangeNotifier {
     }
   }
 
+
+  Future<void> _canjearFragmento(String codigo) async {
+    try {
+      final Map<String, dynamic> datos = await api.canjear(codigo);
+      final String token = datos['token'] as String;
+      await sesion.guardarToken(token);
+      await sesion.guardarNombre(datos['nombre'] as String? ?? '');
+      api.ponerToken(token);
+      nombre = datos['nombre'] as String? ?? '';
+      try {
+        await borrarFragmento();
+      } catch (_) {}
+      _empezar();
+    } on ErrorApi catch (error) {
+      aviso = error.mensaje;
+    } catch (_) {
+      aviso = Textos.errorDeRed;
+    }
+  }
+
   Future<void> _olvidar() async {
     api.quitarToken();
     await sesion.borrarToken();
@@ -186,7 +224,7 @@ class EstadoPanel extends ChangeNotifier {
     alertas = const <Alerta>[];
     recordatorios = const <Recordatorio>[];
     conversacion = const <EntradaConversacion>[];
-    nombresFamiliares = const <String>[];
+    familiaresLista = const <Map<String, dynamic>>[];
     errorFamiliares = null;
     alertaAbierta = null;
     detalleAlerta = null;
@@ -399,7 +437,7 @@ class EstadoPanel extends ChangeNotifier {
     errorFamiliares = null;
     notifyListeners();
     try {
-      nombresFamiliares = await api.familiares();
+      familiaresLista = await api.familiares();
       conectadoAlServidor = true;
     } on ErrorApi catch (error) {
       if (error.sinSesion) {
@@ -415,6 +453,46 @@ class EstadoPanel extends ChangeNotifier {
     }
     cargandoFamiliares = false;
     notifyListeners();
+  }
+
+  Future<Map<String, dynamic>?> agregarFamiliar(String nombre, bool conTelegram) async {
+    try {
+      final Map<String, dynamic> r = await api.agregarFamiliar(nombre: nombre, conTelegram: conTelegram);
+      await cargarFamiliares();
+      return r;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        await cerrarSesion();
+        return null;
+      }
+      aviso = error.mensaje;
+      notifyListeners();
+      return null;
+    } catch (_) {
+      aviso = Textos.errorDeRed;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<bool> desactivarFamiliar(String identificador) async {
+    try {
+      await api.desactivarFamiliar(identificador);
+      await cargarFamiliares();
+      return true;
+    } on ErrorApi catch (error) {
+      if (error.sinSesion) {
+        await cerrarSesion();
+        return false;
+      }
+      aviso = error.mensaje;
+      notifyListeners();
+      return false;
+    } catch (_) {
+      aviso = Textos.errorDeRed;
+      notifyListeners();
+      return false;
+    }
   }
 
   /// Abre el detalle de una alerta (la raíz cambia a `PantallaAlertaDetalle`).

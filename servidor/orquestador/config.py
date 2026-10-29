@@ -502,6 +502,15 @@ PAUSA_CHAT_S = 5
 NIVEL_LOG = os.environ.get("NIVEL_LOG", "INFO").upper()
 
 
+
+# --- Administradores del panel ---------------------------------------------
+#
+# Los familiar (chat_id) que pueden administrar desde el panel: agregar y
+# desactivar familiares. Separados por comas o espacios. Vacío = sin
+# administradores: el panel arranca igual y lo anota en el log.
+PANEL_ADMINS = [x for x in os.environ.get("PANEL_ADMINS", "")
+                .replace(",", " ").split() if x]
+
 def resumen() -> dict:
     """Un resumen sin secretos, para el log de arranque.
 

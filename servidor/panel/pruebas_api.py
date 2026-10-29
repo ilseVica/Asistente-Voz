@@ -45,6 +45,7 @@ sys.path.insert(0, RAIZ)
 
 datos = tempfile.mkdtemp(prefix="pruebas-api-")
 os.environ["ORQUESTADOR_DB"] = os.path.join(datos, "pruebas.sqlite3")
+os.environ.setdefault("PANEL_ADMINS", "111")
 os.environ.setdefault("MQTT_PANEL_PASSWORD", "CONTRASENA-DE-PRUEBAS-NO-REAL")
 os.environ.setdefault("PANEL_URL", "http://villaca.tail722206.ts.net:8080")
 os.environ["PANEL_RAIZ_WEB"] = os.path.join(datos, "web")
@@ -1442,6 +1443,79 @@ api_modulo.estados.recibir(
     "casa/sala/satelite/satelite-sala/estado",
     json.dumps({"conectado": True}),
 )
+
+
+
+# =============================================================================
+# 15. Familiares: administración
+# =============================================================================
+
+titulo("15. Familiares admin")
+
+# 403 a un no administrador
+token_luis = entrar("222")
+r = cliente.post("/api/familiares", headers=cab(token_luis),
+                 json={"nombre": "Pedro", "con_telegram": True})
+prueba("un no administrador recibe 403 al agregar", r.status_code == 403, r.status_code)
+
+# alta con Telegram devuelve codigo
+r = cliente.post("/api/familiares", headers=cab(token_marta),
+                 json={"nombre": "Pedro", "con_telegram": True})
+prueba("un admin agrega con Telegram (200)", r.status_code == 200, r.status_code)
+datos_tg = r.json()
+prueba("alta con Telegram devuelve codigo", "codigo" in datos_tg, datos_tg)
+codigo_tg = datos_tg.get("codigo")
+
+# alta sin Telegram devuelve enlace
+r = cliente.post("/api/familiares", headers=cab(token_marta),
+                 json={"nombre": "Invitada", "con_telegram": False})
+prueba("un admin agrega sin Telegram (200)", r.status_code == 200, r.status_code)
+datos_inv = r.json()
+prueba("alta sin Telegram devuelve enlace", "enlace" in datos_inv
+       and "#codigo=" in (datos_inv.get("enlace") or ""), datos_inv)
+codigo_inv = datos_inv.get("codigo")
+
+# canje correcto del invitado
+r = cliente.post("/api/acceso", json={"codigo": codigo_inv})
+prueba("canje de invitado correcto", r.status_code == 200, r.text[:120])
+token_inv = r.json().get("token") if r.status_code == 200 else None
+
+# segundo canje rechazado
+r = cliente.post("/api/acceso", json={"codigo": codigo_inv})
+prueba("segundo canje de invitado rechazado", r.status_code == 401, r.status_code)
+
+# vencido rechazado
+codigo_venc = panel_acceso.crear_codigo_invitado(base, "111")
+# forzar vencimiento
+base.conexion.execute("UPDATE codigos_acceso SET expira_en = ? WHERE codigo_hash = ?",
+                      (int(time.time()) - 1, panel_acceso.hash_de_codigo(codigo_venc)))
+base.conexion.commit()
+r = cliente.post("/api/acceso", json={"codigo": codigo_venc})
+prueba("codigo invitado vencido rechazado", r.status_code == 401, r.status_code)
+
+# no puede desactivarse a si mismo
+r = cliente.post("/api/familiares/Marta/desactivar", headers=cab(token_marta))
+prueba("no se puede desactivar a si mismo", r.status_code == 403, r.status_code)
+
+# desactivar invalida la sesion
+if token_inv:
+    # encontrar chat_id del invitado: desactivar por nombre
+    r = cliente.post("/api/familiares/Invitada/desactivar", headers=cab(token_marta))
+    prueba("desactivar familiar devuelve 200", r.status_code == 200, r.status_code)
+    r = cliente.get("/api/estado", headers={"Authorization": "Bearer " + token_inv})
+    prueba("la sesion del desactivado deja de valer", r.status_code == 401, r.status_code)
+
+# aviso en la conversacion
+entradas = base.listar_conversacion(limite=20)[0]
+avisos = [e for e in entradas if e["tipo"] == "aviso"
+          and "agreg" in (e["texto"] or "")]
+prueba("alta agrega aviso en la conversacion", len(avisos) >= 1, [e["texto"] for e in entradas])
+# invitado excluido de Telegram sin error
+base.registrar_familiar("inv-excl", nombre="Excluido", tiene_telegram=0)
+base.insertar_alerta("alerta-excl", "gas", json.dumps({"gas_adc": 2500}))
+envios_guest = base.conexion.execute(
+    "SELECT COUNT(*) AS total FROM envios WHERE chat_id = ?", ("inv-excl",)).fetchone()["total"]
+prueba("invitado excluido de Telegram sin error", envios_guest == 0, envios_guest)
 
 
 cliente.__exit__(None, None, None)

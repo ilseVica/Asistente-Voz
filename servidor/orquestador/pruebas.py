@@ -2015,6 +2015,33 @@ base.cerrar()
 
 
 # =============================================================================
+# Regresion: cola._editar_resueltas usa el modulo `textos` REAL (no simulado)
+# para armar el aviso de una falsa alarma resuelta desde la sala.
+# =============================================================================
+titulo("Regresion: falsa alarma en _editar_resueltas")
+
+base_fa, _ = base_nueva("falsa-edit-")
+base_fa.registrar_familiar("551999991", nombre="Marta")
+base_fa.insertar_alerta("000000-fa-0001", "gas",
+                        '{"id":"000000-fa-0001","gas_adc":2100}')
+remitente_fa = RemitenteConId()
+trabajador_fa = cola_modulo.TrabajadorTelegram(base_fa, remitente_fa)
+trabajador_fa._intentar_uno()
+
+atendida_fa = int(time.time())
+alertas.resolver(base_fa, None, "000000-fa-0001", ahora=atendida_fa,
+                 quien="La sala", origen="voz",
+                 nombre_quien="sala:falsa_alarma")
+
+trabajador_fa._editar_resueltas()
+prueba("cola._editar_resueltas arma 'Falsa alarma...' con textos real",
+       len(remitente_fa.ediciones) == 1
+       and str(remitente_fa.ediciones[0][2]).startswith("Falsa alarma"),
+       remitente_fa.ediciones)
+base_fa.cerrar()
+
+
+# =============================================================================
 # 20. Voz (etapa A): el texto reconocido, su eco y su reparto
 # =============================================================================
 #

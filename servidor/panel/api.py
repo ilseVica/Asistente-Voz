@@ -1327,6 +1327,8 @@ def principal() -> None:
                   config.PANEL_URL or "(vacia)")
     if not (config.PANEL_ADMINS or []):
         registro.warning("PANEL_ADMINS vacio: el panel arranca sin administradores")
+    else:
+        registro.info("PANEL_ADMINS cargados: %d", len(config.PANEL_ADMINS or []))
     registro.info("sin log de accesos a proposito: el token del websocket viaja en la "
                   "query y no debe acabar en un archivo")
 

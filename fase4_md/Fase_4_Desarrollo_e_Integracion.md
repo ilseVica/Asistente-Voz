@@ -20,7 +20,7 @@ Criterios de éxito de la fase:
 El prototipo cubre una sola sala con una luz controlada y un nodo de sensores. Lo que queda fuera se documenta para no confundir el alcance:
 
 - Varias habitaciones, varios nodos o varias luces.
-- Varios micrófonos distribuidos en la casa, o captación desde cualquier punto de la sala: con un micrófono USB, el usuario debe estar a 1.5 m o menos. Un arreglo de micrófonos queda como mejora futura.
+- Varios micrófonos distribuidos en la casa, o captación desde cualquier punto de la sala: con un micrófono inalámbrico con receptor USB-C, el usuario debe estar a 1.5 m o menos. Un arreglo de micrófonos queda como mejora futura.
 - Control de cargas a 127 V; la demostración usa cargas de bajo voltaje.
 - Detección de caídas, llamadas telefónicas automáticas y SMS.
 - Apps nativas y publicación en tiendas: el panel se entrega como versión web más una APK de Android compiladas con Flutter, sin App Store ni Google Play.
@@ -35,7 +35,8 @@ Estos datos se definen en el Paso 0 y se agregan a este documento:
 - [ ] Fecha de inicio, fecha de fin y fecha de presentación.
 - [ ] Responsable de cada paso del plan.
 - [ ] Presupuesto: micrófono, relés, fuentes, servidor, y qué equipo es propio o prestado (el dominio ya no se compra: Funnel).
-- [x] Confirmar la laptop que funcionará como satélite de voz en la presentación.
+- [x] Confirmar la laptop con Omarchy que funciona como satélite de voz (sin puente).
+- [x] Panel web con administradores, publicado por Tailscale Funnel (sin dominio propio).
 - [ ] Probar la administración remota del servidor (Proxmox y SSH por Tailscale) desde la laptop, con datos móviles.
 - [ ] Reservar el lugar de la presentación y saber cuántos equipos se conectarán a la vez.
 - [ ] Medir la velocidad de subida de datos móviles en el lugar, con el hotspot.
@@ -53,9 +54,20 @@ Corte al 11 de octubre de 2026; ese día se actualizó la etapa A del servidor d
 | Plan actualizado con las decisiones del broker y del firmware | Hecho | Esta versión del documento. |
 | NTP del servidor para la red local | Pendiente | chrony no escucha en el puerto 123; falta aplicar su configuración con `sudo`. |
 | ESP32 conectado a la VM por USB | Pendiente | Falta agregar el dispositivo a la VM en Proxmox. |
-| Puente de la laptop, satélite de voz, orquestador, panel y alertas | Implementado y probado | Reporte «2026-10-06 - Implementacion - Etapa 1: panel web de la familia». Sin commit. |
+| Satélite de voz (laptop con Omarchy, sin puente), orquestador, panel y alertas | Implementado y probado | Reporte «2026-10-06 - Implementacion - Etapa 1: panel web de la familia». Sin commit. |
 | Panel: P33 (casa sin salida a Internet) | Pendiente | No ejecutable hoy: exige apagar el WAN del router. Escucha LAN ya configurada y probada. |
 | Servidor de voz, etapa A del Paso 2 (11-10-2026) | Implementado y probado en vivo | Reporte «2026-10-11 - Implementacion - Etapa A Vosk y WebSocket». Servicios `voz` y orquestador corriendo; arnés con MQTT: 13/18 aciertos, latencia fin→publicado ≤ 15 ms, ~136 MiB de RAM. |
+
+## Funciones agregadas durante la implementación
+
+| Función | Fecha | Estado |
+| --- | --- | --- |
+| Chat de dos vías | 27 oct | Implementado y probado (orquestador y panel, pruebas en verde) |
+| Botón «Mantener para hablar» | 28 oct | Implementado y probado (equivalente a F9, panel y satélite) |
+| Familiares e invitación por enlace desde el panel | 28 oct | Implementado y probado (código de un solo uso, enlace de invitación) |
+| Frases de hora, fecha, temperatura, recordatorios y «estoy bien» | 28 oct | Implementado y probado en el orquestador de voz |
+| «cancela» como falsa alarma | 28 oct | Implementado y probado (cancela una ayuda reciente) |
+| YouTube por voz | desplegado 29 oct | Desplegado; prueba física pendiente |
 
 ### Broker del servidor
 
@@ -97,13 +109,13 @@ Antes de programar, los documentos previos deben reflejar las decisiones tomadas
 
 | Etapa | Cambios | Motivo |
 | --- | --- | --- |
-| Etapa 3: Requisitos tecnológicos | El ESP32 deja de procesar voz y solo lee sensores y controla relés. Se agrega un servidor local como unidad de procesamiento. Se usa un micrófono USB en lugar del arreglo de micrófonos de la Etapa 5, con el usuario a 1.5 m o menos. | La Etapa 4 ya separó la voz (servidor) del control físico (ESP32), y un micrófono USB es más fácil de conseguir y suficiente para el prototipo. |
+| Etapa 3: Requisitos tecnológicos | El ESP32 deja de procesar voz y solo lee sensores y controla relés. Se agrega un servidor local como unidad de procesamiento. Se usa un micrófono inalámbrico con receptor USB-C en lugar del arreglo de micrófonos de la Etapa 5, con el usuario a 1.5 m o menos. | La Etapa 4 ya separó la voz (servidor) del control físico (ESP32), y un micrófono inalámbrico con receptor USB-C es más fácil de conseguir y suficiente para el prototipo. |
 | Etapa 3: Requisitos funcionales | Se agrega un panel para familiares (versión web y APK de Android), accesible desde fuera de la casa, y Alexa como interfaz complementaria de voz. | Nuevas funciones definidas en esta fase. |
 | Etapa 5: Componentes de software | Se fijan Vosk + Piper como motor de voz y Python como orquestador. Se agregan FastAPI (backend del panel) y Tailscale Funnel (acceso remoto, etapa 2 del panel). Se usa Telegram para alertas y se descarta Twilio/SMS. | Hay que elegir una sola opción antes de programar; Telegram es gratuito y su API es oficial. |
 
 ## Arquitectura actualizada del sistema
 
-El servidor se queda fijo en casa, en una VM de Proxmox, y concentra la voz, la lógica y el panel web. En el sitio de la presentación solo están los dispositivos que escuchan y actúan: la laptop (puente y satélite de voz), el nodo ESP32 y el Echo Pop, conectados al hotspot del celular. El Wi-Fi del lugar queda como respaldo.
+El servidor se queda fijo en casa, en una VM de Proxmox, y concentra la voz, la lógica y el panel web. En el sitio de la presentación solo están los dispositivos que escuchan y actúan: la laptop (satélite de voz con Omarchy, sin puente), el nodo ESP32 y el Echo Pop, conectados al hotspot del celular. El Wi-Fi del lugar queda como respaldo.
 
 ![Arquitectura del prototipo: sitio de la demo, Internet y servidor en casa](img/arquitectura.png)
 
@@ -113,7 +125,7 @@ La laptop es la pieza que une el sitio con la casa. Corre un Mosquitto local al 
 
 El panel web se publica por Tailscale Funnel desde un nodo dedicado (`asistente`, solo para eso y sin acceso a la tailnet), porque los familiares de una instalación real no tendrían Tailscale. Tailscale también sirve para administrar Proxmox y la VM por SSH desde la laptop.
 
-Hay dos escenarios de falla distintos. Si se pierde la conexión con el servidor (falla Tailscale o la casa), el ESP32 sigue conectado al broker de la laptop: los mensajes se acumulan, el puente los reenvía al volver y el panel muestra «sitio sin conexión» mientras tanto. Si el sitio se queda sin Internet, además deja de funcionar Alexa, y solo quedan la alarma local de gas y el botón de luz.
+Hay dos escenarios de falla distintos. Si se pierde la conexión con el servidor, el satélite deja de funcionar y la voz se interrumpe; el ESP32 sigue con la alarma local de gas y el botón de luz, y el panel muestra «sitio sin conexión». Si el sitio se queda sin Internet, además deja de funcionar Alexa, y solo quedan la alarma local de gas y el botón de luz.
 
 ### Modos de operación
 
@@ -133,10 +145,10 @@ Cada componente tiene una herramienta asignada. Las decisiones técnicas están 
 | Control físico | ESP32 NodeMCU-32S con Arduino Core, ESP32MQTTClient 1.1.5 (cliente MQTT de ESP-IDF) y fauxmoESP | Bajo costo, Wi-Fi integrado y compatibilidad directa con Alexa. Se descartó PubSubClient porque solo publica con QoS 0, y las alertas necesitan QoS 1. |
 | Servidor | Servidor Proxmox del equipo, fijo en casa: una VM con Ubuntu Server y Docker, con inicio automático y snapshots. El host enciende solo al volver la corriente (opción de BIOS) y los contenedores se reinician solos | Más potencia que una Raspberry Pi para Vosk. Los snapshots permiten volver atrás si algo se rompe, y Docker permite reinstalar el sistema igual en la casa de un usuario. |
 | Red | Hotspot del celular en 2.4 GHz con datos móviles, más un segundo celular de respaldo con el mismo nombre de red y contraseña; el Wi-Fi del lugar solo como último recurso | El ESP32 solo usa 2.4 GHz (en iPhone: «Maximizar compatibilidad»). Con el mismo nombre de red, todos los dispositivos se reconectan solos al respaldo; pasar el Echo Pop a otra red exige reconfigurarlo en la app de Alexa. |
-| Mensajería interna | Mosquitto en el servidor y en la laptop, enlazados con un bridge por Tailscale | Ligero. El bridge acumula mensajes si se corta la conexión y el broker nunca queda expuesto a Internet. |
-| Micrófono | Micrófono USB, orientado hacia donde estará el usuario, con cancelación de eco por software (módulo echo-cancel de PipeWire) | Fácil de conseguir y funciona en Linux sin drivers. Como no tiene DSP, el eco se cancela por software, con la laptop como referencia de lo que suena, y se refuerza con la pausa del micrófono. Su alcance práctico es de 1.5 m. |
-| Satélite de voz | Laptop en el sitio con un cliente en Python: palabra de activación, Silero VAD, botón para hablar y Piper. Envía por Tailscale el audio en tramas mientras el usuario habla y convierte en voz el texto de la respuesta | El micrófono debe estar junto al usuario. Solo viaja el audio de cada frase hacia el servidor y texto de regreso, lo que ahorra datos y reduce la latencia. |
-| Palabra de activación | openWakeWord con un modelo propio entrenado para una palabra en español, distinta de «Alexa»; botón físico como respaldo | Los modelos incluidos son en inglés; una palabra parecida a «Alexa» activaría los dos asistentes a la vez. |
+| Mensajería interna | Mosquitto en el servidor; la laptop es solo satélite de voz (sin puente ni bridge) | Ligero. El bridge acumula mensajes si se corta la conexión y el broker nunca queda expuesto a Internet. |
+| Micrófono | Micrófono inalámbrico con receptor USB-C, orientado hacia donde estará el usuario, con cancelación de eco por software (módulo echo-cancel de PipeWire) | Fácil de conseguir y funciona en Linux sin drivers. Como no tiene DSP, el eco se cancela por software, con la laptop como referencia de lo que suena, y se refuerza con la pausa del micrófono. Su alcance práctico es de 1.5 m. |
+| Satélite de voz | Laptop con Omarchy como satélite de voz (sin puente): tecla F9 y botón del panel para hablar, Silero VAD y Piper. Envía por Tailscale el audio en tramas mientras el usuario habla y convierte en voz el texto de la respuesta | El micrófono debe estar junto al usuario. Solo viaja el audio de cada frase hacia el servidor y texto de regreso, lo que ahorra datos y reduce la latencia. |
+| Palabra de activación | Tecla F9 y botón «Mantener para hablar» del panel (sin palabra de activación); openWakeWord descartado | Los modelos incluidos son en inglés; una palabra parecida a «Alexa» activaría los dos asistentes a la vez. |
 | Fin de frase | Silero VAD en el satélite, con un tiempo máximo de escucha de 8 segundos | Más preciso que webrtcvad con ruido de fondo y corre sin problema en la laptop. Cierra la frase en cuanto el usuario se calla. |
 | Voz a texto | Vosk en español (modelo vosk-model-small-es-0.42), en el servidor, en modo gramática con vocabulario cerrado | Funciona sin Internet; un vocabulario corto sube mucho la precisión. |
 | Texto a voz | Piper con una voz en español de México (es_MX), en la laptop del satélite; el micrófono se pausa mientras habla | El servidor solo envía texto, así la respuesta no viaja como audio. La pausa evita que el asistente se escuche a sí mismo. |
@@ -145,8 +157,8 @@ Cada componente tiene una herramienta asignada. Las decisiones técnicas están 
 | Backend del panel | FastAPI con REST y WebSocket | Mismo lenguaje que el orquestador; la API sirve después para una app. |
 | Frontend del panel | Flutter: versión web para Safari (iPhone y iPad) y APK para Android, con el mismo código | En iPhone se evita publicar en la App Store: la web se usa desde Safari y puede agregarse a la pantalla de inicio. En Android, la APK se instala directo. |
 | Alertas | Bot de Telegram con long polling y botones «Abrir panel» y «Ya lo atendí» | Gratuito y con API oficial; los botones funcionan sin webhook. Cada familiar se registra en su chat privado enviando /registro con un código de un solo uso que muestra el panel. **Pueden registrarse varios**, y cada alta se suma a la lista, que vive en SQLite: el segundo familiar no sustituye al primero. Cada alerta genera un envío por cada familiar activo, cada uno con sus propios reintentos, así que un teléfono sin cobertura no retrasa el aviso para el resto. /alertas y el botón «Ya lo atendí» responden a cualquiera de los registrados. El coste de dos teléfonos sonando a la vez se acepta: en una alerta de gas, que no llegué a uno de los dos phones es peor que que suene dos veces. |
-| Acceso remoto | Tailscale Funnel desde el nodo `asistente`, etiquetado y sin acceso a la tailnet, solo para el panel web | No abre puertos y el panel sale en `https://asistente.tail722206.ts.net` sin que el familiar instale nada. El resto de la API no depende de Funnel: tiene su propia autenticación. |
-| Autenticación del panel | Token por familiar emitido desde el panel, guardado con hash en SQLite y enviado en cada petición a FastAPI. El mismo mecanismo sirve para la web y para la APK | La APK entra por Tailscale (su propia URL base) y la web entra por Funnel, así que la API necesita su propia protección. Cualquier dispositivo sin token recibe un error 401. |
+| Acceso remoto | Tailscale Funnel (no Cloudflare) desde el nodo `asistente`, etiquetado y sin acceso a la tailnet, solo para el panel web | No abre puertos y el panel sale en `https://asistente.tail722206.ts.net` sin que el familiar instale nada. El resto de la API no depende de Funnel: tiene su propia autenticación. |
+| Autenticación del panel | Token por familiar emitido desde el panel, guardado con hash en SQLite y enviado en cada petición a FastAPI. El panel tiene administradores; el mismo mecanismo sirve para la web y para la APK | La APK entra por Tailscale (su propia URL base) y la web entra por Funnel, así que la API necesita su propia protección. Cualquier dispositivo sin token recibe un error 401. |
 | Red del equipo | Tailscale en el servidor, la laptop, el iPad y el teléfono Android, con ACL que solo abren los puertos necesarios y una segunda cuenta de administrador | Red privada cifrada para el puente MQTT, el audio y la administración de Proxmox, sin exponer nada a Internet. El celular del hotspot no la necesita. |
 | Alexa | fauxmoESP en el ESP32 con dos dispositivos: «luz de la sala» y un dispositivo virtual «ayuda». La rutina, llamada exactamente «necesito ayuda», enciende «ayuda»; el ESP32 publica la alerta de ayuda y lo vuelve a apagar | Control local de luces y alerta de ayuda sin crear una skill. El Echo descubre los dispositivos por SSDP (multicast en UDP 1900), y el firmware fija el puerto 80, porque fauxmoESP usa el 1901 por defecto. |
 | Botón de luz | Pulsador físico en el ESP32 que alterna la luz y publica el estado con origen «boton» | Garantiza que la luz funcione en la demostración sin depender de ninguna nube. |
@@ -166,7 +178,7 @@ El equipo ya cuenta con el ESP32, el Echo Pop, el servidor, la laptop, el iPad, 
 | iPad | Pantalla del panel durante la demo | Disponible |
 | iPhone | Panel web en Safari y alertas de Telegram | Disponible |
 | Teléfono Android | APK del panel y alertas de Telegram | Disponible |
-| Micrófono USB | Micrófono del satélite | Por comprar |
+| Micrófono inalámbrico con receptor USB-C | Micrófono del satélite | Por comprar |
 | Bocina USB o de 3.5 mm | Respuestas habladas, conectada a la laptop | Por comprar |
 | Sensores MQ-2, PIR HC-SR501 y DHT22 | Gas, movimiento, temperatura y humedad | Por comprar |
 | Resistencia de 10 kΩ | Pull-up del DHT22, si el módulo no la trae | Por comprar |
@@ -310,7 +322,7 @@ El desarrollo dura 7 semanas y se divide en 8 pasos; el Paso 0 se parte en organ
 | 0a. Organización y compras (sem. 1, días 1–2) | Comprar todos los materiales el primer día. Asignar un responsable por paso (matriz paso × persona) y fijar una revisión semanal de 30 minutos. Definir fechas y reservar el lugar de la presentación. Crear el repositorio con carpetas `firmware/`, `servidor/`, `satelite/`, `web/` y `docs/`, un `.env.example` y la regla de que ningún secreto (contraseñas MQTT, token del bot, clave del nodo de Funnel) se sube al repositorio. Congelar el contrato MQTT junto con la gramática de Vosk (frases y variantes) y la tabla de intenciones. Elegir la palabra de activación. Registrar las licencias de lo que se usa. | Contrato, gramática e intenciones congelados; responsables asignados; compras hechas. |
 | 0b. Infraestructura (sem. 1, dos personas) | Crear la VM de Ubuntu en Proxmox (2–4 vCPU, 4–8 GB de RAM, inicio automático, zona horaria America/Mazatlan) y activar en la BIOS del host el encendido al volver la corriente. Instalar Docker con reinicio automático de contenedores. Servir NTP a la red local desde la VM (chrony). Instalar Tailscale en el servidor, la laptop, el iPad y el Android, con ACL y una segunda cuenta de administrador. Crear el nodo `asistente` con su clave de un solo uso, etiquetado y con Funnel habilitado, para publicar el panel web (etapa 2 del panel). Configurar el puente de Mosquitto y probarlo desde dentro del contenedor (si falla, usar `network_mode: host`). Probar el micrófono en la laptop con `arecord`. Activar la cancelación de eco de PipeWire. Configurar el hotspot en 2.4 GHz y el de respaldo con el mismo nombre. | Con el hotspot encendido, la laptop llega al broker del servidor por Tailscale; con Tailscale cortado, 10 alertas publicadas en la laptop llegan todas al reconectar; `https://asistente.tail722206.ts.net` responde en un celular con datos móviles; el micrófono graba. |
 | 1. Nodo ESP32 (sem. 2–3) | Programar el cliente MQTT (ESP32MQTTClient), la búsqueda del broker por mDNS y la máquina de estados. Conectar el MQ-2 con el divisor a un pin ADC1 con atenuación de 11 dB, esperar 3 minutos de calentamiento antes de calibrar. Programar la alarma de gas con histéresis y el buzzer con su transistor. Conectar el DHT22 con su pull-up, el PIR en modo de redisparo (jumper en H) con retención mínima, el relé y el botón de luz. Guardar en memoria no volátil el contador de arranques y la configuración recibida por `nodo/config`. Usar un client id fijo, sincronizar la hora por SNTP (con el servidor como respaldo) y descartar las órdenes de luz con más de 10 segundos. Agregar el antirrebote de ayuda, el comando de prueba (`PRUEBAS=1`), *Last Will*, reconexión y fauxmoESP. Dibujar el diagrama eléctrico con fotos del montaje real. | Nodo conectado al servidor a través del puente; diagrama eléctrico terminado. |
-| 2. Servidor y satélite de voz (sem. 2–4) | En el servidor: Mosquitto y Vosk con la gramática congelada, en contenedores Docker, y el WebSocket de audio. En la laptop: Mosquitto con el puente y el cliente del satélite como servicio de sistema, con el micrófono USB, envío de audio en tramas, Silero VAD, tecla para hablar, Piper, pausa del micrófono y descarte de respuestas con más de 10 segundos (salvo recordatorios y chat). Registrar marcas de tiempo en cada etapa. Para la palabra de activación: generar varios miles de ejemplos sintéticos con voces en español de Piper, reunir varias horas de audio negativo (conversación, ruido y música, incluido «Alexa») y entrenar con el cuaderno de openWakeWord, activando su VAD interno y la supresión de ruido Speex. | El satélite envía audio, Vosk devuelve el texto y Piper lo dice; las etapas medibles del presupuesto de latencia están medidas con el hotspot. |
+| 2. Servidor y satélite de voz (sem. 2–4) | En el servidor: Mosquitto y Vosk con la gramática congelada, en contenedores Docker, y el WebSocket de audio. En la laptop con Omarchy: solo el satélite de voz como servicio de sistema (sin puente ni Mosquitto local), con el micrófono inalámbrico con receptor USB-C, envío de audio en tramas, Silero VAD, tecla F9 y botón del panel para hablar, Piper, pausa del micrófono y descarte de respuestas con más de 10 segundos (salvo recordatorios y chat). Registrar marcas de tiempo en cada etapa. Para la palabra de activación: generar varios miles de ejemplos sintéticos con voces en español de Piper, reunir varias horas de audio negativo (conversación, ruido y música, incluido «Alexa») y entrenar con el cuaderno de openWakeWord, activando su VAD interno y la supresión de ruido Speex. | El satélite envía audio, Vosk devuelve el texto y Piper lo dice; las etapas medibles del presupuesto de latencia están medidas con el hotspot. |
 | 3. Orquestador (sem. 4–5) | Traducir las frases a intenciones y mensajes MQTT, con confirmación optimista y corrección si el relé no responde. Programar recordatorios (APScheduler con almacén en SQLite), cálculo de inactividad y reglas automáticas. Guardar ids procesados y la cola de Telegram en SQLite. Mostrar el estado del enlace con el sitio. Medir las etapas de latencia que dependen de MQTT. **Go/no-go de la palabra de activación** al cierre: 20 repeticiones a 1.5 m y una hora de audio grabado en el sitio, reproducido; si no logra 18 de 20 aciertos y como máximo una activación falsa, la tecla para hablar queda como interfaz principal. **Go/no-go del chat** al cierre de la semana 5: si la ida (familiar escribe, el satélite lo dice) no funciona, el chat se corta. | Un comando de voz enciende la luz y el sistema lo confirma; decisiones go/no-go escritas con sus números. |
 | 4. Panel web (sem. 4–5) | Crear la API con FastAPI (REST + WebSocket) con autenticación por token. Construir el panel en Flutter: sensores, estado del sitio, historial de alertas, órdenes de luz, recordatorios (crear, ver y cancelar), ajuste de `TIEMPO_INACTIVIDAD_MIN` y aviso de privacidad. El WebSocket del cliente usa latido y reconexión automática. Compilar la web con `--no-web-resources-cdn`, para que cargue sin Internet, y publicarla con FastAPI por Tailscale Funnel. Compilar la APK con su propia URL base (el nombre de la VM en Tailscale). Implementar el registro de familiares: código de un solo uso, de 16 caracteres aleatorios, válido 10 minutos, con límite de intentos. | Panel funcionando en Safari (iPhone y iPad) y APK instalada en Android, ambos con token. |
 | 5. Alertas y Alexa (sem. 5–6) | Crear el bot de Telegram (long polling) con botones «Abrir panel» y «Ya lo atendí», alimentado por la cola persistente. Crear en el Echo Pop la rutina «necesito ayuda», que enciende el dispositivo virtual «ayuda» del ESP32. Escribir el manual de instalación y actualizar el diagrama de arquitectura. Primer ensayo completo, en casa, con el hotspot real y las pruebas de aceptación. | Una alerta llega a un celular y abre el panel; manual y arquitectura listos; primer ensayo hecho. |
@@ -326,7 +338,7 @@ El equipo ya tiene el ESP32 y el Echo Pop, así que el desarrollo empieza antes 
 - **ESP32 sin sensores:** el LED integrado (GPIO 2) hace de relé y el botón BOOT (GPIO 0) de botón de luz. Desde el 19 de octubre el firmware ya lee DHT22 (GPIO 32), MQ-2 (GPIO 34) y PIR (GPIO 35) reales; cuando un sensor no tiene dato publica `null` y el gas se controla igualmente con `casa/sala/nodo/prueba_gas`.
 - **Prueba temprana de Alexa:** fauxmoESP en el puerto 80, con versiones mantenidas de fauxmoESP y AsyncTCP, y «Alexa, descubre dispositivos». Si el Echo Pop no responde, se cambia a Sinric Pro desde el primer día, en lugar de descubrirlo en la semana 2.
 - **Nodo simulado en Python:** un script que publica los mensajes del contrato como si fuera el ESP32, para desarrollar el orquestador y el panel sin depender del firmware.
-- **Micrófono integrado de la laptop:** sirve para desarrollar el satélite con Vosk y Piper hasta que llegue el micrófono USB.
+- **Micrófono integrado de la laptop:** sirve para desarrollar el satélite con Vosk y Piper hasta que llegue el micrófono inalámbrico con receptor USB-C.
 - **Wokwi (opcional):** simulador web de ESP32 para probar la lógica del gas (histéresis y antirrebote) con un sensor virtual.
 
 ## Plan de pruebas
@@ -355,54 +367,54 @@ Si la velocidad de subida medida en el lugar es menor a 1 Mbit/s, la demostraci�
 
 ### Casos de prueba
 
-| ID | Caso de prueba | Resultado esperado | Tipo | Resultado obtenido |
+| ID | Caso de prueba | Resultado esperado | Tipo | Resultado |
 | --- | --- | --- | --- | --- |
-| P01 | «Enciende la luz» a 1 y 1.5 m con el servidor remoto, 10 repeticiones por distancia | Mediana ≤ 2.5 s y ningún caso > 3 s; se reportan mediana y máximo | A | |
-| P02 | El mismo comando a 3 m, con conversación grabada de fondo | Se registra la tasa de aciertos (informativa, no bloquea la entrega) | A | |
-| P03 | Frase fuera de la gramática | El asistente pide repetir sin ejecutar nada | A | |
-| P04 | El usuario dice «necesito ayuda» | Llega una alerta a Telegram con el botón «Abrir panel» y el panel muestra la ayuda activa | A | |
-| P05 | «Alexa, necesito ayuda», dicho dos veces en 30 s | Llega una sola alerta a Telegram | A | |
-| P06 | «Alexa, enciende la luz de la sala», con el panel abierto en el iPad | El relé se activa, el panel se actualiza sin recargar y el asistente no habla | A | |
-| P07 | 20 repeticiones de «Alexa, enciende la luz» a 1 m del micrófono | El asistente local se activa como máximo una vez | A | |
-| P08 | Gas real cerca del MQ-2 (encendedor sin flama) | Buzzer, un aviso por voz, una alerta en Telegram y aviso en el panel | A | |
-| P09 | Comando de prueba que hace oscilar la lectura alrededor del umbral durante 1 minuto | Un solo episodio y una sola alerta | R | |
-| P10 | MQ-2 en aire limpio durante 30 minutos, ya caliente (60 minutos en el ensayo general) | Cero alertas | A | |
-| P11 | Inactividad con el tiempo ajustado a 2 minutos desde el panel, antes de la sesión | Aviso en el panel y en Telegram 2 minutos después del último movimiento (±10 s) | A | |
-| P12 | Verificar la hora del servidor y crear desde el panel un recordatorio para dentro de 2 minutos | El asistente lo dice en voz alta a la hora indicada (±15 s) | A | |
-| P13 | Cancelar un recordatorio desde el panel | No suena | A | |
-| P14 | El asistente habla con la pausa del micrófono activa | El satélite no envía audio mientras Piper suena | R | |
-| P15 | El asistente habla con la captura forzada (sin pausa) | No ejecuta ninguna orden a partir de su propia voz | A | |
-| P16 | Una alerta llega dos veces al servidor, con un reinicio del servidor entre ambas | Telegram recibe un solo mensaje | R | |
-| P17 | Botón «Ya lo atendí» en Telegram, en el aviso de cada familiar | La alerta se marca como resuelta y el asistente avisa al usuario; lo puede pulsar cualquiera de los familiares registrados y el mensaje se reescribe en su chat | A | |
-| P18 | Acceso al panel desde un celular con datos móviles (sin Tailscale) | El panel se abre en `https://asistente.tail722206.ts.net` sin instalar nada; el WebSocket se conecta | R | |
-| P19 | Petición a la API sin token desde el iPhone y desde el Android | Respuesta 401 | R | |
-| P20 | Registro de un segundo familiar con su código | Se suma a la lista sin quitar al primero, recibe las alertas nuevas y las reintenta él solo, sin que el fallo de uno retrase al otro; el código ya usado deja de funcionar | A | |
-| P21 | Con Tailscale cortado, publicar 10 alertas QoS 1 en la laptop y reconectar | Llegan las 10 al servidor, cada una una sola vez | R | |
-| P22 | Se cortan los datos del hotspot 2 minutos y se publica el comando de prueba de gas desde la laptop | Suena el buzzer; el panel muestra «sitio sin conexión» en menos de 90 s; al volver, se reenvían los mensajes pendientes | A | |
-| P23 | Se corta Tailscale entre la laptop y el servidor durante 2 minutos | El panel muestra «sitio sin conexión» en menos de 90 s y se recupera solo | R | |
-| P24 | Reinicio ordenado del servidor | La VM, Docker y el nodo de Funnel arrancan solos; el puente y el satélite se reconectan | R | |
-| P25 | Corte y regreso de la corriente del host | El host enciende solo, los servicios vuelven y la hora es correcta | A | |
-| P26 | Se corta el Internet de la casa, se genera una alerta, se reinicia la VM y vuelve el Internet | La alerta se entrega una sola vez | A | |
-| P27 | Se desconecta el ESP32 | El panel lo marca como desconectado | R | |
-| P28 | Se reinicia el ESP32 y se vuelve a publicar el comando de prueba de gas | La alerta llega con un id nuevo y Telegram la recibe | A | |
-| P29 | Orden de voz mientras suena la alarma de gas | El asistente avisa del gas una vez por episodio y ejecuta la orden; el buzzer sigue sonando | A | |
-| P30 | Orden de luz desde el panel | El relé se activa, el panel se actualiza y el asistente no habla | A | |
-| P31 | Botón físico de luz | El relé alterna y el estado se publica con origen «boton» | R | |
-| P32 | Variante mínima con el servidor apagado: botón de luz, Alexa y alarma de gas | Las tres funcionan | A | |
-| P33 | Modo instalación: servidor y sitio en la misma red, sin Internet y con el navegador sin caché | Voz, reglas y panel funcionan sin ningún recurso externo; las alertas quedan en cola | A | |
-| P34 | Se apaga el hotspot principal y se enciende el de respaldo, sin tocar ningún dispositivo | La laptop, el ESP32 y el Echo Pop se reconectan solos | A | |
-| P35 | Primer turno después de arrancar el satélite | Se mide; si pasa de 2.5 s, el satélite precarga Piper al arrancar | A | |
-| P36 | Consumo de datos durante un ensayo de 30 minutos | Se registra y se compara con el paquete del celular | A | |
-| P37 | Panel en Safari del iPhone, agregado a la pantalla de inicio | Abre desde el ícono; si la versión de iOS no lo permite, se usa desde Safari | A | |
-| P38 | APK en Android con datos móviles | Entra por Tailscale con su token y muestra lo mismo que la web | A | |
-| P39 | Con el panel abierto, se corta el Internet del iPhone durante 1 minuto | Al volver, el panel muestra el estado actual sin recargar | R | |
-| P40 | El familiar escribe en el chat (opcional) | El mensaje se dice en voz alta en el sitio | A | |
-| P41 | El usuario responde por voz al familiar (opcional) | La respuesta aparece transcrita en el chat | A | |
-| P42 | Publicar una orden de luz con ts de hace 60 segundos | La luz no se enciende y el ESP32 registra el descarte por antigüedad | R | |
-| P43 | Publicar en satelite/decir, con ts de hace 60 segundos, una respuesta y un recordatorio | La respuesta no se dice; el recordatorio sí | R | |
-| P44 | Reiniciar el ESP32 en modo instalación, sin Internet | Obtiene la hora del NTP del servidor y las órdenes de voz funcionan | A | |
-| P45 | Con el Wi-Fi del ESP32 cortado, disparar el gas por monitor serie, esperar 2 minutos y restaurar la red | La alerta llega una sola vez, con el mismo id que se generó durante el corte | A | |
-| P46 | Publicar una orden de luz sin el campo ts | La luz no cambia y el ESP32 registra el descarte | R | |
+| P01 | «Enciende la luz» a 1 y 1.5 m con el servidor remoto, 10 repeticiones por distancia | Mediana ≤ 2.5 s y ningún caso > 3 s; se reportan mediana y máximo | A | Pendiente |
+| P02 | El mismo comando a 3 m, con conversación grabada de fondo | Se registra la tasa de aciertos (informativa, no bloquea la entrega) | A | Pendiente |
+| P03 | Frase fuera de la gramática | El asistente pide repetir sin ejecutar nada | A | Aprobada |
+| P04 | El usuario dice «necesito ayuda» | Llega una alerta a Telegram con el botón «Abrir panel» y el panel muestra la ayuda activa | A | Aprobada |
+| P05 | «Alexa, necesito ayuda», dicho dos veces en 30 s | Llega una sola alerta a Telegram | A | Parcial |
+| P06 | «Alexa, enciende la luz de la sala», con el panel abierto en el iPad | El relé se activa, el panel se actualiza sin recargar y el asistente no habla | A | Sin dato |
+| P07 | 20 repeticiones de «Alexa, enciende la luz» a 1 m del micrófono | El asistente local se activa como máximo una vez | A | No aplica (tecla para hablar en lugar de palabra de activación) |
+| P08 | Gas real cerca del MQ-2 (encendedor sin flama) | Buzzer, un aviso por voz, una alerta en Telegram y aviso en el panel | A | Aprobada (gas simulado) |
+| P09 | Comando de prueba que hace oscilar la lectura alrededor del umbral durante 1 minuto | Un solo episodio y una sola alerta | R | Aprobada |
+| P10 | MQ-2 en aire limpio durante 30 minutos, ya caliente (60 minutos en el ensayo general) | Cero alertas | A | Pendiente |
+| P11 | Inactividad con el tiempo ajustado a 2 minutos desde el panel, antes de la sesión | Aviso en el panel y en Telegram 2 minutos después del último movimiento (±10 s) | A | Pendiente |
+| P12 | Verificar la hora del servidor y crear desde el panel un recordatorio para dentro de 2 minutos | El asistente lo dice en voz alta a la hora indicada (±15 s) | A | Parcial |
+| P13 | Cancelar un recordatorio desde el panel | No suena | A | Pendiente |
+| P14 | El asistente habla con la pausa del micrófono activa | El satélite no envía audio mientras Piper suena | R | Sin dato |
+| P15 | El asistente habla con la captura forzada (sin pausa) | No ejecuta ninguna orden a partir de su propia voz | A | Pendiente |
+| P16 | Una alerta llega dos veces al servidor, con un reinicio del servidor entre ambas | Telegram recibe un solo mensaje | R | Aprobada |
+| P17 | Botón «Ya lo atendí» en Telegram, en el aviso de cada familiar | La alerta se marca como resuelta y el asistente avisa al usuario; lo puede pulsar cualquiera de los familiares registrados y el mensaje se reescribe en su chat | A | Aprobada |
+| P18 | Acceso al panel desde un celular con datos móviles (sin Tailscale) | El panel se abre en `https://asistente.tail722206.ts.net` sin instalar nada; el WebSocket se conecta | R | Aprobada |
+| P19 | Petición a la API sin token desde el iPhone y desde el Android | Respuesta 401 | R | Aprobada |
+| P20 | Registro de un segundo familiar con su código | Se suma a la lista sin quitar al primero, recibe las alertas nuevas y las reintenta él solo, sin que el fallo de uno retrase al otro; el código ya usado deja de funcionar | A | Parcial |
+| P21 | Con Tailscale cortado, publicar 10 alertas QoS 1 en la laptop y reconectar | Llegan las 10 al servidor, cada una una sola vez | R | No aplica (sin puente en la laptop) |
+| P22 | Se cortan los datos del hotspot 2 minutos y se publica el comando de prueba de gas desde la laptop | Suena el buzzer; el panel muestra «sitio sin conexión» en menos de 90 s; al volver, se reenvían los mensajes pendientes | A | No aplica (sin puente en la laptop) |
+| P23 | Se corta Tailscale entre la laptop y el servidor durante 2 minutos | El panel muestra «sitio sin conexión» en menos de 90 s y se recupera solo | R | No aplica (sin puente en la laptop) |
+| P24 | Reinicio ordenado del servidor | La VM, Docker y el nodo de Funnel arrancan solos; el puente y el satélite se reconectan | R | Parcial (reinicio no planeado) |
+| P25 | Corte y regreso de la corriente del host | El host enciende solo, los servicios vuelven y la hora es correcta | A | Pendiente |
+| P26 | Se corta el Internet de la casa, se genera una alerta, se reinicia la VM y vuelve el Internet | La alerta se entrega una sola vez | A | Parcial |
+| P27 | Se desconecta el ESP32 | El panel lo marca como desconectado | R | Aprobada |
+| P28 | Se reinicia el ESP32 y se vuelve a publicar el comando de prueba de gas | La alerta llega con un id nuevo y Telegram la recibe | A | Aprobada |
+| P29 | Orden de voz mientras suena la alarma de gas | El asistente avisa del gas una vez por episodio y ejecuta la orden; el buzzer sigue sonando | A | Pendiente |
+| P30 | Orden de luz desde el panel | El relé se activa, el panel se actualiza y el asistente no habla | A | Aprobada |
+| P31 | Botón físico de luz | El relé alterna y el estado se publica con origen «boton» | R | Aprobada |
+| P32 | Variante mínima con el servidor apagado: botón de luz, Alexa y alarma de gas | Las tres funcionan | A | Pendiente |
+| P33 | Modo instalación: servidor y sitio en la misma red, sin Internet y con el navegador sin caché | Voz, reglas y panel funcionan sin ningún recurso externo; las alertas quedan en cola | A | Pendiente |
+| P34 | Se apaga el hotspot principal y se enciende el de respaldo, sin tocar ningún dispositivo | La laptop, el ESP32 y el Echo Pop se reconectan solos | A | Pendiente |
+| P35 | Primer turno después de arrancar el satélite | Se mide; si pasa de 2.5 s, el satélite precarga Piper al arrancar | A | Parcial |
+| P36 | Consumo de datos durante un ensayo de 30 minutos | Se registra y se compara con el paquete del celular | A | Pendiente |
+| P37 | Panel en Safari del iPhone, agregado a la pantalla de inicio | Abre desde el ícono; si la versión de iOS no lo permite, se usa desde Safari | A | Aprobada |
+| P38 | APK en Android con datos móviles | Entra por Tailscale con su token y muestra lo mismo que la web | A | No aplica (APK fuera del alcance) |
+| P39 | Con el panel abierto, se corta el Internet del iPhone durante 1 minuto | Al volver, el panel muestra el estado actual sin recargar | R | Aprobada |
+| P40 | El familiar escribe en el chat (opcional) | El mensaje se dice en voz alta en el sitio | A | Aprobada |
+| P41 | El usuario responde por voz al familiar (opcional) | La respuesta aparece transcrita en el chat | A | Aprobada |
+| P42 | Publicar una orden de luz con ts de hace 60 segundos | La luz no se enciende y el ESP32 registra el descarte por antigüedad | R | Aprobada |
+| P43 | Publicar en satelite/decir, con ts de hace 60 segundos, una respuesta y un recordatorio | La respuesta no se dice; el recordatorio sí | R | Sin dato |
+| P44 | Reiniciar el ESP32 en modo instalación, sin Internet | Obtiene la hora del NTP del servidor y las órdenes de voz funcionan | A | Parcial |
+| P45 | Con el Wi-Fi del ESP32 cortado, disparar el gas por monitor serie, esperar 2 minutos y restaurar la red | La alerta llega una sola vez, con el mismo id que se generó durante el corte | A | Aprobada |
+| P46 | Publicar una orden de luz sin el campo ts | La luz no cambia y el ESP32 registra el descarte | R | Aprobada |
 
 ## Riesgos y mitigación
 
@@ -430,7 +442,7 @@ Los mayores riesgos están en la red de la demostración, la palabra de activaci
 | Datos móviles limitados | Se agota el paquete durante la demo | Medir el consumo con P36; descargar todo antes y no reproducir música en Alexa. |
 | Conexión de relés a 127 V | Riesgo eléctrico para el equipo y el público | Cargas de bajo voltaje (LED o tira de 12 V) en la demostración. |
 | Retraso en el panel o en el chat | Funciones incompletas para la demo | Priorizar alertas por Telegram y panel; el chat tiene go/no-go en la semana 5. |
-| El usuario habla lejos del micrófono | Comandos fallidos, porque un micrófono USB tiene menos alcance que un arreglo de micrófonos | Marcar en el guion dónde se coloca el usuario, a 1.5 m o menos, con el micrófono orientado hacia él. P02 mide el alcance real. |
+| El usuario habla lejos del micrófono | Comandos fallidos, porque un micrófono inalámbrico con receptor USB-C tiene menos alcance que un arreglo de micrófonos | Marcar en el guion dónde se coloca el usuario, a 1.5 m o menos, con el micrófono orientado hacia él. P02 mide el alcance real. |
 | La VM del asistente comparte recursos con servicios personales | Servicios como Immich o Jellyfin compiten con Vosk y suben la latencia | VM dedicada para el asistente, con prioridad de CPU en Proxmox («CPU units»). |
 | La laptop no está disponible | Sin puente ni satélite en el sitio | Instalación del puente y del satélite en un script del repositorio, para montarlos en otra computadora. |
 

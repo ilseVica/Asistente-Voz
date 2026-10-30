@@ -1,0 +1,11 @@
+# Código fuente de Flutter: no entra en la imagen.
+panel/web/
+
+# Builds antiguos de Flutter: no entran en la imagen.
+panel/web_build_*
+panel/web_build_anterior*
+panel/web_build_chat*
+panel/web_build_nuevo
+
+# La build que se sirve entra (bind mount en compose, pero se deja en el contexto).
+!panel/web_build/

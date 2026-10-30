@@ -18,6 +18,7 @@ hacer si algo falla, respaldos y cambio del token del bot.
   un código de un solo uso.
 - **Panel web.** Estado de la casa (Equipos, alertas, historial), control de luz y
   marcar alertas como atendidas.
+- **Conexiones del nodo:** `docs/CONEXIONES.md`.
 
 ## 2. Arranque para una demostración
 

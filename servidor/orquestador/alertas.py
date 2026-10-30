@@ -449,7 +449,7 @@ def al_estado_satelite(topico: str, cuerpo: str, retenido: bool, base, publicar,
         return 0
     conectado = isinstance(carga, dict) and carga.get("conectado") is True
     if satelites is not None:
-        satelites.actualizar(client_id, conectado)
+        satelites.actualizar(client_id, carga=carga if isinstance(carga, dict) else None)
     if not conectado:
         registro.info("satelite %s: %s", client_id, "desconectado"
                       if isinstance(carga, dict) and carga.get("conectado") is False

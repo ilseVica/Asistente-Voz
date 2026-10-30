@@ -2185,7 +2185,8 @@ base_ar.conexion.commit()
 apuntes, publicar = publicar_que_recoge()
 voz.procesar('{"frase_id":"f","texto":"ayuda","ts":%d}' % AHORA, publicar, base=base_ar)
 prueba("ayuda en antirrebote responde reciente",
-       len(apuntes) == 1 and apuntes[0][1].get("texto") == textos.RESPUESTA_AYUDA_RECIENTE, apuntes)
+       any(c.get("texto") == textos.RESPUESTA_AYUDA_RECIENTE
+           for _, c, *_ in apuntes), apuntes)
 prueba("ayuda en antirrebote no publica alerta/ayuda",
        all(t != config.TOPICO_ALERTA_AYUDA for t, *_ in apuntes), apuntes)
 base_ar.cerrar()
@@ -2261,8 +2262,9 @@ orquestador_modulo.enrutar(
 prueba("enrutar manda la alerta de gas a alertas.procesar",
        base.obtener_alerta("000000-b0030-0001") is not None, None)
 prueba("y una alerta NO dispara el eco, sino la alerta hablada (Fase 2C)",
-       len(apuntes) == 1 and apuntes[0][1].get("tipo") == "alerta"
-       and "Usted dijo" not in apuntes[0][1].get("texto", ""), apuntes)
+       any(c.get("tipo") == "alerta" for _, c, *_ in apuntes)
+       and not any("Usted dijo" in c.get("texto", "")
+                   for _, c, *_ in apuntes), apuntes)
 base.cerrar()
 
 # --- El ACL: el usuario voz solo escribe su topico; el orquestador lo lee ---
@@ -4244,6 +4246,129 @@ prueba("RECORDATORIOS con uno ya hecho no lo dice",
        len(resp) >= 1 and resp[-1]["texto"] == textos.RESPUESTA_SIN_RECORDATORIOS, resp)
 base_rec2.cerrar()
 
+
+
+
+# =============================================================================
+# Video por voz (orquestador)
+# =============================================================================
+
+titulo("Video por voz: orquestador")
+
+base_vid, _ = base_nueva("video-")
+
+import recordatorios as _rec_vid
+_sat_vid = _rec_vid.Satelites()
+_sat_vid.actualizar(config.SATELITE_VIDEO_CLIENT_ID, True, video=True)
+
+# BUSCAR_VIDEO abre ventana y pregunta.
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fv","texto":"busca un video","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("BUSCAR_VIDEO abre la ventana de video",
+       voz.ventana_video_abierta(), None)
+prueba("BUSCAR_VIDEO pregunta qué video",
+       any(c.get("texto") == textos.PREGUNTA_VIDEO for _, c, *_ in apuntes), apuntes)
+
+# la ventana de video usa el texto libre.
+voz.abrir_ventana_video()
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fv","texto":"[unk]","texto_libre":"gatos divertidos","ts":%d}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("la ventana de video usa el texto libre",
+       any(t == "casa/sala/satelite/%s/video" % config.SATELITE_VIDEO_CLIENT_ID
+           and c.get("consulta") == "gatos divertidos" and c.get("accion") == "buscar"
+           for t, c, *_ in apuntes), apuntes)
+
+# AYUDA dentro de la ventana manda la alerta.
+voz.abrir_ventana_video()
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fv","texto":"ayuda","ts":%d}' % int(time.time()),
+             publicar, base_vid, _sat_vid)
+prueba("AYUDA dentro de la ventana de video manda la alerta",
+       any(t == config.TOPICO_ALERTA_AYUDA for t, *_ in apuntes), apuntes)
+
+# cancela cierra la ventana sin buscar.
+voz.abrir_ventana_video()
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fv","texto":"cancela","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("cancela cierra la ventana de video",
+       not voz.ventana_abierta(), None)
+
+# consulta vacia.
+voz.abrir_ventana_video()
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fv","texto":"[unk]","texto_libre":"","ts":%d}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("consulta vacia responde no entendí",
+       any(c.get("texto") == textos.RESPUESTA_NO_ENTENDI_VIDEO
+           for _, c, *_ in apuntes), apuntes)
+
+# consulta con caracteres raros limpiada.
+voz.abrir_ventana_video()
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fv","texto":"[unk]","texto_libre":"g@t0s!!","ts":%d}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("consulta con caracteres raros limpiada",
+       any(c.get("consulta") == "gt0s" for _, c, *_ in apuntes), apuntes)
+
+# sin video true no se busca.
+_sat_sin = _rec_vid.Satelites()
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fv","texto":"busca un video","ts":%d}' % int(time.time()),
+             publicar, None, _sat_sin)
+prueba("sin video true no se busca",
+       any(c.get("texto") == textos.RESPUESTA_VIDEO_NO_DISPONIBLE
+           for _, c, *_ in apuntes) and not voz.ventana_abierta(), apuntes)
+
+# VIDEO_HABILITADO false.
+config.VIDEO_HABILITADO = False
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fv","texto":"busca un video","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("VIDEO_HABILITADO false no abre",
+       any(c.get("texto") == textos.RESPUESTA_VIDEO_NO_DISPONIBLE
+           for _, c, *_ in apuntes) and not voz.ventana_abierta(), apuntes)
+config.VIDEO_HABILITADO = True
+
+# AYUDA cierra el video.
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fv","texto":"ayuda","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("AYUDA cierra el video",
+       any(t == "casa/sala/satelite/%s/video" % config.SATELITE_VIDEO_CLIENT_ID
+           and c.get("accion") == "cerrar" for t, c, *_ in apuntes), apuntes)
+
+# GAS cierra el video (via enrutar).
+apuntes, publicar = publicar_que_recoge()
+orquestador_modulo.enrutar(config.TOPICO_ALERTA_GAS,
+                           '{"id":"vidgas-1","gas_adc":2100}',
+                           base_vid, publicar, satelites=_sat_vid)
+prueba("GAS cierra el video",
+       any(t == "casa/sala/satelite/%s/video" % config.SATELITE_VIDEO_CLIENT_ID
+           and c.get("accion") == "cerrar" for t, c, *_ in apuntes), apuntes)
+
+base_vid.cerrar()
+
+# privacidad: la consulta no aparece en los logs.
+import io as _io_vid
+import logging as _log_vid
+voz.cerrar_ventana_video()
+voz.abrir_ventana_video()
+buf = _io_vid.StringIO()
+handler = _log_vid.StreamHandler(buf)
+handler.setLevel(_log_vid.DEBUG)
+for name in ("voz", "mqtt", "orquestador"):
+    _log_vid.getLogger(name).addHandler(handler)
+secreto = "CONSULTA-SECRETA-VIDEO"
+voz.procesar('{"frase_id":"fv","texto":"[unk]","texto_libre":"%s","ts":%d}'
+             % (secreto, int(time.time())), publicar, None, _sat_vid)
+for name in ("voz", "mqtt", "orquestador"):
+    _log_vid.getLogger(name).removeHandler(handler)
+salida = buf.getvalue()
+prueba("la consulta no aparece en los logs",
+       secreto not in salida, salida[:200])
 
 
 print("\n" + "=" * 66)

@@ -19,6 +19,8 @@ import tempfile
 import time
 import unittest
 import wave
+import os
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -704,12 +706,13 @@ class TestOrdenAlConectar(unittest.TestCase):
     """
 
     def _puente_y_cliente(self):
-        cfg = _CfgFalsa()
+        cfg = satelite.Config()
         puente = PuenteMQTT.__new__(PuenteMQTT)
         puente.cfg = cfg
         puente.nucleo = None
         puente.topico_estado = topico_estado_de(cfg)
         puente.topico_hablar = "casa/sala/satelite/%s/hablar" % cfg.client_id
+        puente.topico_video = "casa/sala/satelite/%s/video" % cfg.client_id
         puente.loop = _LoopFalso()
         puente.listo = asyncio.Event()
         return puente, _ClienteMQTTFalso()
@@ -725,6 +728,8 @@ class TestOrdenAlConectar(unittest.TestCase):
         self.assertEqual(cliente.orden[1],
                          ("subscribe", puente.topico_hablar))
         self.assertEqual(cliente.orden[2],
+                         ("subscribe", puente.topico_video))
+        self.assertEqual(cliente.orden[3],
                          ("publish", puente.topico_estado))
         indice_sub = cliente.orden.index(
             ("subscribe", puente.cfg.topico_decir))
@@ -737,7 +742,7 @@ class TestOrdenAlConectar(unittest.TestCase):
         # El estado va como {"conectado": true} y retenido.
         topico, carga, _qos, retain = cliente.publicados[0]
         self.assertEqual(topico, puente.topico_estado)
-        self.assertEqual(json.loads(carga), {"conectado": True, "hablar": True})
+        self.assertEqual(json.loads(carga), {"conectado": True, "hablar": True, "video": False})
         self.assertTrue(retain)
 
     def test_el_orden_malo_se_detecta(self):
@@ -1080,12 +1085,13 @@ class TestHablarPanel(Base):
         self.assertEqual(llamadas, [])
 
     async def test_ignora_topico_de_otro_client_id(self):
-        cfg = _CfgFalsa()
+        cfg = satelite.Config()
         puente = PuenteMQTT.__new__(PuenteMQTT)
         puente.cfg = cfg
         puente.nucleo = None
         puente.topico_estado = topico_estado_de(cfg)
         puente.topico_hablar = "casa/sala/satelite/%s/hablar" % cfg.client_id
+        puente.topico_video = "casa/sala/satelite/%s/video" % cfg.client_id
         puente.loop = asyncio.get_event_loop()
         puente.listo = asyncio.Event()
 
@@ -1096,6 +1102,172 @@ class TestHablarPanel(Base):
         puente._al_mensaje(None, None, Msg())
         await asyncio.sleep(0.05)
         self.assertTrue(True)
+
+
+
+class TestVideo(unittest.TestCase):
+    def setUp(self):
+        self.cfg = satelite.Config() if "_CfgFalsa" in globals() else None
+
+    def _nucleo(self):
+        # Reuse helper from Base? create minimal
+        import satelite
+        cfg = satelite.Config()
+        rep = FakeRep() if "FakeRep" in globals() else None
+        nucleo = satelite.Nucleo(cfg, rep, None, None) if False else None
+        return None
+
+    def test_limpiar_consulta(self):
+        import satelite
+        self.assertEqual(satelite.limpiar_consulta("  G@t0s!!  "), "Gt0s")
+        self.assertEqual(satelite.limpiar_consulta("a" * 200), "a" * 100)
+
+    def test_ts_viejo_descartado(self):
+        import satelite, time
+        cfg = satelite.Config()
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.video_disponible = True
+        os.environ["WAYLAND_DISPLAY"] = "wayland-1"
+        llamadas = []
+        nucleo._encolar_habla = lambda *a, **k: llamadas.append((a, k))
+        nucleo.al_video({"accion": "buscar", "consulta": "gatos", "ts": int(time.time()) - 100})
+        self.assertEqual(nucleo._proceso_video, None)
+        loop.close()
+
+    def test_args_mpv_como_lista(self):
+        import satelite, time
+        cfg = satelite.Config()
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.video_disponible = True
+        os.environ["WAYLAND_DISPLAY"] = "wayland-1"
+
+        class ProcFalso:
+            def __init__(self):
+                self.terminado = False
+            def poll(self):
+                return None
+            def terminate(self):
+                self.terminado = True
+            def wait(self, timeout=None):
+                return 0
+            def kill(self):
+                pass
+
+        capturado = {}
+        def popen_falso(args, **kw):
+            capturado["args"] = args
+            capturado["shell"] = kw.get("shell", False)
+            return ProcFalso()
+        with patch("subprocess.Popen", popen_falso):
+            nucleo.al_video({"accion": "buscar", "consulta": "gatos raros", "ts": int(time.time())})
+        self.assertEqual(capturado["args"],
+                         ["mpv", "--fs", "--no-terminal", "ytdl://ytsearch1:gatos raros"])
+        self.assertFalse(capturado["shell"])
+        self.assertIsNotNone(nucleo._proceso_video)
+        loop.close()
+
+    def test_nuevo_buscar_cierra_anterior(self):
+        import satelite, time
+        cfg = satelite.Config()
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.video_disponible = True
+        os.environ["WAYLAND_DISPLAY"] = "wayland-1"
+
+        class ProcFalso:
+            def __init__(self):
+                self.terminated = False
+            def poll(self):
+                return None
+            def terminate(self):
+                self.terminated = True
+            def wait(self, timeout=None):
+                return 0
+            def kill(self):
+                pass
+
+        primero = ProcFalso()
+        nucleo._proceso_video = primero
+        with patch("subprocess.Popen", lambda *a, **k: ProcFalso()):
+            nucleo.al_video({"accion": "buscar", "consulta": "perros", "ts": int(time.time())})
+        self.assertTrue(primero.terminated)
+        loop.close()
+
+    def test_cerrar_termina_proceso(self):
+        import satelite, time
+        cfg = satelite.Config()
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.video_disponible = True
+
+        class ProcFalso:
+            def __init__(self):
+                self.terminated = False
+                self.killed = False
+            def poll(self):
+                return None
+            def terminate(self):
+                self.terminated = True
+            def wait(self, timeout=None):
+                if not self.terminated:
+                    raise subprocess.TimeoutExpired(cmd="mpv", timeout=timeout)
+                return 0
+            def kill(self):
+                self.killed = True
+
+        proc = ProcFalso()
+        nucleo._proceso_video = proc
+        nucleo.al_video({"accion": "cerrar", "ts": int(time.time())})
+        self.assertTrue(proc.terminated)
+        self.assertIsNone(nucleo._proceso_video)
+        loop.close()
+
+    def test_detener_cierra_mpv(self):
+        import satelite, time
+        cfg = satelite.Config()
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+
+        class ProcFalso:
+            def __init__(self):
+                self.terminated = False
+            def poll(self):
+                return None
+            def terminate(self):
+                self.terminated = True
+            def wait(self, timeout=None):
+                return 0
+            def kill(self):
+                pass
+
+        proc = ProcFalso()
+        nucleo._proceso_video = proc
+        nucleo.cerrar_video()
+        self.assertTrue(proc.terminated)
+        loop.close()
+
+    def test_video_false_sin_wayland(self):
+        import satelite
+        # simulate by checking video_disponible logic
+        old = os.environ.pop("WAYLAND_DISPLAY", None)
+        try:
+            cfg = satelite.Config()
+            rep = FakeRep()
+            loop = asyncio.new_event_loop()
+            nucleo = satelite.Nucleo(cfg, rep, None, loop)
+            self.assertFalse(nucleo.video_disponible)
+            loop.close()
+        finally:
+            if old is not None:
+                os.environ["WAYLAND_DISPLAY"] = old
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

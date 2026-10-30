@@ -57,6 +57,7 @@ import logging
 import os
 import re
 import signal
+import shutil
 import struct
 import sys
 import time
@@ -95,6 +96,7 @@ TOPICO_ESTADO_DEF = "casa/sala/satelite/{client_id}/estado"
 # corrige solo (la ACL ya no deja escribirlo).
 TOPICO_ESTADO_VIEJO = "casa/sala/satelite/estado"
 TOPICO_DECIR_DEF = "casa/sala/satelite/decir"
+TOPICO_VIDEO_DEF = "casa/sala/satelite/{client_id}/video"
 
 FUENTES = ("pipewire", "archivo")
 MODOS_SALIDA = ("audio", "archivo")
@@ -149,6 +151,28 @@ def topico_estado_de(cfg) -> str:
                          "usa %r. Quitalo del config.", valor, TOPICO_ESTADO_DEF)
         valor = TOPICO_ESTADO_DEF
     return valor.replace("{client_id}", cfg.client_id)
+
+
+def topico_video_de(cfg) -> str:
+    if not cfg.client_id or any(c in cfg.client_id for c in "/+#"):
+        raise ValueError("client_id %r no sirve para un topico MQTT" % cfg.client_id)
+    valor = cfg.topico_video if getattr(cfg, "topico_video", None) else TOPICO_VIDEO_DEF
+    return valor.replace("{client_id}", cfg.client_id)
+
+
+def limpiar_consulta(texto) -> str:
+    """Limpia la consulta de un video: solo letras, numeros, espacios y acentos.
+
+    Maximo 100 caracteres. No usa shell ni compone comandos: el satelite arma la
+    URL localmente a partir de este texto ya limpio.
+    """
+    if not isinstance(texto, str):
+        return ""
+    limpio = "".join(c for c in texto if c.isalnum() or c.isspace())
+    return " ".join(limpio.split())[:100]
+
+
+limpiar_consulta_video = limpiar_consulta
 
 
 def leer_wav_estricto(ruta: str) -> bytes:
@@ -292,6 +316,7 @@ class Config:
     client_id: str = "satelite-sala"
     topico_estado: str = TOPICO_ESTADO_DEF
     topico_decir: str = TOPICO_DECIR_DEF
+    topico_video: str = TOPICO_VIDEO_DEF
     entrada_nodo: str = ""
     salida_nodo: str = ""
     latencia_captura: str = "20ms"
@@ -369,6 +394,7 @@ def cargar_config(ruta: str) -> Config:
     cfg.client_id = mq.get("client_id", cfg.client_id)
     cfg.topico_estado = mq.get("topico_estado", cfg.topico_estado)
     cfg.topico_decir = mq.get("topico_decir", cfg.topico_decir)
+    cfg.topico_video = mq.get("topico_video", cfg.topico_video)
     cfg.entrada_nodo = audio.get("entrada_nodo", cfg.entrada_nodo)
     cfg.salida_nodo = audio.get("salida_nodo", cfg.salida_nodo)
     cfg.latencia_captura = audio.get("latencia_captura", cfg.latencia_captura)
@@ -850,6 +876,7 @@ class PuenteMQTT:
         self.listo = asyncio.Event()
         self.topico_estado = topico_estado_de(cfg)
         self.topico_hablar = "casa/sala/satelite/%s/hablar" % cfg.client_id
+        self.topico_video = topico_video_de(cfg)
         self.cliente = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=cfg.client_id,
@@ -877,10 +904,18 @@ class PuenteMQTT:
             return
         registro.info("MQTT conectado como %s (client_id=%s, estado en %s)",
                       self.cfg.mqtt_usuario, self.cfg.client_id, self.topico_estado)
+        topico_video = getattr(self, "topico_video", None) or topico_video_de(self.cfg)
+        self.topico_video = topico_video
         cliente.subscribe(self.cfg.topico_decir, qos=1)
         cliente.subscribe(self.topico_hablar, qos=1)
+        cliente.subscribe(topico_video, qos=1)
+        video = False
+        if getattr(self, "nucleo", None) is not None:
+            video = getattr(self.nucleo, "video_disponible", False)
         cliente.publish(self.topico_estado,
-                        json.dumps({"conectado": True, "hablar": True}, separators=(",", ":")),
+                        json.dumps({"conectado": True, "hablar": True,
+                                    "video": video},
+                                   separators=(",", ":")),
                         qos=0, retain=True)
         self.loop.call_soon_threadsafe(self.listo.set)
 
@@ -894,6 +929,8 @@ class PuenteMQTT:
             self.loop.call_soon_threadsafe(self.nucleo.al_hablar, carga)
         elif mensaje.topic == self.cfg.topico_decir:
             self.loop.call_soon_threadsafe(self.nucleo.al_decir, carga)
+        elif mensaje.topic == (getattr(self, "topico_video", None) or topico_video_de(self.cfg)):
+            self.loop.call_soon_threadsafe(self.nucleo.al_video, carga)
         else:
             registro.debug("satelite: topico ignorado %s", mensaje.topic)
 
@@ -953,6 +990,11 @@ class Nucleo:
         self._primer_turno_hecho = False
         self.segundos_sin_respuesta = SEGUNDOS_SIN_RESPUESTA
         self._timer_hablar = None
+        self.video_disponible = bool(shutil.which("mpv") and shutil.which("yt-dlp")
+                                    and os.environ.get("WAYLAND_DISPLAY"))
+        self._proceso_video = None
+        if not self.video_disponible:
+            registro.warning("video: desactivado (falta mpv, yt-dlp o WAYLAND_DISPLAY)")
 
     # --- tecla ---
     def presionar(self) -> None:
@@ -1055,6 +1097,67 @@ class Nucleo:
                 os.unlink(ruta)
             except OSError:
                 pass
+
+    def al_video(self, carga: dict) -> None:
+        """Procesa una orden de video (buscar/cerrar) del orquestador."""
+        if not isinstance(carga, dict):
+            return
+        ts = carga.get("ts")
+        if not isinstance(ts, (int, float)) or isinstance(ts, bool):
+            registro.warning("video: mensaje sin ts, descartado")
+            return
+        if abs(time.time() - float(ts)) > 30:
+            registro.warning("video: mensaje antiguo (ts=%s), descartado", ts)
+            return
+        accion = carga.get("accion")
+        if accion == "cerrar":
+            self._cerrar_video()
+            return
+        if accion != "buscar":
+            registro.debug("video: accion desconocida %r", accion)
+            return
+        if not self.video_disponible:
+            registro.warning("video: no disponible (falta mpv, yt-dlp o WAYLAND_DISPLAY)")
+            self._encolar_habla("No puedo poner videos en este momento.", "aviso")
+            return
+        consulta = limpiar_consulta(carga.get("consulta", ""))
+        if len(consulta) < 2:
+            return
+        # Cierra el video anterior antes de abrir uno nuevo.
+        self._cerrar_video()
+        args = ["mpv", "--fs", "--no-terminal",
+                "ytdl://ytsearch1:%s" % consulta]
+        try:
+            self._proceso_video = subprocess.Popen(
+                args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True)
+            registro.info("video: mpv lanzado (consulta_len=%d)", len(consulta))
+        except Exception as error:  # noqa: BLE001
+            registro.warning("video: no se pudo lanzar mpv: %s", error)
+            self._proceso_video = None
+
+    def _cerrar_video(self) -> None:
+        proc = self._proceso_video
+        self._proceso_video = None
+        if proc is None:
+            return
+        if proc.poll() is not None:
+            return
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                try:
+                    proc.wait(timeout=3)
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception as error:  # noqa: BLE001
+            registro.warning("video: no se pudo cerrar mpv: %s", error)
+
+    def cerrar_video(self) -> None:
+        self._cerrar_video()
 
     def enviar_archivo(self, pcm: bytes) -> tuple:
         """Manda un PCM ya validado como una frase completa. `(frase_id, error)`.
@@ -1555,6 +1658,7 @@ async def ejecutar(args) -> int:
                 os.unlink(cfg.socket_ruta)
         if ws._tarea is not None:
             ws._tarea.cancel()
+        nucleo.cerrar_video()
         mqttc.cerrar()
         try:
             await reproductor.cerrar()

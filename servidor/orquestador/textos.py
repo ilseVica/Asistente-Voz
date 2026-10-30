@@ -51,6 +51,12 @@ RESPUESTA_SIN_RECORDATORIOS = "Hoy no tiene recordatorios pendientes."
 RESPUESTA_CHAT_ENVIADA = "Listo, le envié su respuesta."
 PERDON_NO_ESCUCHO = "Perdón, no le escuché bien. ¿Me lo repite?"
 
+# Video por voz.
+PREGUNTA_VIDEO = "¿Qué video quiere ver?"
+RESPUESTA_BUSCANDO_VIDEO = "Buscando videos de {consulta}"
+RESPUESTA_NO_ENTENDI_VIDEO = "No le entendí, intente de nuevo"
+RESPUESTA_VIDEO_NO_DISPONIBLE = "Por ahora no puedo poner videos"
+
 # El eco de prueba (se queda hasta el Paso 3).
 ECO = "Usted dijo: {texto}."
 

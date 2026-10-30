@@ -277,7 +277,10 @@ def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
     que existiera la Fase 4).
     """
     if topico == config.TOPICO_VOZ_TEXTO:
-        voz.procesar(cuerpo, publicar, base)
+        voz.procesar(cuerpo, publicar, base, satelites)
+    elif topico in (config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA):
+        voz.publicar_cerrar_video_por_alerta(publicar)
+        alertas.procesar(topico, cuerpo, base, publicar)
     elif alertas.client_id_de_estado(topico) is not None:
         alertas.al_estado_satelite(topico, cuerpo, retenido, base, publicar,
                                    satelites=satelites)

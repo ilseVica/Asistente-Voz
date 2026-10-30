@@ -143,10 +143,40 @@ class Satelites:
     def __init__(self):
         self._cerrojo = threading.Lock()
         self._estado = {}
+        self._video = {}
 
-    def actualizar(self, client_id: str, conectado: bool) -> None:
+    def actualizar(self, client_id: str, conectado=True, video=None,
+                   carga=None) -> None:
+        if carga is not None and isinstance(carga, dict):
+            conectado = carga.get("conectado") is True
+            if video is None:
+                video = carga.get("video") is True
+        if video is None:
+            video = False
         with self._cerrojo:
             self._estado[client_id] = bool(conectado)
+            self._video[client_id] = bool(video) and bool(conectado)
+
+    def tiene_video(self, client_id=None) -> bool:
+        with self._cerrojo:
+            if client_id is None:
+                return any(self._video.get(cid) and self._estado.get(cid)
+                           for cid in self._estado)
+            return bool(self._video.get(client_id)) and bool(self._estado.get(client_id))
+
+    def hay_video(self) -> bool:
+        return self.tiene_video()
+
+    def satelite_con_video(self) -> bool:
+        return self.tiene_video()
+
+    def video_activo(self, client_id=None) -> bool:
+        return self.tiene_video(client_id)
+
+    def client_ids_con_video(self) -> list:
+        with self._cerrojo:
+            return [cid for cid in self._estado
+                    if self._video.get(cid) and self._estado.get(cid)]
 
     def hay_conectado(self) -> bool:
         with self._cerrojo:

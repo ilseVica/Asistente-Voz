@@ -194,6 +194,7 @@ Esta sección es un **borrador**: se revisa y se congela al final del Paso 0, y 
 | `casa/sala/alerta/ayuda` | ESP32 (vía Alexa) o servidor (vía voz) | Servidor | `{"id":"a4cf12-b0007-0043","origen":"alexa"}` |
 | `casa/sala/alerta/inactividad` | Servidor | Servidor (bot y panel) | `{"id":"srv-0001","minutos":120}` |
 | `casa/sala/satelite/decir` | Servidor | Satélite | `{"texto":"Listo, encendí la luz","tipo":"respuesta","ts":1759501234}` |
+| `casa/sala/satelite/+/video` | Servidor | Satélite | `{"accion":"buscar","consulta":"gatos","ts":1759501234}` o `{"accion":"cerrar","ts":1759501234}` |
 | `casa/sala/satelite/estado` | Satélite (*Last Will*, con *retain*) | Servidor | `{"conectado":true}` |
 | `casa/sala/nodo/estado` | ESP32 (al conectar y como *Last Will*, con *retain*) | Servidor | `{"conectado":true,"ts":"2026-10-03T18:46:07Z","ip":"192.168.1.123","fw":"1.0.0","gas_adc":312,"alertas_pendientes":0,"gas_episodio":false,"alexa":true}` |
 | `casa/sala/nodo/config` | Servidor (con *retain*) | ESP32 | `{"gas_on_adc":1800,"gas_off_adc":1550}` |
@@ -259,6 +260,7 @@ Reglas del contrato:
 | Fecha | Cambio | Motivo |
 | --- | --- | --- |
 | 2026-10-26 | Chat de dos vias (Paso 6): `casa/sala/voz/texto` suma el campo `texto_libre` (transcripcion libre) para la ventana de respuesta; `satelite/decir` tipo `chat` se dice aunque llegue tarde; nueva tabla `conversacion` en SQLite. | El orquestador necesita la transcripcion libre solo dentro de la ventana de respuesta, sin cambiar el satelite. |
+| 2026-10-29 | YouTube por voz: `casa/sala/satelite/+/video` (buscar/cerrar), ventana de 15 s en el orquestador, mpv en el satelite, estado `"video"`. | Permite pedir un video por voz y cerrarlo; solo el satelite configurado recibe la orden. |
 | 2026-10-11 | Alta de `casa/sala/voz/texto` (etapa A del Paso 2), eco del orquestador por `satelite/decir`, gramática Vosk de 18 frases + `[unk]` y descarte de mensajes de voz/texto con `ts` > 10 s o sin `ts`. | El servicio de voz del servidor publica el reconocimiento en texto para que el orquestador decida la intención en el Paso 3; el eco confirma al satélite que el audio se entendió, y se aplica la misma regla de antigüedad que `luz/set`. |
 | 2026-10-27 | Nuevo tópico `casa/sala/satelite/<client_id>/hablar` (QoS 1, sin retener): el panel publica `inicio`/`fin` con `ts`; el satélite lo trata como F9 (tono corto solo si viene del panel) con corte propio a 10 s y descarte por antigüedad (>10 s o sin `ts`). ACL: panel escribe `casa/sala/satelite/+/hablar`, satélite lee el suyo. | Botón «Mantener para hablar» del panel, equivalente a F9. |
 

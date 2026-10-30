@@ -33,6 +33,7 @@ _ultimos_sensores = {"temperatura": None, "humedad": None, "ts": None}
 _nodo_conectado = {"valor": None}  # True | False | None
 _ventana_hasta = {"valor": 0.0}
 _ventana_reintentos = {"valor": 0}
+_ventana_modo = {"valor": None}  # "chat" | "video" | None
 
 _frase_a_intencion = {}
 
@@ -164,15 +165,41 @@ def _confirmar_luz(estado_pedido, publicar, frase_id):
 def abrir_ventana_respuesta() -> None:
     _ventana_hasta["valor"] = time.time() + config.VENTANA_RESPUESTA_CHAT_S
     _ventana_reintentos["valor"] = 1
+    _ventana_modo["valor"] = "chat"
 
 
 def cerrar_ventana_respuesta() -> None:
     _ventana_hasta["valor"] = 0.0
     _ventana_reintentos["valor"] = 0
+    _ventana_modo["valor"] = None
 
 
 def ventana_respuesta_abierta() -> bool:
+    return time.time() < _ventana_hasta["valor"] and _ventana_modo["valor"] == "chat"
+
+
+def abrir_ventana_video() -> None:
+    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+    _ventana_reintentos["valor"] = 0
+    _ventana_modo["valor"] = "video"
+
+
+def cerrar_ventana_video() -> None:
+    _ventana_hasta["valor"] = 0.0
+    _ventana_reintentos["valor"] = 0
+    _ventana_modo["valor"] = None
+
+
+def ventana_video_abierta() -> bool:
+    return time.time() < _ventana_hasta["valor"] and _ventana_modo["valor"] == "video"
+
+
+def ventana_abierta() -> bool:
     return time.time() < _ventana_hasta["valor"]
+
+
+def cerrar_ventana() -> None:
+    cerrar_ventana_respuesta()
 
 
 
@@ -247,7 +274,54 @@ def _hora_en_palabras(ahora) -> str:
     return "Son las %s y %s de la noche." % (_numero_a_palabras(h), minuto_txt)
 
 
-def procesar(cuerpo: str, publicar, base=None) -> bool:
+def _limpiar_consulta_video(texto) -> str:
+    if not isinstance(texto, str):
+        return ""
+    limpio = "".join(c for c in texto if c.isalnum() or c.isspace())
+    return " ".join(limpio.split())[:100]
+
+
+def _satelite_video_activo(satelites) -> bool:
+    if satelites is None:
+        return False
+    cid = config.SATELITE_VIDEO_CLIENT_ID
+    for nombre in ("tiene_video", "hay_video", "satelite_con_video",
+                   "video_activo", "hay_satelite_con_video"):
+        metodo = getattr(satelites, nombre, None)
+        if callable(metodo):
+            try:
+                return bool(metodo(cid))
+            except TypeError:
+                try:
+                    return bool(metodo())
+                except Exception:  # noqa: BLE001
+                    pass
+            except Exception:  # noqa: BLE001
+                pass
+    for atributo in ("_video", "video", "_videos"):
+        valor = getattr(satelites, atributo, None)
+        if isinstance(valor, dict):
+            if cid in valor:
+                v = valor[cid]
+                if isinstance(v, dict):
+                    return bool(v.get("video"))
+                return bool(v)
+            if any((x.get("video") if isinstance(x, dict) else bool(x))
+                   for x in valor.values()):
+                return True
+    return False
+
+
+def publicar_cerrar_video_por_alerta(publicar) -> None:
+    cid = config.SATELITE_VIDEO_CLIENT_ID
+    try:
+        publicar("casa/sala/satelite/%s/video" % cid,
+                 {"accion": "cerrar", "ts": int(time.time())}, qos=1)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
     try:
         carga = json.loads(cuerpo)
     except ValueError as error:
@@ -274,12 +348,66 @@ def procesar(cuerpo: str, publicar, base=None) -> bool:
     if not isinstance(texto_libre, str):
         texto_libre = ""
 
-    # Ventana de respuesta del chat: tiene prioridad sobre todo lo demas.
-    if ventana_respuesta_abierta():
+    # Ventana (chat o video): tiene prioridad sobre todo lo demas.
+    if ventana_abierta():
+        if ventana_video_abierta():
+            es_ayuda = (_frase_a_intencion.get(normalizar(texto)) == "AYUDA"
+                        or _frase_a_intencion.get(normalizar(texto_libre)) == "AYUDA")
+            if es_ayuda:
+                cerrar_ventana_video()
+                publicar_cerrar_video_por_alerta(publicar)
+                if base is not None and hasattr(base, "hay_ayuda_reciente") \
+                        and base.hay_ayuda_reciente():
+                    _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)
+                    return True
+                CONTADOR_AYUDA[0] += 1
+                id_alerta = "srv-%08x-%04x" % (int(time.time()) % 0xFFFFFFFF,
+                                               CONTADOR_AYUDA[0])
+                publicar(config.TOPICO_ALERTA_AYUDA,
+                         {"id": id_alerta, "origen": "voz"}, qos=1)
+                _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA, frase_id)
+                return True
+
+            if (normalizar(texto) == "cancela"
+                    or normalizar(texto_libre) == "cancela"
+                    or _frase_a_intencion.get(normalizar(texto)) == "CANCELAR"
+                    or _frase_a_intencion.get(normalizar(texto_libre)) == "CANCELAR"):
+                cerrar_ventana_video()
+                _publicar_respuesta(publicar, textos.RESPUESTA_CANCELAR, frase_id)
+                return True
+
+            if no_entendido(texto) and no_entendido(texto_libre):
+                _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
+                _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                return True
+
+            consulta = texto_libre if not no_entendido(texto_libre) else texto
+            consulta = _limpiar_consulta_video(consulta)
+            if len(consulta) < 2:
+                _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
+                _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                return True
+
+            cerrar_ventana_video()
+            _publicar_respuesta(publicar,
+                                textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta),
+                                frase_id)
+            cid = config.SATELITE_VIDEO_CLIENT_ID
+            try:
+                publicar("casa/sala/satelite/%s/video" % cid,
+                         {"accion": "buscar", "consulta": consulta,
+                          "ts": int(time.time())}, qos=1)
+            except Exception as error:  # noqa: BLE001
+                registro.warning("voz: no se pudo publicar video/buscar: %s", error)
+            registro.info("voz turno: intencion=BUSCAR_VIDEO accion=video_buscar "
+                          "consulta_len=%d", len(consulta))
+            return True
+
         es_ayuda = (_frase_a_intencion.get(normalizar(texto)) == "AYUDA"
                     or _frase_a_intencion.get(normalizar(texto_libre)) == "AYUDA")
         if es_ayuda:
             cerrar_ventana_respuesta()
+            publicar_cerrar_video_por_alerta(publicar)
             if base is not None and hasattr(base, "hay_ayuda_reciente") \
                     and base.hay_ayuda_reciente():
                 _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)
@@ -325,6 +453,24 @@ def procesar(cuerpo: str, publicar, base=None) -> bool:
 
     latencia = int((time.time() - int(ts)) * 1000)
 
+    if intencion == "BUSCAR_VIDEO":
+        if not config.VIDEO_HABILITADO or not _satelite_video_activo(satelites):
+            _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_NO_DISPONIBLE, frase_id)
+            registro.info("voz turno: intencion=BUSCAR_VIDEO accion=no_disponible "
+                          "texto_len=%d", len(texto))
+            return True
+        abrir_ventana_video()
+        _publicar_respuesta(publicar, textos.PREGUNTA_VIDEO, frase_id)
+        registro.info("voz turno: intencion=BUSCAR_VIDEO accion=abrir_ventana "
+                      "texto_len=%d", len(texto))
+        return True
+
+    if intencion == "CERRAR_VIDEO":
+        publicar_cerrar_video_por_alerta(publicar)
+        registro.info("voz turno: intencion=CERRAR_VIDEO accion=cerrar "
+                      "texto_len=%d", len(texto))
+        return True
+
     if intencion in ("ENCENDER_LUZ", "APAGAR_LUZ"):
         estado_pedido = "on" if intencion == "ENCENDER_LUZ" else "off"
         if _nodo_conectado["valor"] is False:
@@ -356,6 +502,7 @@ def procesar(cuerpo: str, publicar, base=None) -> bool:
         return True
 
     if intencion == "AYUDA":
+        publicar_cerrar_video_por_alerta(publicar)
         if base is not None and hasattr(base, "hay_ayuda_reciente") \
                 and base.hay_ayuda_reciente():
             _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)

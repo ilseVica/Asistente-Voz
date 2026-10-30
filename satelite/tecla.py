@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Aviso corto de la tecla para hablar, y entrada por archivo.
 
+La tecla (F9 por defecto) la captura Hyprland con `bind`/`bindr`, que son atajos
+globales: llegan al socket Unix del satelite aunque mpv este en pantalla
+completa, porque no dependen del foco de la ventana.
+
+
 Lo llama Hyprland en `bind` (al presionar) y `bindr` (al soltar). Solo abre el
 socket Unix local del servicio, manda una letra (`P` o `R`) y se marcha. No usa
 evdev ni el grupo input: no lee el teclado, solo escucha la orden del gestor de

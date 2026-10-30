@@ -491,6 +491,12 @@ ENLACE_SITIO_VALORES_CAIDO = ("0", "false", "off", "no")
 # Ventana de respuesta tras decir un mensaje de chat, en segundos.
 VENTANA_RESPUESTA_CHAT_S = int(os.environ.get("VENTANA_RESPUESTA_CHAT_S", "60"))
 
+# --- Video por voz ---------------------------------------------------------
+VIDEO_HABILITADO = os.environ.get("VIDEO_HABILITADO", "1").strip().lower() not in ("0", "false", "no", "")
+VENTANA_VIDEO_S = int(os.environ.get("VENTANA_VIDEO_S", "15"))
+# Satelite al que se le pide el video (igual que el boton para hablar).
+SATELITE_VIDEO_CLIENT_ID = os.environ.get("SATELITE_VIDEO_CLIENT_ID", "satelite-sala").strip() or "satelite-sala"
+
 # Limite de caracteres de un mensaje a la sala.
 LIMITE_CHAT_CARACTERES = 200
 

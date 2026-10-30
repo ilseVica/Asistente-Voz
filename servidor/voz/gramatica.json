@@ -104,6 +104,16 @@
     ],
     "ESTOY_BIEN": [
       "avisa a mi familia que estoy bien"
+    ],
+    "BUSCAR_VIDEO": [
+      "busca un video",
+      "pon un video",
+      "quiero ver un video"
+    ],
+    "CERRAR_VIDEO": [
+      "cierra el video",
+      "quita el video",
+      "para el video"
     ]
   }
 }

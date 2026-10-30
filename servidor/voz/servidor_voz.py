@@ -300,7 +300,7 @@ def _final(reconocedor) -> str:
 
 
 async def _resolver_frase(websocket, frase: Frase, motivo_error: str,
-                          fin_ms: int, publicador: Publicador):
+                          fin_ms: int, publicador=None):
     """Cierra una frase: reconoce, manda `final` y publica en MQTT."""
     if frase.id is None:
         return
@@ -356,6 +356,9 @@ async def _resolver_frase(websocket, frase: Frase, motivo_error: str,
         "ts": int(time.time()),
         "marcas": marcas,
     }
+    if publicador is None:
+        registro.info("modo sin MQTT: frase %s no se publica (modo_prueba)", frase.id)
+        return
     try:
         await asyncio.to_thread(publicador.publicar, carga)
         registro.info("frase %s [%s] -> %r (fin->final %d ms, fin->publicado %d ms)",
@@ -365,7 +368,7 @@ async def _resolver_frase(websocket, frase: Frase, motivo_error: str,
         registro.error("frase %s: no se pudo publicar: %s", frase.id, error)
 
 
-async def atender(websocket, modelo: vosk.Model, fases, publicador: Publicador):
+async def atender(websocket, modelo: vosk.Model, fases, publicador=None):
     """Atiende una conexion persistente: un inicio y, despues, muchas frases."""
     registro.info("conexion de %s", websocket.remote_address)
     autenticado = False
@@ -456,7 +459,10 @@ async def atender(websocket, modelo: vosk.Model, fases, publicador: Publicador):
                     await websocket.close(code=CIERRE_TOKEN_INVALIDO)
                     return
                 autenticado = True
-                await websocket.send(json.dumps({"tipo": "listo"}))
+                saludo = {"tipo": "listo"}
+                if publicador is None:
+                    saludo["modo_prueba"] = True
+                await websocket.send(json.dumps(saludo))
                 registro.info("cliente autenticado y listo")
                 continue
 
@@ -507,7 +513,7 @@ async def atender(websocket, modelo: vosk.Model, fases, publicador: Publicador):
         registro.info("conexion de %s cerrada", websocket.remote_address)
 
 
-async def servir(modelo: vosk.Model, fases, publicador: Publicador) -> list:
+async def servir(modelo: vosk.Model, fases, publicador=None) -> list:
     servidores = []
     for direccion in DIRECCIONES:
         try:
@@ -541,6 +547,15 @@ def configurar_log() -> None:
     logging.getLogger("paho").setLevel(max(nivel, logging.WARNING))
 
 
+def publicacion_habilitada(argv=None) -> bool:
+    if argv is None:
+        argv = sys.argv
+    if "--sin-mqtt" in (argv or []):
+        return False
+    return os.environ.get("VOZ_PUBLICAR_MQTT", "1").strip().lower() not in (
+        "0", "false", "no")
+
+
 async def amain() -> int:
     configurar_log()
     # Vosk escribe sus progresos de carga en stderr desde C. Se silencian, y NO se
@@ -566,8 +581,13 @@ async def amain() -> int:
     if not TOKEN_SHA256:
         raise SystemExit("FALTA VOZ_TOKEN_SHA256 en el entorno")
 
-    publicador = Publicador()
-    publicador.conectar()
+    sin_mqtt = not publicacion_habilitada(sys.argv)
+    if sin_mqtt:
+        registro.info("modo sin MQTT: no se conecta al broker ni se publica nada (modo_prueba)")
+        publicador = None
+    else:
+        publicador = Publicador()
+        publicador.conectar()
 
     servidores = await servir(modelo, fases, publicador)
 
@@ -586,7 +606,8 @@ async def amain() -> int:
         servidor.close()
     for servidor in servidores:
         await servidor.wait_closed()
-    publicador.cerrar()
+    if publicador is not None:
+        publicador.cerrar()
     registro.info("servicio de voz detenido")
     return 0
 

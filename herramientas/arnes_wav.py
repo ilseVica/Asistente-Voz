@@ -576,11 +576,37 @@ async def seccion_corte(args, token, observador):
 
 # --- Programa ---------------------------------------------------------------
 
+def exige_modo_prueba(saludo, host, puerto) -> None:
+    if not (isinstance(saludo, dict) and saludo.get("modo_prueba") is True):
+        raise SystemExit("ERROR: el servicio %s:%d no declara modo_prueba; aborto."
+                         % (host, puerto))
+
+
 async def principal(args):
     token = leer_token(args.token_archivo)
     if not token:
         print("No hay token en %s" % args.token_archivo)
         return 2
+
+    # Si se apunta a un servicio, exige que declare modo_prueba en el saludo.
+    try:
+        ws, saludo = await abrir_conexion(args.host, args.puerto, token)
+    except Exception as error:  # noqa: BLE001
+        print("No se pudo conectar al servicio de voz: %s" % error)
+        return 2
+    try:
+        exige_modo_prueba(saludo, args.host, args.puerto)
+    except SystemExit as error:
+        try:
+            await ws.close()
+        except Exception:  # noqa: BLE001
+            pass
+        print(str(error))
+        return 2
+    try:
+        await ws.close()
+    except Exception:  # noqa: BLE001
+        pass
 
     observador = None
     if not args.sin_mqtt:
@@ -651,6 +677,9 @@ def main():
 
     _HOSTS_PRODUCCION = {"127.0.0.1", "localhost", "192.168.1.169",
                           "100.116.194.116"}
+    if args.produccion and args.puerto != 2700:
+        raise SystemExit("ERROR: --produccion solo tiene sentido con el puerto de "
+                         "produccion 2700, no con %d." % args.puerto)
     if not args.produccion:
         if args.host in _HOSTS_PRODUCCION and args.puerto == 2700:
             raise SystemExit("ERROR: destino es el servidor de voz de produccion "

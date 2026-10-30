@@ -36,6 +36,23 @@ ENV = os.path.join(SERVIDOR, ".env")
 IMAGEN = "eclipse-mosquitto:2.0.22"
 PASSWD_REL = "passwd"
 
+USUARIOS_CONOCIDOS = {"nodo", "puente", "orquestador", "satelite", "salud",
+                      "panel", "voz"}
+
+
+def validar_usuarios(usuarios):
+    desconocidos = [u for u in usuarios if u not in USUARIOS_CONOCIDOS]
+    if desconocidos:
+        die("usuario desconocido: %s (conocidos: %s)"
+            % (", ".join(desconocidos),
+               ", ".join(sorted(USUARIOS_CONOCIDOS))))
+
+
+def uso():
+    sys.stdout.write(
+        "Uso: rotar-claves.py [--help] <usuario> [usuario ...]\n"
+        "Usuarios conocidos: %s\n" % ", ".join(sorted(USUARIOS_CONOCIDOS)))
+
 
 def die(msg):
     sys.stderr.write("error: %s\n" % msg)
@@ -118,9 +135,13 @@ def escribir_env(texto):
 
 
 def main():
+    if "--help" in sys.argv[1:] or "-h" in sys.argv[1:]:
+        uso()
+        return 0
     usuarios = sys.argv[1:]
     if not usuarios:
         die("uso: rotar-claves.py <usuario> [usuario ...]")
+    validar_usuarios(usuarios)
     sd = secrets_dir()
     passwd = os.path.join(sd, PASSWD_REL)
     resp_dir = os.path.join(sd, "respaldos")

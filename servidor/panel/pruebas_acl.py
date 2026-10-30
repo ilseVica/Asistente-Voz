@@ -74,10 +74,23 @@ def _falta(nombre):
              "historial de bash." % nombre)
 
 
+def exige_entorno_prueba() -> None:
+    """Las pruebas ACL no leen servidor/.env y no tocan el broker de produccion."""
+    if PUERTO == 1883:
+        sys.exit("ERROR: puerto 1883 es de produccion; use un broker de prueba.")
+
+
+def _clave_prueba(nombre_generico):
+    return (os.environ.get("PRUEBA_" + nombre_generico)
+            or os.environ.get(nombre_generico)
+            or _falta("PRUEBA_" + nombre_generico))
+
+
 PUERTO = int(os.environ.get("MQTT_PUERTO", "18830"))
 HOST = os.environ.get("MQTT_HOST", "127.0.0.1")
-CLAVE_PANEL = os.environ.get("MQTT_PANEL_PASSWORD") or _falta("MQTT_PANEL_PASSWORD")
-CLAVE_PUENTE = os.environ.get("MQTT_PUENTE_PASSWORD") or _falta("MQTT_PUENTE_PASSWORD")
+exige_entorno_prueba()
+CLAVE_PANEL = _clave_prueba("MQTT_PANEL_PASSWORD")
+CLAVE_PUENTE = _clave_prueba("MQTT_PUENTE_PASSWORD")
 # Opcionales: sin ellas se salta la parte de la Fase 2C.
 CLAVE_SATELITE = os.environ.get("MQTT_SATELITE_PASSWORD", "")
 CLAVE_ORQUESTADOR = os.environ.get("MQTT_ORQUESTADOR_PASSWORD", "")

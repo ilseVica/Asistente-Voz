@@ -75,6 +75,7 @@ import config
 import db as db_modulo
 import alertas
 import telegram_cliente
+import textos
 from telegram_cliente import TelegramNoConfigurado
 
 registro = logging.getLogger("cola")

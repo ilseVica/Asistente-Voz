@@ -227,6 +227,8 @@ services:
       VOZ_DIRECCIONES: ${VOZ_DIRECCIONES:-127.0.0.1 192.168.1.169 100.116.194.116}
       VOZ_MODELO: /modelo/vosk-model-small-es-0.42
       VOZ_GRAMATICA: /app/gramatica.json
+      VOZ_MODELO_INGLES: /modelo/vosk-model-small-en-us-0.15
+      VIDEO_INGLES_HABILITADO: ${VIDEO_INGLES_HABILITADO:-0}
       VOZ_TOKEN_SHA256: ${VOZ_TOKEN_SHA256:?falta VOZ_TOKEN_SHA256 en servidor/.env}
       MQTT_HOST: 127.0.0.1
       MQTT_PUERTO: "1883"
@@ -245,7 +247,7 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    mem_limit: 512m
+    mem_limit: 768m
     cpus: 1.0
     pids_limit: 100
 

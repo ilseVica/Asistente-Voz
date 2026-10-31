@@ -34,6 +34,7 @@ _nodo_conectado = {"valor": None}  # True | False | None
 _ventana_hasta = {"valor": 0.0}
 _ventana_reintentos = {"valor": 0}
 _ventana_modo = {"valor": None}  # "chat" | "video" | None
+_ventana_idioma = {"valor": "es"}  # "es" | "en"
 
 _frase_a_intencion = {}
 
@@ -140,10 +141,12 @@ def actualizar_sensores(cuerpo: str) -> None:
         _ultimos_sensores["ts"] = int(time.time())
 
 
-def _publicar_respuesta(publicar, texto, frase_id=None):
+def _publicar_respuesta(publicar, texto, frase_id=None, extra=None):
     salida = {"texto": texto, "tipo": "respuesta", "ts": int(time.time())}
     if isinstance(frase_id, str) and frase_id:
         salida["frase_id"] = frase_id
+    if isinstance(extra, dict):
+        salida.update(extra)
     publicar(config.TOPICO_SATELITE_DECIR, salida, qos=1)
 
 
@@ -178,20 +181,25 @@ def ventana_respuesta_abierta() -> bool:
     return time.time() < _ventana_hasta["valor"] and _ventana_modo["valor"] == "chat"
 
 
-def abrir_ventana_video() -> None:
+def abrir_ventana_video(ingles: bool = False) -> None:
     _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
     _ventana_reintentos["valor"] = 0
     _ventana_modo["valor"] = "video"
+    _ventana_idioma["valor"] = "en" if ingles else "es"
 
 
 def cerrar_ventana_video() -> None:
     _ventana_hasta["valor"] = 0.0
     _ventana_reintentos["valor"] = 0
     _ventana_modo["valor"] = None
+    _ventana_idioma["valor"] = "es"
 
 
 def ventana_video_abierta() -> bool:
     return time.time() < _ventana_hasta["valor"] and _ventana_modo["valor"] == "video"
+
+def ventana_video_idioma() -> str:
+    return _ventana_idioma["valor"] if _ventana_idioma["valor"] in ("es", "en") else "es"
 
 
 def ventana_abierta() -> bool:
@@ -376,12 +384,19 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
                 _publicar_respuesta(publicar, textos.RESPUESTA_CANCELAR, frase_id)
                 return True
 
-            if no_entendido(texto) and no_entendido(texto_libre):
-                _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
-                _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
-                return True
-
-            consulta = texto_libre if not no_entendido(texto_libre) else texto
+            idioma_ventana = ventana_video_idioma()
+            if idioma_ventana == "en":
+                if no_entendido(texto_libre):
+                    _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
+                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                    return True
+                consulta = texto_libre
+            else:
+                if no_entendido(texto) and no_entendido(texto_libre):
+                    _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
+                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                    return True
+                consulta = texto_libre if not no_entendido(texto_libre) else texto
             consulta = _limpiar_consulta_video(consulta)
             if len(consulta) < 2:
                 _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
@@ -389,9 +404,14 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
                 return True
 
             cerrar_ventana_video()
-            _publicar_respuesta(publicar,
-                                textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta),
-                                frase_id)
+            disponible = carga.get("ingles_disponible", True)
+            if idioma_ventana == "en" and disponible is False:
+                respuesta = ("%s. %s"
+                             % (textos.RESPUESTA_VIDEO_INGLES_NO_DISPONIBLE,
+                                textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta)))
+            else:
+                respuesta = textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta)
+            _publicar_respuesta(publicar, respuesta, frase_id)
             cid = config.SATELITE_VIDEO_CLIENT_ID
             try:
                 publicar("casa/sala/satelite/%s/video" % cid,
@@ -400,7 +420,7 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
             except Exception as error:  # noqa: BLE001
                 registro.warning("voz: no se pudo publicar video/buscar: %s", error)
             registro.info("voz turno: intencion=BUSCAR_VIDEO accion=video_buscar "
-                          "consulta_len=%d", len(consulta))
+                          "idioma=%s consulta_len=%d", idioma_ventana, len(consulta))
             return True
 
         es_ayuda = (_frase_a_intencion.get(normalizar(texto)) == "AYUDA"
@@ -453,16 +473,24 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
 
     latencia = int((time.time() - int(ts)) * 1000)
 
+    _FRASES_VIDEO_INGLES = {
+        normalizar("pon un video en ingles"),
+        normalizar("quiero ver un video en ingles"),
+    }
     if intencion == "BUSCAR_VIDEO":
         if not config.VIDEO_HABILITADO or not _satelite_video_activo(satelites):
             _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_NO_DISPONIBLE, frase_id)
             registro.info("voz turno: intencion=BUSCAR_VIDEO accion=no_disponible "
                           "texto_len=%d", len(texto))
             return True
-        abrir_ventana_video()
-        _publicar_respuesta(publicar, textos.PREGUNTA_VIDEO, frase_id)
+        ingles = normalizar(texto) in _FRASES_VIDEO_INGLES
+        abrir_ventana_video(ingles=ingles)
+        _publicar_respuesta(publicar, textos.PREGUNTA_VIDEO, frase_id,
+                            extra={"idioma": "en" if ingles else "es",
+                                   "ventana": "video",
+                                   "ventana_s": config.VENTANA_VIDEO_S})
         registro.info("voz turno: intencion=BUSCAR_VIDEO accion=abrir_ventana "
-                      "texto_len=%d", len(texto))
+                      "ingles=%s texto_len=%d", ingles, len(texto))
         return True
 
     if intencion == "CERRAR_VIDEO":

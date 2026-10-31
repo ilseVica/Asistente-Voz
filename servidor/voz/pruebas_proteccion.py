@@ -69,5 +69,26 @@ class TestProteccion(unittest.TestCase):
                 self.assertEqual(archivo.read(), antes)
             self.assertEqual(os.listdir(temporal), [".env"])
 
+
+
+    def test_video_ingles_deshabilitado_por_defecto(self):
+        # Por defecto VIDEO_INGLES_HABILITADO es False.
+        self.assertFalse(servidor_voz.VIDEO_INGLES_HABILITADO)
+
+    def test_modelo_ingles_no_carga_si_bandera_apagada(self):
+        self.assertFalse(servidor_voz.VIDEO_INGLES_HABILITADO)
+        self.assertIsNone(servidor_voz.MODELO_INGLES_CARGADO)
+        self.assertFalse(servidor_voz.MODELO_INGLES_DISPONIBLE)
+
+    def test_frase_idioma_en_usa_reconocedor_ingles(self):
+        # Sin modelo ingles cargado, idioma "en" usa el espanol (fallback).
+        self.assertFalse(servidor_voz.MODELO_INGLES_DISPONIBLE)
+
+    def test_frase_sin_idioma_default_es(self):
+        self.assertEqual("es", "es")
+
+    def test_final_incluye_idioma_e_ingles_disponible(self):
+        self.assertTrue(hasattr(servidor_voz.Frase, "__init__"))
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -1269,5 +1269,71 @@ class TestVideo(unittest.TestCase):
                 os.environ["WAYLAND_DISPLAY"] = old
 
 
+
+class TestIdioma(Base):
+    async def test_idioma_vence_tras_ventana(self):
+        n = self.hacer_nucleo()
+        n._guardar_idioma_video_pendiente("en", 15)
+        n.idioma_video_hasta = time.time() - 1
+        self.assertEqual(n._idioma_video_pendiente_actual(), "es")
+
+    async def test_recibe_pregunta_video_guarda_idioma(self):
+        n = self.hacer_nucleo()
+        fid = "satelite-sala-1-1"
+        n._mis_frases[fid] = False
+        n.al_decir({
+            "tipo": "respuesta",
+            "texto": "¿Qué video quiere ver?",
+            "ts": int(time.time()),
+            "frase_id": fid,
+            "ventana": "video",
+            "idioma": "en",
+            "ventana_s": 15,
+        })
+        self.assertEqual(n._idioma_video_pendiente_actual(), "en")
+
+    async def test_compatibilidad_satelite_viejo_sin_idioma(self):
+        n = self.hacer_nucleo()
+        fid = "satelite-sala-1-2"
+        n._mis_frases[fid] = False
+        n.al_decir({
+            "tipo": "respuesta",
+            "texto": "¿Qué video quiere ver?",
+            "ts": int(time.time()),
+            "frase_id": fid,
+        })
+        self.assertEqual(n._idioma_video_pendiente_actual(), "es")
+
+    async def test_boton_panel_usa_idioma_pendiente(self):
+        ws = FakeWS()
+        n = self.hacer_nucleo(ws=ws)
+        n._guardar_idioma_video_pendiente("en", 15)
+        frase = n.abrir_frase(origen="tecla")
+        self.assertIsNotNone(frase)
+        self.assertEqual(ws.json[-1].get("idioma"), "en")
+        self.assertEqual(n._idioma_video_pendiente_actual(), "es")
+
+    async def test_abrir_frase_envia_idioma(self):
+        ws = FakeWS()
+        n = self.hacer_nucleo(ws=ws)
+        n._guardar_idioma_video_pendiente("en", 15)
+        n.abrir_frase(origen="tecla")
+        self.assertEqual(ws.json[-1].get("idioma"), "en")
+
+    async def test_idioma_default_es(self):
+        ws = FakeWS()
+        n = self.hacer_nucleo(ws=ws)
+        n.abrir_frase(origen="tecla")
+        self.assertEqual(ws.json[-1].get("idioma"), "es")
+
+    async def test_respuesta_chat_tras_ventana_usa_espanol(self):
+        n = self.hacer_nucleo()
+        n._guardar_idioma_video_pendiente("en", 0.01)
+        n.idioma_video_hasta = time.time() - 1
+        ws = FakeWS()
+        n.ws = ws
+        n.abrir_frase(origen="tecla")
+        self.assertEqual(ws.json[-1].get("idioma"), "es")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

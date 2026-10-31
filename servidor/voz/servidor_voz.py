@@ -63,6 +63,10 @@ DIRECCIONES = (
 )
 
 MODELO = os.environ.get("VOZ_MODELO", "/modelo/vosk-model-small-es-0.42")
+MODELO_INGLES = os.environ.get("VOZ_MODELO_INGLES",
+                               "/modelo/vosk-model-small-en-us-0.15")
+VIDEO_INGLES_HABILITADO = os.environ.get("VIDEO_INGLES_HABILITADO", "0") \
+    .strip().lower() not in ("0", "false", "no", "")
 GRAMATICA = os.environ.get("VOZ_GRAMATICA", "/app/gramatica.json")
 
 # El hash SHA-256 (hex, minusculas) del token del satelite. En el .env va SOLO el
@@ -79,6 +83,9 @@ MQTT_CLIENT_ID = os.environ.get("MQTT_CLIENT_ID", "voz")
 
 TOPICO_TEXTO = "casa/sala/voz/texto"
 QOS = 1
+
+MODELO_INGLES_CARGADO = None
+MODELO_INGLES_DISPONIBLE = False
 
 # --- Limites del protocolo --------------------------------------------------
 
@@ -247,12 +254,16 @@ class Publicador:
 class Frase:
     """El estado de una frase en curso."""
 
-    __slots__ = ("id", "modo", "reconocedor", "reconocedor_libre", "textos",
-                 "textos_libres", "bytes", "primera_ms", "ultima_ms")
+    __slots__ = ("id", "modo", "idioma", "ingles_disponible", "reconocedor",
+                 "reconocedor_libre", "textos", "textos_libres", "bytes",
+                 "primera_ms", "ultima_ms")
 
-    def __init__(self, frase_id, modo, reconocedor, reconocedor_libre):
+    def __init__(self, frase_id, modo, reconocedor, reconocedor_libre,
+                 idioma="es", ingles_disponible=False):
         self.id = frase_id
         self.modo = modo
+        self.idioma = idioma if idioma in ("es", "en") else "es"
+        self.ingles_disponible = bool(ingles_disponible)
         self.reconocedor = reconocedor
         self.reconocedor_libre = reconocedor_libre
         self.textos = []
@@ -333,6 +344,8 @@ async def _resolver_frase(websocket, frase: Frase, motivo_error: str,
             "texto": texto,
             "texto_libre": texto_libre,
             "modo": frase.modo,
+            "idioma": frase.idioma,
+            "ingles_disponible": frase.ingles_disponible,
             "marcas": marcas,
         }, ensure_ascii=False))
     except ConnectionClosed:
@@ -353,6 +366,8 @@ async def _resolver_frase(websocket, frase: Frase, motivo_error: str,
         "texto": texto,
         "texto_libre": texto_libre,
         "modo": frase.modo,
+        "idioma": frase.idioma,
+        "ingles_disponible": frase.ingles_disponible,
         "ts": int(time.time()),
         "marcas": marcas,
     }
@@ -477,6 +492,9 @@ async def atender(websocket, modelo: vosk.Model, fases, publicador=None):
                     await enviar_error(websocket, "mensaje_invalido", None,
                                        "frase sin frase_id")
                     continue
+                idioma = datos.get("idioma", "es")
+                if idioma not in ("es", "en"):
+                    idioma = "es"
                 if modo == "chat":
                     await enviar_error(websocket, "modo_chat_no_disponible",
                                        frase_id,
@@ -487,8 +505,13 @@ async def atender(websocket, modelo: vosk.Model, fases, publicador=None):
                                        "modo %r no soportado" % modo)
                     continue
                 reconocedor = vosk.KaldiRecognizer(modelo, 16000, gramatica_json)
-                reconocedor_libre = vosk.KaldiRecognizer(modelo, 16000)
-                frase = Frase(frase_id, modo, reconocedor, reconocedor_libre)
+                if idioma == "en" and MODELO_INGLES_DISPONIBLE and MODELO_INGLES_CARGADO is not None:
+                    reconocedor_libre = vosk.KaldiRecognizer(MODELO_INGLES_CARGADO, 16000)
+                else:
+                    reconocedor_libre = vosk.KaldiRecognizer(modelo, 16000)
+                frase = Frase(frase_id, modo, reconocedor, reconocedor_libre,
+                              idioma=idioma,
+                              ingles_disponible=MODELO_INGLES_DISPONIBLE)
                 continue
 
             if tipo == "fin" or datos.get("fin") is True:
@@ -566,6 +589,25 @@ async def amain() -> int:
     t0 = time.time()
     modelo = vosk.Model(MODELO)
     registro.info("modelo cargado en %.1f s", time.time() - t0)
+
+    global MODELO_INGLES_CARGADO, MODELO_INGLES_DISPONIBLE
+    if VIDEO_INGLES_HABILITADO:
+        try:
+            t1 = time.time()
+            registro.info("cargando modelo ingles %s", MODELO_INGLES)
+            MODELO_INGLES_CARGADO = vosk.Model(MODELO_INGLES)
+            MODELO_INGLES_DISPONIBLE = True
+            registro.info("modelo ingles cargado en %.1f s", time.time() - t1)
+        except Exception as error:  # noqa: BLE001
+            MODELO_INGLES_CARGADO = None
+            MODELO_INGLES_DISPONIBLE = False
+            registro.warning("modelo ingles no disponible (%s); la busqueda en "
+                             "ingles usa el espanol", error)
+    else:
+        registro.info("ingles deshabilitado (VIDEO_INGLES_HABILITADO=0); "
+                      "la busqueda en ingles usa el espanol")
+        MODELO_INGLES_CARGADO = None
+        MODELO_INGLES_DISPONIBLE = False
 
     fases, advertencias = cargar_gramatica(modelo)
     registro.info("gramatica cargada: %d frases", len(fases))

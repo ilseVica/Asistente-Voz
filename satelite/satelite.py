@@ -993,6 +993,8 @@ class Nucleo:
         self.video_disponible = bool(shutil.which("mpv") and shutil.which("yt-dlp")
                                     and os.environ.get("WAYLAND_DISPLAY"))
         self._proceso_video = None
+        self.idioma_video_pendiente = "es"
+        self.idioma_video_hasta = 0.0
         if not self.video_disponible:
             registro.warning("video: desactivado (falta mpv, yt-dlp o WAYLAND_DISPLAY)")
 
@@ -1174,13 +1176,40 @@ class Nucleo:
         if self.ws is None or not self.ws.listo:
             return None, "el WebSocket no esta listo (sin conexion con el servidor)"
         self.fuente = FuentePCM(pcm)
-        frase = self.abrir_frase(origen="archivo")
+        frase = self.abrir_frase(origen="archivo", idioma=None)
         if self.frase is not frase:
             return None, "no se pudo abrir la frase (sin conexion)"
         return frase.frase_id, None
 
     # --- ciclo de una frase ---
-    def abrir_frase(self, origen: str = "tecla") -> Frase:
+    def _idioma_video_pendiente_actual(self) -> str:
+        if time.time() < self.idioma_video_hasta and self.idioma_video_pendiente in ("es", "en"):
+            return self.idioma_video_pendiente
+        self.idioma_video_pendiente = "es"
+        self.idioma_video_hasta = 0.0
+        return "es"
+
+    def _guardar_idioma_video_pendiente(self, idioma, ventana_s=None) -> None:
+        if idioma not in ("es", "en"):
+            idioma = "es"
+        self.idioma_video_pendiente = idioma
+        try:
+            segundos = float(ventana_s) if ventana_s is not None else 15.0
+        except (TypeError, ValueError):
+            segundos = 15.0
+        if segundos <= 0:
+            segundos = 15.0
+        self.idioma_video_hasta = time.time() + segundos
+
+    def _borrar_idioma_video_pendiente(self) -> None:
+        self.idioma_video_pendiente = "es"
+        self.idioma_video_hasta = 0.0
+
+    def abrir_frase(self, origen: str = "tecla", idioma=None) -> Frase:
+        if idioma is None:
+            idioma = self._idioma_video_pendiente_actual()
+        if idioma not in ("es", "en"):
+            idioma = "es"
         self._contador += 1
         # `<client_id>-<epoch>-<n>`: con dos satelites, el eco lleva el frase_id
         # y cada uno sabe si la respuesta es para el.
@@ -1191,15 +1220,16 @@ class Nucleo:
             self._mis_frases.popitem(last=False)
         frase = Frase(frase_id=frase_id, origen=origen)
         self.frase = frase
-        registro.info("frase %s abierta (%s)", frase_id, origen)
+        registro.info("frase %s abierta (%s, idioma=%s)", frase_id, origen, idioma)
         try:
             self.ws.enviar_json({"tipo": "frase", "frase_id": frase_id,
-                                 "modo": "comandos"})
+                                 "modo": "comandos", "idioma": idioma})
         except ConnectionError as error:
             registro.error("no se pudo abrir la frase: %s", error)
             self.frase = None
             self._encolar_habla(MENSAJE_SIN_CONEXION, "local")
             return frase
+        self._borrar_idioma_video_pendiente()
         self.captura = self.loop.create_task(self._capturar(frase))
         return frase
 
@@ -1335,6 +1365,10 @@ class Nucleo:
         """
         if not isinstance(carga, dict):
             return
+        es_pregunta_video = (carga.get("tipo") == "respuesta"
+                             and carga.get("ventana") == "video")
+        if not es_pregunta_video:
+            self._borrar_idioma_video_pendiente()
         destino = carga.get("destino")
         if destino is not None and destino != self.cfg.client_id:
             registro.debug("satelite/decir para %r, no para %s; se ignora",
@@ -1352,6 +1386,9 @@ class Nucleo:
         frase_id = carga.get("frase_id")
         if not isinstance(frase_id, str) or not frase_id:
             frase_id = None
+        if tipo == "respuesta" and es_pregunta_video:
+            self._guardar_idioma_video_pendiente(
+                carga.get("idioma", "es"), carga.get("ventana_s"))
         if tipo == "respuesta":
             self._al_decir_respuesta(texto, frase_id)
             return

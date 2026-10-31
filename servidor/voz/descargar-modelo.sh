@@ -48,3 +48,35 @@ echo "Descomprimiendo en ${DESTINO}/ ..."
 unzip -q "${TMP}/${NOMBRE}.zip" -d "${DESTINO}"
 
 echo "Listo: ${DESTINO}/${NOMBRE}"
+
+# Modelo en ingles (T-56). Solo se descarga si se va a usar; el servicio lo
+# carga unicamente con VIDEO_INGLES_HABILITADO=1.
+NOMBRE_EN="vosk-model-small-en-us-0.15"
+URL_EN="https://alphacephei.com/vosk/models/${NOMBRE_EN}.zip"
+PESO_ESPERADO_EN=41205931
+SHA256_ESPERADO_EN="30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498"
+
+if [ -d "${DESTINO}/${NOMBRE_EN}" ]; then
+  echo "El modelo ingles ya esta en ${DESTINO}/${NOMBRE_EN}; nada que hacer."
+else
+  TMP_EN="$(mktemp -d)"
+  trap 'rm -rf "${TMP_EN}"' EXIT
+  echo "Descargando ${URL_EN} ..."
+  curl -fSL --retry 3 -o "${TMP_EN}/${NOMBRE_EN}.zip" "${URL_EN}"
+
+  PESO_EN="$(stat -c%s "${TMP_EN}/${NOMBRE_EN}.zip")"
+  if [ "${PESO_EN}" != "${PESO_ESPERADO_EN}" ]; then
+    echo "ERROR: peso inesperado del modelo ingles (${PESO_EN} != ${PESO_ESPERADO_EN} bytes)." >&2
+    exit 1
+  fi
+
+  if ! echo "${SHA256_ESPERADO_EN}  ${TMP_EN}/${NOMBRE_EN}.zip" | sha256sum -c -; then
+    echo "ERROR: el SHA-256 del modelo ingles no coincide. No se descomprime nada." >&2
+    exit 1
+  fi
+
+  echo "Descomprimiendo modelo ingles en ${DESTINO}/ ..."
+  unzip -q "${TMP_EN}/${NOMBRE_EN}.zip" -d "${DESTINO}"
+  echo "Listo: ${DESTINO}/${NOMBRE_EN}"
+  rm -rf "${TMP_EN}"
+fi

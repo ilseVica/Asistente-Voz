@@ -2618,8 +2618,8 @@ if os.path.exists(ruta_compose):
 
     indice_voz = compose.index("  voz:")
     bloque_voz = compose[indice_voz:limite_servicio(compose, indice_voz + 6)]
-    prueba("el servicio de voz limita la RAM a 512m",
-           "mem_limit: 512m" in bloque_voz, bloque_voz[:200])
+    prueba("el servicio de voz limita la RAM a 768m",
+           "mem_limit: 768m" in bloque_voz, bloque_voz[:200])
     prueba("el servicio de voz limita la CPU a 1.0",
            "cpus: 1.0" in bloque_voz, None)
     prueba("el servicio de voz corre con el sistema de archivos en solo lectura",
@@ -4397,6 +4397,49 @@ salida = buf.getvalue()
 prueba("la consulta no aparece en los logs",
        secreto not in salida, salida[:200])
 
+
+# Video en ingles (T-56)
+voz.cerrar_ventana_video()
+voz.abrir_ventana_video(ingles=True)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvi","texto":"[unk]","texto_libre":"","ts":%d,"ingles_disponible":false}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("termino vacio ingles no publica video",
+       not any(c.get("accion") == "buscar"
+               for _, c, *_ in apuntes) and
+       any(c.get("texto") == textos.RESPUESTA_NO_ENTENDI_VIDEO
+           for _, c, *_ in apuntes), apuntes)
+
+voz.cerrar_ventana_video()
+voz.abrir_ventana_video(ingles=True)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvi","texto":"[unk]","texto_libre":"single ladies","ts":%d,"ingles_disponible":false}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("aviso ingles no disponible",
+       any(textos.RESPUESTA_VIDEO_INGLES_NO_DISPONIBLE in str(c.get("texto", ""))
+           for _, c, *_ in apuntes), apuntes)
+
+# frases ingles exactas, no subcadena
+voz.cerrar_ventana()
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvi","texto":"pon un video en ingles","ts":%d}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("frases ingles exactas abren ventana",
+       voz.ventana_video_abierta() and voz.ventana_video_idioma() == "en", None)
+voz.cerrar_ventana_video()
+
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvi","texto":"quiero ver un video en ingles","ts":%d}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("frases ingles exactas abren ventana",
+       voz.ventana_video_abierta() and voz.ventana_video_idioma() == "en", None)
+voz.cerrar_ventana_video()
+
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvi","texto":"pon un video en ingles por favor","ts":%d}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("test_frases_ingles_exactas_no_subcadena",
+       not voz.ventana_video_abierta(), None)
 
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])

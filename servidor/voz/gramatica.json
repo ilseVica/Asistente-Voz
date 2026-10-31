@@ -108,7 +108,9 @@
     "BUSCAR_VIDEO": [
       "busca un video",
       "pon un video",
-      "quiero ver un video"
+      "quiero ver un video",
+      "pon un video en ingles",
+      "quiero ver un video en ingles"
     ],
     "CERRAR_VIDEO": [
       "cierra el video",

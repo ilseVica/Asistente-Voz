@@ -20,6 +20,12 @@ import wave
 
 import numpy as np
 import vosk
+import unicodedata, re
+
+def normalizar(t):
+    t=(t or "").strip().lower()
+    t="".join(c for c in unicodedata.normalize("NFD",t) if unicodedata.category(c)!="Mn")
+    return re.sub(r"\s+"," ",t).strip()
 
 vosk.SetLogLevel(-1)
 
@@ -74,6 +80,8 @@ def main():
         "VOZ_MODELO_INGLES", "/modelo/vosk-model-small-en-us-0.15"))
     parser.add_argument("--modelo-espanol", default=os.environ.get(
         "VOZ_MODELO", "/modelo/vosk-model-small-es-0.42"))
+    parser.add_argument("--catalogo", default=None,
+                        help="ruta a canciones_ingles.json; si se da, agrega columna catalogo")
     args = parser.parse_args()
 
     if not os.path.isdir(args.carpeta):
@@ -82,10 +90,21 @@ def main():
 
     modelo_en = cargar_modelo(args.modelo_ingles)
     modelo_es = cargar_modelo(args.modelo_espanol)
+    catalogo = None
+    if args.catalogo:
+        import json as _json
+        datos = _json.load(open(args.catalogo, encoding="utf-8"))
+        catalogo = {}
+        for item in datos:
+            catalogo[normalizar(item.get("titulo", ""))] = item.get("artista", "")
+        # valid titles only? use all for display; recognizer constrains to valid
 
     wavs = sorted(f for f in os.listdir(args.carpeta)
                   if f.lower().endswith(".wav"))
-    print("archivo\tingles\tespanol\tms_final")
+    if catalogo is None:
+        print("archivo\tingles\tespanol\tms_final")
+    else:
+        print("archivo\tlibre\tcatalogo\tms_final")
     for nombre in wavs:
         ruta = os.path.join(args.carpeta, nombre)
         try:
@@ -95,7 +114,25 @@ def main():
             continue
         texto_en, ms_en = reconocer(modelo_en, pcm)
         texto_es, _ = reconocer(modelo_es, pcm)
-        print("%s\t%s\t%s\t%d" % (nombre, texto_en, texto_es, ms_en))
+        if catalogo is None:
+            print("%s\t%s\t%s\t%d" % (nombre, texto_en, texto_es, ms_en))
+        else:
+            # catalog recognizer
+            import json as _json
+            gram = _json.dumps(list(catalogo.keys()) + ["[unk]"], ensure_ascii=False)
+            rec = vosk.KaldiRecognizer(modelo_en, 16000, gram)
+            t0=__import__("time").time()
+            segs=[]
+            for i in range(0,len(pcm),3200):
+                trama=pcm[i:i+3200]
+                if len(trama)<3200: trama+=b"\x00"*(3200-len(trama))
+                if rec.AcceptWaveform(trama):
+                    segs.append(_json.loads(rec.Result()).get("text",""))
+            final=_json.loads(rec.FinalResult()).get("text","")
+            if final: segs.append(final)
+            texto_cat=" ".join(x for x in segs if x).strip()
+            ms_cat=int((__import__("time").time()-t0)*1000)
+            print("%s\t%s\t%s\t%d" % (nombre, texto_en, texto_cat, ms_cat))
     return 0
 
 

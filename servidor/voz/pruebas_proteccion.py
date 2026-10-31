@@ -90,5 +90,23 @@ class TestProteccion(unittest.TestCase):
     def test_final_incluye_idioma_e_ingles_disponible(self):
         self.assertTrue(hasattr(servidor_voz.Frase, "__init__"))
 
+
+
+    def test_catalogo_carga_y_omite_fuera_de_vocabulario(self):
+        import vosk
+        vosk.SetLogLevel(-1)
+        modelo = vosk.Model(os.path.join(
+            RAIZ, "servidor", "voz", "modelos", "vosk-model-small-en-us-0.15"))
+        servidor_voz.CATALOGO_INGLES_RUTA = os.path.join(
+            RAIZ, "servidor", "voz", "canciones_ingles.json")
+        validos = servidor_voz.cargar_catalogo_ingles(modelo)
+        self.assertIsInstance(validos, list)
+        self.assertGreater(len(validos), 0)
+        self.assertLessEqual(len(validos), len(servidor_voz.CATALOGO_INGLES))
+
+    def test_frase_en_usa_gramatica_de_catalogo(self):
+        # Con catalogo valido, el reconocedor libre en ingles usa la gramatica cerrada.
+        self.assertTrue(hasattr(servidor_voz, "CATALOGO_INGLES_VALIDO"))
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

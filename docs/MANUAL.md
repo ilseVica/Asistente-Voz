@@ -284,3 +284,25 @@ docker compose up -d --no-deps --force-recreate orquestador
 - Volver a arrancar Storyteller e Immich si se detuvieron.
 - Si el ESP32 se compartió con otro proyecto: respaldar la NVS al terminar y, al
   volver, revisar que el ESP32 arranca y reporta hora correctamente.
+
+## 11. Catalogo de canciones en ingles (T-56)
+
+El termino de busqueda de «pon un video en ingles» ya no es libre: se reconoce
+contra un catalogo cerrado en `servidor/voz/canciones_ingles.json`.
+
+Agregar canciones:
+1. Editar `servidor/voz/canciones_ingles.json` (lista de objetos
+   `{"titulo": "...", "artista": "..."}`).
+   - `titulo` en minusculas, sin puntuacion ni apostrofos, tal como se dice.
+   - `artista` no vacio.
+2. Validar el vocabulario del modelo ingles:
+   ```bash
+   cd servidor/voz
+   python validar_catalogo.py
+   ```
+   Los titulos con palabras fuera del vocabulario se omiten al arrancar el
+   servicio de voz (se registra un aviso) y no se reconocen.
+3. Activar la funcion:
+   - `VIDEO_INGLES_HABILITADO=1` en `servidor/.env` (lo edita Ilse).
+   - Reconstruir y recrear voz y orquestador: `docker compose build voz orquestador`
+     y `docker compose up -d --no-deps voz orquestador`.

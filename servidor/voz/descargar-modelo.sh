@@ -23,9 +23,8 @@ SHA256_ESPERADO="09b239888f633ef2f0b4e09736e3d9936acfd810bc65d53fad45261762c6511
 mkdir -p "${DESTINO}"
 
 if [ -d "${DESTINO}/${NOMBRE}" ]; then
-  echo "El modelo ya esta en ${DESTINO}/${NOMBRE}; nada que hacer."
-  exit 0
-fi
+  echo "El modelo espanol ya esta en ${DESTINO}/${NOMBRE}; nada que hacer."
+else
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
@@ -48,6 +47,7 @@ echo "Descomprimiendo en ${DESTINO}/ ..."
 unzip -q "${TMP}/${NOMBRE}.zip" -d "${DESTINO}"
 
 echo "Listo: ${DESTINO}/${NOMBRE}"
+fi
 
 # Modelo en ingles (T-56). Solo se descarga si se va a usar; el servicio lo
 # carga unicamente con VIDEO_INGLES_HABILITADO=1.

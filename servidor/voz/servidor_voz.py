@@ -65,6 +65,8 @@ DIRECCIONES = (
 MODELO = os.environ.get("VOZ_MODELO", "/modelo/vosk-model-small-es-0.42")
 MODELO_INGLES = os.environ.get("VOZ_MODELO_INGLES",
                                "/modelo/vosk-model-small-en-us-0.15")
+CATALOGO_INGLES_RUTA = os.environ.get("VOZ_CATALOGO_INGLES",
+                                      "/app/canciones_ingles.json")
 VIDEO_INGLES_HABILITADO = os.environ.get("VIDEO_INGLES_HABILITADO", "0") \
     .strip().lower() not in ("0", "false", "no", "")
 GRAMATICA = os.environ.get("VOZ_GRAMATICA", "/app/gramatica.json")
@@ -86,6 +88,8 @@ QOS = 1
 
 MODELO_INGLES_CARGADO = None
 MODELO_INGLES_DISPONIBLE = False
+CATALOGO_INGLES = {}   # titulo -> artista (todos)
+CATALOGO_INGLES_VALIDO = []   # titulos que pasan el vocabulario
 
 # --- Limites del protocolo --------------------------------------------------
 
@@ -178,6 +182,68 @@ def cargar_gramatica(modelo: vosk.Model) -> tuple:
             advertencias.append(palabra.strip().lstrip(":").strip().strip("'\""))
 
     return frases, advertencias
+
+
+def _palabras_fuera_vocabulario(modelo: vosk.Model, titulo: str) -> list:
+    """Devuelve las palabras del titulo que el modelo no conoce (via stderr)."""
+    faltantes = []
+
+    def crear():
+        vosk.KaldiRecognizer(modelo, 16000,
+                            json.dumps([titulo, "[unk]"], ensure_ascii=False))
+
+    with _stderr_capturado() as lectura:
+        crear()
+    salida = _leer_pipe(lectura)
+    for linea in salida.splitlines():
+        if "missing in vocabulary" in linea:
+            palabra = linea.split("missing in vocabulary", 1)[1]
+            palabra = palabra.strip().lstrip(":").strip().strip(chr(39) + chr(34))
+            if palabra:
+                faltantes.append(palabra)
+    return faltantes
+
+
+def cargar_catalogo_ingles(modelo: vosk.Model) -> list:
+    """Lee el catalogo, valida cada titulo contra el vocabulario del modelo ingles.
+
+    Devuelve la lista de titulos validos. Los invalidos se omiten y se avisa.
+    """
+    global CATALOGO_INGLES, CATALOGO_INGLES_VALIDO
+    CATALOGO_INGLES = {}
+    CATALOGO_INGLES_VALIDO = []
+    if not os.path.isfile(CATALOGO_INGLES_RUTA):
+        registro.warning("catalogo ingles no encontrado en %s; sin catalogo",
+                         CATALOGO_INGLES_RUTA)
+        return []
+    try:
+        with open(CATALOGO_INGLES_RUTA, encoding="utf-8") as archivo:
+            datos = json.load(archivo)
+    except (OSError, ValueError) as error:
+        registro.warning("no se pudo leer el catalogo ingles %s: %s",
+                         CATALOGO_INGLES_RUTA, error)
+        return []
+    if not isinstance(datos, list):
+        registro.warning("el catalogo ingles no es una lista")
+        return []
+    for item in datos:
+        if not isinstance(item, dict):
+            continue
+        titulo = str(item.get("titulo", "")).strip().lower()
+        artista = str(item.get("artista", "")).strip()
+        if not titulo or not artista:
+            continue
+        CATALOGO_INGLES[titulo] = artista
+    for titulo in list(CATALOGO_INGLES.keys()):
+        faltantes = _palabras_fuera_vocabulario(modelo, titulo)
+        if faltantes:
+            registro.warning("catalogo ingles: omitido %r (palabras fuera del "
+                             "vocabulario: %s)", titulo, ", ".join(faltantes))
+            continue
+        CATALOGO_INGLES_VALIDO.append(titulo)
+    registro.info("catalogo ingles cargado: %d titulos, %d validos",
+                  len(CATALOGO_INGLES), len(CATALOGO_INGLES_VALIDO))
+    return list(CATALOGO_INGLES_VALIDO)
 
 
 def _json_gramatica(frases) -> str:
@@ -506,7 +572,13 @@ async def atender(websocket, modelo: vosk.Model, fases, publicador=None):
                     continue
                 reconocedor = vosk.KaldiRecognizer(modelo, 16000, gramatica_json)
                 if idioma == "en" and MODELO_INGLES_DISPONIBLE and MODELO_INGLES_CARGADO is not None:
-                    reconocedor_libre = vosk.KaldiRecognizer(MODELO_INGLES_CARGADO, 16000)
+                    if CATALOGO_INGLES_VALIDO:
+                        gramatica_catalogo = json.dumps(CATALOGO_INGLES_VALIDO + ["[unk]"],
+                                                       ensure_ascii=False)
+                        reconocedor_libre = vosk.KaldiRecognizer(MODELO_INGLES_CARGADO, 16000,
+                                                                gramatica_catalogo)
+                    else:
+                        reconocedor_libre = vosk.KaldiRecognizer(MODELO_INGLES_CARGADO, 16000)
                 else:
                     reconocedor_libre = vosk.KaldiRecognizer(modelo, 16000)
                 frase = Frase(frase_id, modo, reconocedor, reconocedor_libre,
@@ -608,6 +680,9 @@ async def amain() -> int:
                       "la busqueda en ingles usa el espanol")
         MODELO_INGLES_CARGADO = None
         MODELO_INGLES_DISPONIBLE = False
+
+    if MODELO_INGLES_DISPONIBLE and MODELO_INGLES_CARGADO is not None:
+        cargar_catalogo_ingles(MODELO_INGLES_CARGADO)
 
     fases, advertencias = cargar_gramatica(modelo)
     registro.info("gramatica cargada: %d frases", len(fases))

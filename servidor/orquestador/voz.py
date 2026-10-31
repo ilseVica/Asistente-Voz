@@ -35,6 +35,7 @@ _ventana_hasta = {"valor": 0.0}
 _ventana_reintentos = {"valor": 0}
 _ventana_modo = {"valor": None}  # "chat" | "video" | None
 _ventana_idioma = {"valor": "es"}  # "es" | "en"
+_catalogo_ingles = {}  # titulo normalizado -> artista
 
 _frase_a_intencion = {}
 
@@ -86,6 +87,49 @@ def _cargar() -> dict:
             if isinstance(frase, str) and frase.strip():
                 mapa[normalizar(frase)] = intencion
     registro.info("voz: gramatica cargada desde %s (%d frases)", ruta, len(mapa))
+    return mapa
+
+
+def _ruta_catalogo() -> str:
+    candidatas = []
+    env = os.environ.get("CATALOGO_INGLES_JSON")
+    if env:
+        return os.path.abspath(env)
+    candidatas.append("/app/canciones_ingles.json")
+    base = os.path.dirname(os.path.abspath(__file__))
+    candidatas.append(os.path.join(base, "..", "voz", "canciones_ingles.json"))
+    candidatas.append(os.path.join(base, "..", "..", "servidor", "voz", "canciones_ingles.json"))
+    for ruta in candidatas:
+        if ruta and os.path.isfile(ruta):
+            return os.path.abspath(ruta)
+    return ""
+
+
+def _cargar_catalogo() -> dict:
+    global _catalogo_ingles
+    ruta = _ruta_catalogo()
+    if not ruta:
+        registro.warning("voz: no se encontro canciones_ingles.json; sin catalogo")
+        return {}
+    try:
+        with open(ruta, encoding="utf-8") as archivo:
+            datos = json.load(archivo)
+    except (OSError, ValueError) as error:
+        registro.warning("voz: no se pudo leer %s: %s", ruta, error)
+        return {}
+    if not isinstance(datos, list):
+        registro.warning("voz: canciones_ingles.json no es una lista")
+        return {}
+    mapa = {}
+    for item in datos:
+        if not isinstance(item, dict):
+            continue
+        titulo = normalizar(item.get("titulo", ""))
+        artista = str(item.get("artista", "")).strip()
+        if titulo and artista:
+            mapa[titulo] = artista
+    _catalogo_ingles = mapa
+    registro.info("voz: catalogo ingles cargado desde %s (%d titulos)", ruta, len(mapa))
     return mapa
 
 
@@ -390,27 +434,50 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
                     _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
                     _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
                     return True
-                consulta = texto_libre
+                titulo = normalizar(texto_libre)
+                if titulo not in _catalogo_ingles:
+                    _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
+                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                    return True
+                artista = _catalogo_ingles[titulo]
+                consulta = "%s %s" % (titulo, artista)
+                respuesta_buscar = textos.RESPUESTA_BUSCANDO_VIDEO.format(
+                    consulta="%s de %s" % (titulo, artista))
+                # reusar respuesta con "Busco: <titulo> de <artista>"
+                respuesta_buscar = "Busco: %s de %s" % (titulo, artista)
             else:
                 if no_entendido(texto) and no_entendido(texto_libre):
                     _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
                     _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
                     return True
                 consulta = texto_libre if not no_entendido(texto_libre) else texto
-            consulta = _limpiar_consulta_video(consulta)
-            if len(consulta) < 2:
-                _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
-                _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
-                return True
+            if idioma_ventana != "en":
+                consulta = _limpiar_consulta_video(consulta)
+                if len(consulta) < 2:
+                    _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
+                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                    return True
+            else:
+                consulta = _limpiar_consulta_video(consulta)
+                if len(consulta) < 2:
+                    _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
+                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                    return True
 
             cerrar_ventana_video()
             disponible = carga.get("ingles_disponible", True)
-            if idioma_ventana == "en" and disponible is False:
-                respuesta = ("%s. %s"
-                             % (textos.RESPUESTA_VIDEO_INGLES_NO_DISPONIBLE,
-                                textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta)))
+            if idioma_ventana == "en":
+                if disponible is False:
+                    respuesta = ("%s. %s"
+                                 % (textos.RESPUESTA_VIDEO_INGLES_NO_DISPONIBLE,
+                                    respuesta_buscar))
+                else:
+                    respuesta = respuesta_buscar
             else:
-                respuesta = textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta)
+                if False:
+                    respuesta = ""
+                else:
+                    respuesta = textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta)
             _publicar_respuesta(publicar, respuesta, frase_id)
             cid = config.SATELITE_VIDEO_CLIENT_ID
             try:
@@ -656,3 +723,4 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
 
 
 _frase_a_intencion = _cargar()
+_catalogo_ingles = _cargar_catalogo()

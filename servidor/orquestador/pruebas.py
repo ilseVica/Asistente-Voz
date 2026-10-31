@@ -4441,6 +4441,49 @@ voz.procesar('{"frase_id":"fvi","texto":"pon un video en ingles por favor","ts":
 prueba("test_frases_ingles_exactas_no_subcadena",
        not voz.ventana_video_abierta(), None)
 
+
+# Catalogo de canciones en ingles (T-56)
+voz.cerrar_ventana_video()
+voz.abrir_ventana_video(ingles=True)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvc","texto":"[unk]","texto_libre":"single ladies","ts":%d,"ingles_disponible":true}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("test_titulo_catalogo_publica_titulo_y_artista",
+       any(c.get("consulta") == "single ladies beyonce"  # artista del catalogo
+           or c.get("consulta", "").startswith("single ladies ")
+           for _, c, *_ in apuntes) and
+       any("Busco: single ladies de" in str(c.get("texto", ""))
+           for _, c, *_ in apuntes), apuntes)
+
+voz.cerrar_ventana_video()
+voz.abrir_ventana_video(ingles=True)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvc","texto":"[unk]","texto_libre":"[unk]","ts":%d,"ingles_disponible":true}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("test_unk_ingles_no_publica_video",
+       not any(c.get("accion") == "buscar" for _, c, *_ in apuntes), apuntes)
+
+voz.cerrar_ventana_video()
+voz.abrir_ventana_video(ingles=False)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvc","texto":"[unk]","texto_libre":"gatos divertidos","ts":%d}'
+             % int(time.time()), publicar, None, _sat_vid)
+prueba("test_ventana_espanol_sin_cambios",
+       any(c.get("consulta") == "gatos divertidos" and c.get("accion") == "buscar"
+           for _, c, *_ in apuntes), apuntes)
+voz.cerrar_ventana_video()
+
+# test_catalogo_json_valido
+import json as _json_cat
+_cat = _json_cat.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                       "..", "..", "servidor", "voz", "canciones_ingles.json")
+                           if False else "/home/ilse/Servidores/Asistente-Voz/servidor/voz/canciones_ingles.json",
+                           encoding="utf-8"))
+_titulos = [voz.normalizar(x.get("titulo", "")) for x in _cat]
+prueba("test_catalogo_json_valido",
+       len(_titulos) == len(set(_titulos)) and
+       all(t == t.lower() and t and not any(ch in t for ch in ".,'!?") for t in _titulos) and
+       all(str(x.get("artista", "")).strip() for x in _cat), _cat)
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))

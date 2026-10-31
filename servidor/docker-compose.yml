@@ -165,6 +165,7 @@ services:
       - orquestador_datos:/datos
       # Fuente unica de la gramatica de intenciones (solo lectura).
       - ./voz/gramatica.json:/app/gramatica.json:ro
+      - ./voz/canciones_ingles.json:/app/canciones_ingles.json:ro
 
     read_only: true
     tmpfs:

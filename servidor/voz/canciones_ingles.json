@@ -1,0 +1,426 @@
+[
+  {
+    "titulo": "single ladies",
+    "artista": "Beyonce"
+  },
+  {
+    "titulo": "please please please",
+    "artista": "Sabrina Carpenter"
+  },
+  {
+    "titulo": "bohemian rhapsody",
+    "artista": "Queen"
+  },
+  {
+    "titulo": "shape of you",
+    "artista": "Ed Sheeran"
+  },
+  {
+    "titulo": "billie jean",
+    "artista": "Michael Jackson"
+  },
+  {
+    "titulo": "hotel california",
+    "artista": "Eagles"
+  },
+  {
+    "titulo": "thriller",
+    "artista": "Michael Jackson"
+  },
+  {
+    "titulo": "yesterday",
+    "artista": "The Beatles"
+  },
+  {
+    "titulo": "blinding lights",
+    "artista": "The Weeknd"
+  },
+  {
+    "titulo": "bad guy",
+    "artista": "Billie Eilish"
+  },
+  {
+    "titulo": "rolling in the deep",
+    "artista": "Adele"
+  },
+  {
+    "titulo": "someone like you",
+    "artista": "Adele"
+  },
+  {
+    "titulo": "hello",
+    "artista": "Adele"
+  },
+  {
+    "titulo": "uptown funk",
+    "artista": "Bruno Mars"
+  },
+  {
+    "titulo": "happy",
+    "artista": "Pharrell Williams"
+  },
+  {
+    "titulo": "believer",
+    "artista": "Imagine Dragons"
+  },
+  {
+    "titulo": "perfect",
+    "artista": "Ed Sheeran"
+  },
+  {
+    "titulo": "thinking out loud",
+    "artista": "Ed Sheeran"
+  },
+  {
+    "titulo": "let it be",
+    "artista": "The Beatles"
+  },
+  {
+    "titulo": "hey jude",
+    "artista": "The Beatles"
+  },
+  {
+    "titulo": "imagine",
+    "artista": "John Lennon"
+  },
+  {
+    "titulo": "smooth criminal",
+    "artista": "Michael Jackson"
+  },
+  {
+    "titulo": "beat it",
+    "artista": "Michael Jackson"
+  },
+  {
+    "titulo": "black or white",
+    "artista": "Michael Jackson"
+  },
+  {
+    "titulo": "sweet child o mine",
+    "artista": "Guns N Roses"
+  },
+  {
+    "titulo": "november rain",
+    "artista": "Guns N Roses"
+  },
+  {
+    "titulo": "wonderwall",
+    "artista": "Oasis"
+  },
+  {
+    "titulo": "yellow",
+    "artista": "Coldplay"
+  },
+  {
+    "titulo": "viva la vida",
+    "artista": "Coldplay"
+  },
+  {
+    "titulo": "fix you",
+    "artista": "Coldplay"
+  },
+  {
+    "titulo": "counting stars",
+    "artista": "OneRepublic"
+  },
+  {
+    "titulo": "radioactive",
+    "artista": "Imagine Dragons"
+  },
+  {
+    "titulo": "roar",
+    "artista": "Katy Perry"
+  },
+  {
+    "titulo": "firework",
+    "artista": "Katy Perry"
+  },
+  {
+    "titulo": "dancing queen",
+    "artista": "ABBA"
+  },
+  {
+    "titulo": "my heart will go on",
+    "artista": "Celine Dion"
+  },
+  {
+    "titulo": "take on me",
+    "artista": "a-ha"
+  },
+  {
+    "titulo": "toxic",
+    "artista": "Britney Spears"
+  },
+  {
+    "titulo": "umbrella",
+    "artista": "Rihanna"
+  },
+  {
+    "titulo": "halo",
+    "artista": "Beyonce"
+  },
+  {
+    "titulo": "shake it off",
+    "artista": "Taylor Swift"
+  },
+  {
+    "titulo": "blank space",
+    "artista": "Taylor Swift"
+  },
+  {
+    "titulo": "anti hero",
+    "artista": "Taylor Swift"
+  },
+  {
+    "titulo": "cruel summer",
+    "artista": "Taylor Swift"
+  },
+  {
+    "titulo": "love story",
+    "artista": "Taylor Swift"
+  },
+  {
+    "titulo": "someone you loved",
+    "artista": "Lewis Capaldi"
+  },
+  {
+    "titulo": "before you go",
+    "artista": "Lewis Capaldi"
+  },
+  {
+    "titulo": "watermelon sugar",
+    "artista": "Harry Styles"
+  },
+  {
+    "titulo": "as it was",
+    "artista": "Harry Styles"
+  },
+  {
+    "titulo": "sign of the times",
+    "artista": "Harry Styles"
+  },
+  {
+    "titulo": "levitating",
+    "artista": "Dua Lipa"
+  },
+  {
+    "titulo": "dont start now",
+    "artista": "Dua Lipa"
+  },
+  {
+    "titulo": "new rules",
+    "artista": "Dua Lipa"
+  },
+  {
+    "titulo": "physical",
+    "artista": "Dua Lipa"
+  },
+  {
+    "titulo": "uptown girl",
+    "artista": "Billy Joel"
+  },
+  {
+    "titulo": "piano man",
+    "artista": "Billy Joel"
+  },
+  {
+    "titulo": "hey ya",
+    "artista": "OutKast"
+  },
+  {
+    "titulo": "ms jackson",
+    "artista": "OutKast"
+  },
+  {
+    "titulo": "crazy in love",
+    "artista": "Beyonce"
+  },
+  {
+    "titulo": "irreplaceable",
+    "artista": "Beyonce"
+  },
+  {
+    "titulo": "chandelier",
+    "artista": "Sia"
+  },
+  {
+    "titulo": "elastic heart",
+    "artista": "Sia"
+  },
+  {
+    "titulo": "cheap thrills",
+    "artista": "Sia"
+  },
+  {
+    "titulo": "titanium",
+    "artista": "David Guetta"
+  },
+  {
+    "titulo": "sexy and i know it",
+    "artista": "LMFAO"
+  },
+  {
+    "titulo": "party rock anthem",
+    "artista": "LMFAO"
+  },
+  {
+    "titulo": "skyfall",
+    "artista": "Adele"
+  },
+  {
+    "titulo": "set fire to the rain",
+    "artista": "Adele"
+  },
+  {
+    "titulo": "all of me",
+    "artista": "John Legend"
+  },
+  {
+    "titulo": "ordinary people",
+    "artista": "John Legend"
+  },
+  {
+    "titulo": "just the way you are",
+    "artista": "Bruno Mars"
+  },
+  {
+    "titulo": "locked out of heaven",
+    "artista": "Bruno Mars"
+  },
+  {
+    "titulo": "treasure",
+    "artista": "Bruno Mars"
+  },
+  {
+    "titulo": "talking to the moon",
+    "artista": "Bruno Mars"
+  },
+  {
+    "titulo": "summer of sixty nine",
+    "artista": "Bryan Adams"
+  },
+  {
+    "titulo": "heaven",
+    "artista": "Bryan Adams"
+  },
+  {
+    "titulo": "every breath you take",
+    "artista": "The Police"
+  },
+  {
+    "titulo": "roxanne",
+    "artista": "The Police"
+  },
+  {
+    "titulo": "message in a bottle",
+    "artista": "The Police"
+  },
+  {
+    "titulo": "with or without you",
+    "artista": "U2"
+  },
+  {
+    "titulo": "beautiful day",
+    "artista": "U2"
+  },
+  {
+    "titulo": "one",
+    "artista": "U2"
+  },
+  {
+    "titulo": "where the streets have no name",
+    "artista": "U2"
+  },
+  {
+    "titulo": "sweet dreams",
+    "artista": "Eurythmics"
+  },
+  {
+    "titulo": "tainted love",
+    "artista": "Soft Cell"
+  },
+  {
+    "titulo": "girls just want to have fun",
+    "artista": "Cyndi Lauper"
+  },
+  {
+    "titulo": "time after time",
+    "artista": "Cyndi Lauper"
+  },
+  {
+    "titulo": "like a virgin",
+    "artista": "Madonna"
+  },
+  {
+    "titulo": "vogue",
+    "artista": "Madonna"
+  },
+  {
+    "titulo": "material girl",
+    "artista": "Madonna"
+  },
+  {
+    "titulo": "back in black",
+    "artista": "AC DC"
+  },
+  {
+    "titulo": "highway to hell",
+    "artista": "AC DC"
+  },
+  {
+    "titulo": "thunderstruck",
+    "artista": "AC DC"
+  },
+  {
+    "titulo": "you shook me all night long",
+    "artista": "AC DC"
+  },
+  {
+    "titulo": "smells like teen spirit",
+    "artista": "Nirvana"
+  },
+  {
+    "titulo": "come as you are",
+    "artista": "Nirvana"
+  },
+  {
+    "titulo": "in bloom",
+    "artista": "Nirvana"
+  },
+  {
+    "titulo": "lithium",
+    "artista": "Nirvana"
+  },
+  {
+    "titulo": "heart shaped box",
+    "artista": "Nirvana"
+  },
+  {
+    "titulo": "black hole sun",
+    "artista": "Soundgarden"
+  },
+  {
+    "titulo": "spoonman",
+    "artista": "Soundgarden"
+  },
+  {
+    "titulo": "fell on black days",
+    "artista": "Soundgarden"
+  },
+  {
+    "titulo": "alive",
+    "artista": "Pearl Jam"
+  },
+  {
+    "titulo": "even flow",
+    "artista": "Pearl Jam"
+  },
+  {
+    "titulo": "black",
+    "artista": "Pearl Jam"
+  },
+  {
+    "titulo": "jeremy",
+    "artista": "Pearl Jam"
+  }
+]

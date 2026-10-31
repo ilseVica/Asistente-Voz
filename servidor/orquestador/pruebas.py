@@ -4329,7 +4329,7 @@ apuntes, publicar = publicar_que_recoge()
 voz.procesar('{"frase_id":"fv","texto":"[unk]","texto_libre":"","ts":%d}'
              % int(time.time()), publicar, None, _sat_vid)
 prueba("consulta vacia responde no entendí",
-       any(c.get("texto") == textos.RESPUESTA_NO_ENTENDI_VIDEO
+       any(c.get("texto") == textos.RESPUESTA_VIDEO_REINTENTAR
            for _, c, *_ in apuntes), apuntes)
 
 # consulta con caracteres raros limpiada.
@@ -4407,7 +4407,7 @@ voz.procesar('{"frase_id":"fvi","texto":"[unk]","texto_libre":"","ts":%d,"ingles
 prueba("termino vacio ingles no publica video",
        not any(c.get("accion") == "buscar"
                for _, c, *_ in apuntes) and
-       any(c.get("texto") == textos.RESPUESTA_NO_ENTENDI_VIDEO
+       any(c.get("texto") == textos.RESPUESTA_VIDEO_REINTENTAR
            for _, c, *_ in apuntes), apuntes)
 
 voz.cerrar_ventana_video()
@@ -4484,6 +4484,72 @@ prueba("test_catalogo_json_valido",
        len(_titulos) == len(set(_titulos)) and
        all(t == t.lower() and t and not any(ch in t for ch in ".,'!?") for t in _titulos) and
        all(str(x.get("artista", "")).strip() for x in _cat), _cat)
+
+# Correccion ventana de video (incidente 30 oct)
+voz.cerrar_ventana_video()
+voz.abrir_ventana_video(ingles=True)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvr","texto":"[unk]","texto_libre":"zzzzz","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+voz.procesar('{"frase_id":"fvr","texto":"[unk]","texto_libre":"yyyyy","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("test_ventana_video_fallo_doble_cierra",
+       not voz.ventana_abierta() and
+       any("No encontré ese video" in str(c.get("texto", "")) for _, c, *_ in apuntes),
+       apuntes)
+voz.cerrar_ventana_video()
+
+voz.abrir_ventana_video(ingles=True)
+voz._ventana_tope["valor"] = time.time() - 1
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvr","texto":"[unk]","texto_libre":"single ladies","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("test_ventana_video_tope_absoluto_aunque_lleguen_frases",
+       not voz.ventana_abierta(), None)
+voz.cerrar_ventana_video()
+
+voz.abrir_ventana_video(ingles=True)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvr","texto":"que hora es","texto_libre":"[unk]","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("test_hora_dentro_de_ventana_ingles_se_procesa_como_orden",
+       not voz.ventana_abierta(), apuntes)
+
+voz.cerrar_ventana_video()
+voz.abrir_ventana_video(ingles=True)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvr","texto":"pon un video en ingles","texto_libre":"[unk]","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("test_pon_video_ingles_dentro_de_ventana_reabre",
+       voz.ventana_video_abierta() and voz.ventana_video_idioma() == "en", None)
+voz.cerrar_ventana_video()
+
+voz.abrir_ventana_video(ingles=True)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvr","texto":"que hora es","texto_libre":"single ladies","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("test_titulo_valido_gana_sobre_orden",
+       any(c.get("consulta", "").startswith("single ladies ") for _, c, *_ in apuntes),
+       apuntes)
+voz.cerrar_ventana_video()
+
+voz.abrir_ventana_video(ingles=True)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvr","texto":"ayuda","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("test_ayuda_dentro_de_ventana_sigue_funcionando",
+       any(t == config.TOPICO_ALERTA_AYUDA for t, *_ in apuntes), apuntes)
+voz.cerrar_ventana_video()
+
+voz.abrir_ventana_video(ingles=True)
+apuntes, publicar = publicar_que_recoge()
+voz.procesar('{"frase_id":"fvr","texto":"[unk]","texto_libre":"smooth criminal","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+voz.procesar('{"frase_id":"fvr","texto":"que hora es","texto_libre":"[unk]","ts":%d}' % int(time.time()),
+             publicar, None, _sat_vid)
+prueba("test_secuencia_incidente_30oct",
+       not voz.ventana_abierta(), apuntes)
+voz.cerrar_ventana_video()
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))

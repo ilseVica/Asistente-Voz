@@ -33,6 +33,7 @@ _ultimos_sensores = {"temperatura": None, "humedad": None, "ts": None}
 _nodo_conectado = {"valor": None}  # True | False | None
 _ventana_hasta = {"valor": 0.0}
 _ventana_reintentos = {"valor": 0}
+_ventana_tope = {"valor": 0.0}
 _ventana_modo = {"valor": None}  # "chat" | "video" | None
 _ventana_idioma = {"valor": "es"}  # "es" | "en"
 _catalogo_ingles = {}  # titulo normalizado -> artista
@@ -226,28 +227,37 @@ def ventana_respuesta_abierta() -> bool:
 
 
 def abrir_ventana_video(ingles: bool = False) -> None:
-    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
-    _ventana_reintentos["valor"] = 0
+    ahora = time.time()
+    _ventana_hasta["valor"] = ahora + config.VENTANA_VIDEO_S
+    _ventana_tope["valor"] = ahora + 2 * config.VENTANA_VIDEO_S
+    _ventana_reintentos["valor"] = 1
     _ventana_modo["valor"] = "video"
     _ventana_idioma["valor"] = "en" if ingles else "es"
 
 
 def cerrar_ventana_video() -> None:
     _ventana_hasta["valor"] = 0.0
+    _ventana_tope["valor"] = 0.0
     _ventana_reintentos["valor"] = 0
     _ventana_modo["valor"] = None
     _ventana_idioma["valor"] = "es"
 
 
 def ventana_video_abierta() -> bool:
-    return time.time() < _ventana_hasta["valor"] and _ventana_modo["valor"] == "video"
+    ahora = time.time()
+    if ahora >= _ventana_tope["valor"] and _ventana_tope["valor"] > 0:
+        return False
+    return ahora < _ventana_hasta["valor"] and _ventana_modo["valor"] == "video"
 
 def ventana_video_idioma() -> str:
     return _ventana_idioma["valor"] if _ventana_idioma["valor"] in ("es", "en") else "es"
 
 
 def ventana_abierta() -> bool:
-    return time.time() < _ventana_hasta["valor"]
+    ahora = time.time()
+    if _ventana_modo["valor"] == "video" and _ventana_tope["valor"] > 0 and ahora >= _ventana_tope["valor"]:
+        return False
+    return ahora < _ventana_hasta["valor"]
 
 
 def cerrar_ventana() -> None:
@@ -429,55 +439,77 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
                 return True
 
             idioma_ventana = ventana_video_idioma()
+            intencion_texto = _frase_a_intencion.get(normalizar(texto))
+
+            # Termino invalido: decide si la frase es en realidad una orden.
+            termino_invalido = False
             if idioma_ventana == "en":
                 if no_entendido(texto_libre):
-                    _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
-                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
-                    return True
-                titulo = normalizar(texto_libre)
-                if titulo not in _catalogo_ingles:
-                    _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
-                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
-                    return True
-                artista = _catalogo_ingles[titulo]
-                consulta = "%s %s" % (titulo, artista)
-                respuesta_buscar = textos.RESPUESTA_BUSCANDO_VIDEO.format(
-                    consulta="%s de %s" % (titulo, artista))
-                # reusar respuesta con "Busco: <titulo> de <artista>"
-                respuesta_buscar = "Busco: %s de %s" % (titulo, artista)
+                    termino_invalido = True
+                else:
+                    titulo = normalizar(texto_libre)
+                    if titulo not in _catalogo_ingles:
+                        termino_invalido = True
             else:
                 if no_entendido(texto) and no_entendido(texto_libre):
-                    _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
-                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                    termino_invalido = True
+
+            if termino_invalido and intencion_texto is not None:
+                # Orden real dentro de la ventana: se cierra y se procesa normal.
+                cerrar_ventana_video()
+                return procesar(cuerpo, publicar, base, satelites)
+
+            if termino_invalido:
+                # Primer fallo: un reintento. Segundo: cerrar y avisar.
+                if _ventana_reintentos["valor"] > 0:
+                    _ventana_reintentos["valor"] -= 1
+                    nuevo = time.time() + config.VENTANA_VIDEO_S
+                    if nuevo > _ventana_tope["valor"]:
+                        nuevo = _ventana_tope["valor"]
+                    _ventana_hasta["valor"] = nuevo
+                    _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_REINTENTAR,
+                                        frase_id)
                     return True
-                consulta = texto_libre if not no_entendido(texto_libre) else texto
-            if idioma_ventana != "en":
-                consulta = _limpiar_consulta_video(consulta)
-                if len(consulta) < 2:
-                    _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
-                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
-                    return True
+                cerrar_ventana_video()
+                _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_NO_ENCONTRADO,
+                                    frase_id)
+                return True
+
+            # Termino valido.
+            if idioma_ventana == "en":
+                titulo = normalizar(texto_libre)
+                artista = _catalogo_ingles[titulo]
+                consulta = "%s %s" % (titulo, artista)
+                respuesta_buscar = "Busco: %s de %s" % (titulo, artista)
             else:
-                consulta = _limpiar_consulta_video(consulta)
-                if len(consulta) < 2:
-                    _publicar_respuesta(publicar, textos.RESPUESTA_NO_ENTENDI_VIDEO, frase_id)
-                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                consulta = texto_libre if not no_entendido(texto_libre) else texto
+
+            consulta = _limpiar_consulta_video(consulta)
+            if len(consulta) < 2:
+                if _ventana_reintentos["valor"] > 0:
+                    _ventana_reintentos["valor"] -= 1
+                    nuevo = time.time() + config.VENTANA_VIDEO_S
+                    if nuevo > _ventana_tope["valor"]:
+                        nuevo = _ventana_tope["valor"]
+                    _ventana_hasta["valor"] = nuevo
+                    _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_REINTENTAR,
+                                        frase_id)
                     return True
+                cerrar_ventana_video()
+                _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_NO_ENCONTRADO,
+                                    frase_id)
+                return True
 
             cerrar_ventana_video()
             disponible = carga.get("ingles_disponible", True)
-            if idioma_ventana == "en":
-                if disponible is False:
-                    respuesta = ("%s. %s"
-                                 % (textos.RESPUESTA_VIDEO_INGLES_NO_DISPONIBLE,
-                                    respuesta_buscar))
-                else:
-                    respuesta = respuesta_buscar
+            if idioma_ventana == "en" and disponible is False:
+                respuesta = ("%s. %s"
+                             % (textos.RESPUESTA_VIDEO_INGLES_NO_DISPONIBLE,
+                                respuesta_buscar))
+            elif idioma_ventana == "en":
+                respuesta = respuesta_buscar
             else:
-                if False:
-                    respuesta = ""
-                else:
-                    respuesta = textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta)
+                respuesta = textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta)
             _publicar_respuesta(publicar, respuesta, frase_id)
             cid = config.SATELITE_VIDEO_CLIENT_ID
             try:

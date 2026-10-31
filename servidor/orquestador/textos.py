@@ -55,6 +55,8 @@ PERDON_NO_ESCUCHO = "Perdón, no le escuché bien. ¿Me lo repite?"
 PREGUNTA_VIDEO = "¿Qué video quiere ver?"
 RESPUESTA_BUSCANDO_VIDEO = "Busco: {consulta}"
 RESPUESTA_NO_ENTENDI_VIDEO = "No le entendí, intente de nuevo"
+RESPUESTA_VIDEO_REINTENTAR = "No entendí, dímelo otra vez"
+RESPUESTA_VIDEO_NO_ENCONTRADO = "No encontré ese video. Puedes volver a pedirlo."
 RESPUESTA_VIDEO_NO_DISPONIBLE = "Por ahora no puedo poner videos"
 RESPUESTA_VIDEO_INGLES_NO_DISPONIBLE = "Ingles no disponible, busco en espanol"
 

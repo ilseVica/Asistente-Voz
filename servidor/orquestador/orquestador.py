@@ -300,6 +300,10 @@ def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
 
 def main() -> int:
     configurar_log()
+    try:
+        voz._cargar_catalogo()
+    except Exception as error:  # noqa: BLE001
+        registro_log.warning("voz: no se pudo cargar el catalogo: %s", error)
     log_resumen()
 
     parando = threading.Event()

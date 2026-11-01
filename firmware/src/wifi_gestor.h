@@ -3,7 +3,8 @@
 #include <Arduino.h>
 
 // Red. Conexion no bloqueante con espera creciente entre reintentos, para no
-// bloquear el loop mientras no hay red.
+// bloquear el loop mientras no hay red. Con WiFiMulti se elige la red de mejor
+// señal entre las dos configuradas (red 1: casa, red 2: hotspot).
 //
 // La direccion del broker viene de secrets.h. Si ahi hay un nombre .local, se
 // resuelve con mDNS; si no resuelve, se usa el ultimo host que funciono, guardado
@@ -14,6 +15,10 @@ void red_tarea();
 
 bool red_conectado();
 String red_ip();
+
+// Indice de la red a la que esta conectado: 1 (casa) o 2 (hotspot). 0 si no
+// hay conexion. Se usa para elegir el broker MQTT y el servidor NTP.
+int red_indice_actual();
 
 // mDNS, para resolver el nombre del broker y para que el nodo sea
 // easier-asistente.local en la red.

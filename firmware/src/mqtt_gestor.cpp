@@ -51,13 +51,36 @@ bool mqtt_suscribir() {
 }  // namespace
 
 bool mqtt_iniciar() {
-  const String broker = red_resolver_broker(String(MQTT_HOST));
+  const bool es_red2 = (red_indice_actual() == 2);
+  String host_primario;
+  String host_respaldo;
+  if (es_red2) {
+    host_primario = String(MQTT2_HOST);
+    host_respaldo = String(MQTT2_HOST_RESPALDO);
+  } else if (red_indice_actual() == 3) {
+    host_primario = String(MQTT3_HOST);
+  } else {
+    host_primario = String(MQTT1_HOST);
+  }
+
+  String broker = red_resolver_broker(host_primario);
+  bool uso_respaldo = false;
+  if (es_red2 && broker.isEmpty() && !host_respaldo.isEmpty() && host_respaldo != "cambia-esto") {
+    log_aviso(ETIQUETA, "mDNS no resolvio %s; usando respaldo %s",
+              host_primario.c_str(), host_respaldo.c_str());
+    broker = red_resolver_broker(host_respaldo);
+    uso_respaldo = !broker.isEmpty();
+  }
+
   if (broker.isEmpty()) {
     // A nivel de depuracion: el motivo concreto. En nivel Info, quien lo ve es el
     // log de espera de main.cpp, que es una sola linea por intento y no se repite
     // cada 50 ms.
     log_depurar(ETIQUETA, "sin broker resoluble");
     return false;
+  }
+  if (es_red2) {
+    log_info(ETIQUETA, "broker hotspot: %s", uso_respaldo ? "respaldo" : "mDNS");
   }
   broker_usado = broker;
   // Client id FIJO, sin partes aleatorias ni derivadas del hostname. El plan lo

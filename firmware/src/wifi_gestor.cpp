@@ -3,6 +3,8 @@
 #include <ESPmDNS.h>
 #include <WiFi.h>
 
+#include <time.h>
+
 #include "config.h"
 #include "persistencia.h"
 #include "registro.h"
@@ -12,38 +14,127 @@ namespace {
 constexpr char ETIQUETA[] = "wifi";
 constexpr char MDNS_NOMBRE[] = "easier-asistente";
 
-// Espera creciente: 1 s, 2 s, 4 s... hasta 30 s. Asi un router que tarda en
-// arrancar no se martillea, pero una red estable reconecta casi de inmediato.
 constexpr uint32_t MS_ESPERA_MINIMA = 1000UL;
 constexpr uint32_t MS_ESPERA_MAXIMA = 30000UL;
 
+// Orden de preferencia (mayor a menor): 1 (principal), 3 (repetidor), 2 (hotspot).
+struct APConocido {
+  int red;
+  const char *ssid;
+  const char *pass;
+};
+
+const APConocido APS[] = {
+    {1, WIFI1_SSID, WIFI1_PASS},
+    {3, WIFI3_SSID, WIFI3_PASS},
+    {2, WIFI2_SSID, WIFI2_PASS},
+};
+constexpr size_t NUM_APS = sizeof(APS) / sizeof(APS[0]);
+
 bool conectado = false;
+int red_actual = 0;
+int red_ultima_conectada = 0;
+bool red_cambio_pendiente = false;
+bool mdns_activo = false;
 uint32_t espera_actual_ms = MS_ESPERA_MINIMA;
 uint32_t proximo_intento_ms = 0;
+
+int red_de_ssid(const String &ssid) {
+  for (size_t i = 0; i < NUM_APS; ++i) {
+    if (ssid == String(APS[i].ssid)) {
+      return APS[i].red;
+    }
+  }
+  return 0;
+}
+
+// Devuelve el numero de red preferida disponible en el escaneo, o 0 si ninguna.
+int escanear_preferida() {
+  const int n = WiFi.scanNetworks();
+  if (n <= 0) {
+    WiFi.scanDelete();
+    return 0;
+  }
+  // Para cada AP en orden de preferencia, ver si aparece en el escaneo.
+  for (size_t p = 0; p < NUM_APS; ++p) {
+    for (int i = 0; i < n; ++i) {
+      String ssid_scan;
+      int32_t rssi_scan;
+      uint8_t sec_scan;
+      uint8_t *bssid_scan;
+      int32_t chan_scan;
+      WiFi.getNetworkInfo(i, ssid_scan, sec_scan, rssi_scan, bssid_scan, chan_scan);
+      if (ssid_scan == String(APS[p].ssid)) {
+        WiFi.scanDelete();
+        return APS[p].red;
+      }
+    }
+  }
+  WiFi.scanDelete();
+  return 0;
+}
+
+const APConocido *ap_por_red(int red) {
+  for (size_t i = 0; i < NUM_APS; ++i) {
+    if (APS[i].red == red) {
+      return &APS[i];
+    }
+  }
+  return nullptr;
+}
+
+void manejar_cambio_de_red(int nuevo) {
+  if (red_ultima_conectada != 0 && red_ultima_conectada != nuevo) {
+    red_cambio_pendiente = true;
+  }
+  red_ultima_conectada = nuevo;
+}
 }  // namespace
 
 void red_iniciar() {
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);  // la red es de casa, no conviene dormir
-  WiFi.setAutoReconnect(true);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  // El hostname no es un secreto y va en config.h. El client id del broker se
-  // deriva de el mas adelante, en mqtt_gestor.
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(false);
   WiFi.setHostname(MDNS_NOMBRE);
 
   const uint32_t ahora = millis();
   proximo_intento_ms = ahora + MS_ESPERA_MINIMA;
-  log_info(ETIQUETA, "conectando a %s", WIFI_SSID);
+  log_info(ETIQUETA, "conectando (3 redes, por preferencia)");
 }
 
 void red_tarea() {
+  if (red_cambio_pendiente) {
+    red_cambio_pendiente = false;
+    uint8_t cnt = persistencia_reinicios_red_cnt();
+    uint32_t epoch_guardado = persistencia_reinicios_red_epoch();
+    const uint32_t ahora_epoch = static_cast<uint32_t>(time(nullptr));
+    bool dentro_ventana = (epoch_guardado != 0 && ahora_epoch >= epoch_guardado &&
+                           (ahora_epoch - epoch_guardado) <= 300U);
+    uint8_t nuevo_cnt = dentro_ventana ? static_cast<uint8_t>(cnt + 1) : 1U;
+    if (nuevo_cnt >= 3U) {
+      log_aviso(ETIQUETA,
+                "limite de reinicios por cambio de red alcanzado (%u en 5 min); "
+                "me quedo en la red actual",
+                static_cast<unsigned>(nuevo_cnt));
+      persistencia_fijar_reinicios_red(nuevo_cnt, ahora_epoch);
+      return;
+    }
+    persistencia_fijar_reinicios_red(nuevo_cnt, ahora_epoch);
+    log_info(ETIQUETA, "cambio de red detectado; reiniciando (reinicio %u/3)",
+             static_cast<unsigned>(nuevo_cnt));
+    delay(200);
+    ESP.restart();
+    return;
+  }
+
   const bool ahora_conectado = (WiFi.status() == WL_CONNECTED);
   if (ahora_conectado) {
     if (!conectado) {
       conectado = true;
       espera_actual_ms = MS_ESPERA_MINIMA;
-      log_info(ETIQUETA, "conectado, IP %s", red_ip().c_str());
+      red_actual = red_de_ssid(WiFi.SSID());
+      manejar_cambio_de_red(red_actual);
+      log_info(ETIQUETA, "conectado, red %d, IP %s", red_actual, red_ip().c_str());
       red_iniciar_mdns();
       red_anunciar_mdns();
     }
@@ -52,6 +143,7 @@ void red_tarea() {
 
   if (conectado) {
     conectado = false;
+    red_actual = 0;
     proximo_intento_ms = millis() + (MS_ESPERA_MINIMA * 2);
     log_aviso(ETIQUETA, "sin red, reintento en %lu ms",
               static_cast<unsigned long>(MS_ESPERA_MINIMA * 2));
@@ -63,17 +155,40 @@ void red_tarea() {
     return;
   }
 
-  log_info(ETIQUETA, "reintentando conectar a %s", WIFI_SSID);
-  WiFi.disconnect();
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  log_info(ETIQUETA, "reintentando conexion");
+  const int preferida = escanear_preferida();
+  if (preferida == 0) {
+    log_aviso(ETIQUETA, "ninguna red conocida disponible");
+    proximo_intento_ms = millis() + espera_actual_ms;
+    if (espera_actual_ms < MS_ESPERA_MAXIMA) {
+      espera_actual_ms *= 2;
+      if (espera_actual_ms > MS_ESPERA_MAXIMA) espera_actual_ms = MS_ESPERA_MAXIMA;
+    }
+    return;
+  }
+  const APConocido *ap = ap_por_red(preferida);
+  if (ap == nullptr) {
+    proximo_intento_ms = millis() + espera_actual_ms;
+    return;
+  }
+  WiFi.begin(ap->ssid, ap->pass);
+  const uint32_t inicio = millis();
+  uint8_t estado = WiFi.status();
+  while (estado != WL_CONNECTED && estado != WL_NO_SSID_AVAIL &&
+         estado != WL_CONNECT_FAILED && (millis() - inicio) <= 8000UL) {
+    delay(10);
+    estado = WiFi.status();
+  }
+  if (estado == WL_CONNECTED) {
+    // se reporta en el siguiente ciclo al transicionar
+  } else {
+    log_aviso(ETIQUETA, "fallo al conectar a red %d", preferida);
+  }
 
-  // La espera crece hasta el tope y se queda ahi.
-  proximo_intento_ms = ahora + espera_actual_ms;
+  proximo_intento_ms = millis() + espera_actual_ms;
   if (espera_actual_ms < MS_ESPERA_MAXIMA) {
     espera_actual_ms *= 2;
-    if (espera_actual_ms > MS_ESPERA_MAXIMA) {
-      espera_actual_ms = MS_ESPERA_MAXIMA;
-    }
+    if (espera_actual_ms > MS_ESPERA_MAXIMA) espera_actual_ms = MS_ESPERA_MAXIMA;
   }
 }
 
@@ -88,8 +203,16 @@ String red_ip() {
   return String(WiFi.localIP().toString().c_str());
 }
 
+int red_indice_actual() {
+  return red_actual;
+}
+
 void red_iniciar_mdns() {
+  if (mdns_activo) {
+    return;
+  }
   if (MDNS.begin(MDNS_NOMBRE)) {
+    mdns_activo = true;
     log_info(ETIQUETA, "mDNS activo, el nodo es %s.local", MDNS_NOMBRE);
   } else {
     log_aviso(ETIQUETA, "mDNS no arranco; se usara la IP directa");
@@ -97,8 +220,6 @@ void red_iniciar_mdns() {
 }
 
 void red_anunciar_mdns() {
-  // mDNS es SOLO para nombres. El descubrimiento de Alexa lo hace fauxmoESP por
-  // SSDP, que es un protocolo distinto (1.4 y 2.12).
   MDNS.addService("http", "tcp", 80);
 }
 
@@ -107,7 +228,6 @@ String red_resolver_broker(const String &host) {
     return String("");
   }
 
-  // Si ya parece una IP, no hay nada que resolver.
   if (host.indexOf('.') > 0 && host.indexOf(':') < 0) {
     int octetos = 0;
     bool valida = true;
@@ -142,7 +262,6 @@ String red_resolver_broker(const String &host) {
     return direccion;
   }
 
-  // No resuelve por mDNS: se intenta el host que ya funciono antes.
   const String previo = persistencia_host_previo();
   if (!previo.isEmpty() && previo != host) {
     log_aviso(ETIQUETA, "no se pudo resolver %s, se usa el host previo %s", host.c_str(),

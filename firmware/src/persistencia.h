@@ -32,3 +32,9 @@ void persistencia_fijar_umbral_cierre_gas(int valor);
 // Se guarda en claro: no es un secreto.
 String persistencia_host_previo();
 void persistencia_fijar_host_previo(const String &host);
+
+// Contador de reinicios por cambio de red en los ultimos 5 minutos, y epoch del
+// ultimo. Se usan para limitar a 3 reinicios por ventana de 5 min.
+uint8_t persistencia_reinicios_red_cnt();
+uint32_t persistencia_reinicios_red_epoch();
+void persistencia_fijar_reinicios_red(uint8_t cnt, uint32_t epoch);

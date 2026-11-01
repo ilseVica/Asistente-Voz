@@ -17,6 +17,8 @@ constexpr char CLAVE_UMBRAL[] = "umbral_gas";
 // que renombrarla no requiere migrar datos.
 constexpr char CLAVE_UMBRAL_CIERRE[] = "cierre_gas";
 constexpr char CLAVE_HOST[] = "host_previo";
+constexpr char CLAVE_RR_CNT[] = "rr_cnt";
+constexpr char CLAVE_RR_EPOCH[] = "rr_epoch";
 
 Preferences nvs;
 uint16_t arranque_actual = 0;
@@ -24,6 +26,8 @@ uint16_t contador_alerta = 0;
 int umbral_gas = 0;
 int umbral_cierre_gas = 0;
 String host_previo;
+uint8_t reinicios_red_cnt = 0;
+uint32_t reinicios_red_epoch = 0;
 }  // namespace
 
 void persistencia_iniciar() {
@@ -57,6 +61,8 @@ void persistencia_iniciar() {
                                                         : umbral_gas - 1;
   }
   host_previo = nvs.getString(CLAVE_HOST, "").c_str();
+  reinicios_red_cnt = nvs.getUChar(CLAVE_RR_CNT, 0);
+  reinicios_red_epoch = nvs.getULong(CLAVE_RR_EPOCH, 0);
 
   nvs.end();
   log_info(ETIQUETA, "arranque=%u contador=%u umbral_gas=%d cierre_gas=%d",
@@ -133,4 +139,22 @@ void persistencia_fijar_host_previo(const String &host) {
     nvs.end();
   }
   log_info(ETIQUETA, "host previo guardado: %s", host.c_str());
+}
+
+uint8_t persistencia_reinicios_red_cnt() {
+  return reinicios_red_cnt;
+}
+
+uint32_t persistencia_reinicios_red_epoch() {
+  return reinicios_red_epoch;
+}
+
+void persistencia_fijar_reinicios_red(uint8_t cnt, uint32_t epoch) {
+  reinicios_red_cnt = cnt;
+  reinicios_red_epoch = epoch;
+  if (nvs.begin(ESPACIO, false)) {
+    nvs.putUChar(CLAVE_RR_CNT, cnt);
+    nvs.putULong(CLAVE_RR_EPOCH, epoch);
+    nvs.end();
+  }
 }

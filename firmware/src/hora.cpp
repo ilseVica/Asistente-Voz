@@ -3,6 +3,8 @@
 #include <time.h>
 
 #include "config.h"
+#include "secrets.h"
+#include "wifi_gestor.h"
 #include "registro.h"
 
 namespace {
@@ -12,8 +14,8 @@ constexpr char ETIQUETA[] = "hora";
 // de casa) y el respaldo es el servidor publico. Antes era al reves: con el de la
 // VM todavia sin configurar chrony (6.5), la hora llegaba solo si habia internet,
 // que es exactamente lo que la VM esta puesta para no depender.
-constexpr char NTP_PRIMARIO[] = "192.168.1.169";
-constexpr char NTP_RESPALDO[] = "pool.ntp.org";
+constexpr char NTP_CASA[] = "192.168.1.169";
+constexpr char NTP_PUBLICO[] = "pool.ntp.org";
 constexpr char NTP_ZONA[] = "UTC0";  // se guarda UTC y se convierte al publicar
 
 // 2024-01-01T00:00:00Z. Antes de esto, el reloj no se considera ajustado. Sin
@@ -33,7 +35,13 @@ constexpr uint32_t MS_REINTENTO_SIN_HORA = 5000UL;
 constexpr uint32_t MS_REINTENTO_CON_HORA = MS_60S;
 
 void intentar_sincronizar() {
-  configTime(0, 0, NTP_PRIMARIO, NTP_RESPALDO);
+  if (red_indice_actual() == 2) {
+    // Hotspot: internet del celular. La laptop como segundo servidor (por mDNS o
+    // respaldo) solo si sirve NTP; el repositorio no tiene evidencia de ello.
+    configTime(0, 0, NTP_PUBLICO, MQTT2_HOST_RESPALDO);
+  } else {
+    configTime(0, 0, NTP_CASA, NTP_PUBLICO);
+  }
 }
 }  // namespace
 

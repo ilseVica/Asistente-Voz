@@ -492,6 +492,14 @@ ENLACE_SITIO_VALORES_CAIDO = ("0", "false", "off", "no")
 VENTANA_RESPUESTA_CHAT_S = int(os.environ.get("VENTANA_RESPUESTA_CHAT_S", "60"))
 
 # --- Video por voz ---------------------------------------------------------
+# --- Alexa (skill personalizada, Fase A) -----------------------------------
+# Banderas de la skill. Las lee el panel (que importa este mismo modulo), porque
+# el endpoint /alexa vive en el panel. ALEXA_VIDEO_HABILITADO es solo la bandera
+# de la Fase B (videos): no se usa todavia.
+ALEXA_SKILL_HABILITADO = os.environ.get("ALEXA_SKILL_HABILITADO", "0").strip().lower() not in ("0", "false", "no", "")
+ALEXA_VIDEO_HABILITADO = os.environ.get("ALEXA_VIDEO_HABILITADO", "0").strip().lower() not in ("0", "false", "no", "")
+ALEXA_SKILL_ID = os.environ.get("ALEXA_SKILL_ID", "").strip()
+
 VIDEO_HABILITADO = os.environ.get("VIDEO_HABILITADO", "1").strip().lower() not in ("0", "false", "no", "")
 VENTANA_VIDEO_S = int(os.environ.get("VENTANA_VIDEO_S", "15"))
 # Satelite al que se le pide el video (igual que el boton para hablar).

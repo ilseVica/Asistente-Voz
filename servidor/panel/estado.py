@@ -479,6 +479,13 @@ class EstadoSala:
             if oyente in self._oyentes:
                 self._oyentes.remove(oyente)
 
+    def luz_encendida(self, base) -> bool | None:
+        """Conveniencia para Alexa: el estado actual de la luz, o ``None``."""
+        try:
+            return self.instantanea(base)["luz"]["encendida"]
+        except Exception:  # noqa: BLE001
+            return None
+
     def conexiones(self) -> int:
         with self._candado:
             return len(self._oyentes)

@@ -37,6 +37,7 @@ import re
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 RAIZ_ORQUESTADOR = os.path.join(os.path.dirname(RAIZ), "orquestador")
@@ -1526,6 +1527,224 @@ envios_guest = base.conexion.execute(
     "SELECT COUNT(*) AS total FROM envios WHERE chat_id = ?", ("inv-excl",)).fetchone()["total"]
 prueba("invitado excluido de Telegram sin error", envios_guest == 0, envios_guest)
 
+
+
+# =============================================================================
+# Alexa (Fase A)
+# =============================================================================
+
+titulo("Alexa (Fase A)")
+
+import alexa as alexa_modulo  # noqa: E402
+_verificar_original = alexa_modulo.verificar
+
+# Enmascarado de ids.
+prueba("mask_id enmascara un id largo",
+       alexa_modulo.mask_id("amzn1.ask.account.ABCD1234EFGH") != "amzn1.ask.account.ABCD1234EFGH"
+       and "..." in alexa_modulo.mask_id("amzn1.ask.account.ABCD1234EFGH"))
+
+# Bandera apagada.
+_flag_anterior = config.ALEXA_SKILL_HABILITADO
+config.ALEXA_SKILL_HABILITADO = False
+api_modulo.config.ALEXA_SKILL_HABILITADO = False
+r = cliente.post("/alexa", json={})
+prueba("bandera apagada: /alexa es 404", r.status_code == 404, r.status_code)
+config.ALEXA_SKILL_HABILITADO = True
+api_modulo.config.ALEXA_SKILL_HABILITADO = True
+
+# Helper para construir un envelope firmado de mentira (la verificacion se sustituye).
+from ask_sdk_core.skill_builder import SkillBuilder as _SB  # noqa: E402
+from ask_sdk_model import RequestEnvelope as _RE  # noqa: E402
+_skill = _SB().create()
+
+
+def _envelope(peticion):
+    cuerpo = json.dumps(peticion)
+    return _skill.serializer.deserialize(payload=cuerpo, obj_type=_RE)
+
+
+def _peticion_launch():
+    return {
+        "version": "1.0",
+        "session": {"application": {"applicationId": config.ALEXA_SKILL_ID or "skill-pruebas"},
+                    "user": {"userId": "amzn1.ask.account.USUARIO-DE-PRUEBA"},
+                    "new": True},
+        "context": {"System": {"application": {"applicationId": config.ALEXA_SKILL_ID or "skill-pruebas"},
+                               "device": {"deviceId": "device-PRUEBA-1234"},
+                               "user": {"userId": "amzn1.ask.account.USUARIO-DE-PRUEBA"}}},
+        "request": {"type": "LaunchRequest", "requestId": "r1",
+                    "timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+# Peticion valida (verificacion sustituida).
+_env_launch = _envelope(_peticion_launch())
+api_modulo.alexa.verificar = lambda h, b: _env_launch
+r = cliente.post("/alexa", json=_peticion_launch())
+prueba("peticion valida: 200", r.status_code == 200, r.status_code)
+if r.status_code == 200:
+    texto = r.json()["response"]["outputSpeech"]["text"]
+    prueba("bienvenida menciona luz y ayuda", "luz" in texto and "ayuda" in texto, texto)
+
+# HelpIntent.
+_env_help_intent = _envelope({
+    "version": "1.0",
+    "session": {"application": {"applicationId": "skill-pruebas"},
+                "user": {"userId": "amzn1.ask.account.U"}, "new": True},
+    "context": {"System": {"application": {"applicationId": "skill-pruebas"},
+                           "device": {"deviceId": "dev"}, "user": {"userId": "u"}}},
+    "request": {"type": "IntentRequest", "requestId": "rh",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "intent": {"name": "AMAZON.HelpIntent"}},
+})
+api_modulo.alexa.verificar = lambda h, b: _env_help_intent
+r = cliente.post("/alexa", json={})
+prueba("HelpIntent: 200", r.status_code == 200, r.status_code)
+if r.status_code == 200:
+    texto = r.json()["response"]["outputSpeech"]["text"]
+    prueba("HelpIntent: texto correcto",
+           texto == "Si necesita ayuda urgente, diga: necesito ayuda", texto)
+api_modulo.alexa.verificar = lambda h, b: _env_launch
+
+# Firma invalida.
+api_modulo.alexa.verificar = lambda h, b: (_ for _ in ()).throw(Exception("firma"))
+r = cliente.post("/alexa", json={})
+prueba("firma invalida: 400", r.status_code == 400, r.status_code)
+api_modulo.alexa.verificar = lambda h, b: _env_launch
+
+# applicationId ajeno (verificacion real, verificadores sustituidos).
+config.ALEXA_SKILL_ID = "skill-esperada"
+api_modulo.config.ALEXA_SKILL_ID = "skill-esperada"
+
+
+class _VerificadorNulo:
+    def verify(self, *a, **k):
+        return None
+
+
+# applicationId ajeno: verificador real de applicationId, el resto nulos.
+api_modulo.alexa.verificar = _verificar_original
+config.ALEXA_SKILL_ID = "skill-esperada"
+api_modulo.config.ALEXA_SKILL_ID = "skill-esperada"
+api_modulo.alexa._verifiers = lambda: [alexa_modulo.ApplicationIdVerifier("skill-esperada")]
+_peticion_ajena = _peticion_launch()
+# forzar appId ajeno en session y context
+_peticion_ajena["session"]["application"]["applicationId"] = "skill-ajena"
+_peticion_ajena["context"]["System"]["application"]["applicationId"] = "skill-ajena"
+try:
+    api_modulo.alexa.verificar({}, json.dumps(_peticion_ajena))
+    prueba("applicationId ajeno: no lanza (inesperado)", False)
+except Exception as e:
+    prueba("applicationId ajeno: lanza", True)
+
+# Marca de tiempo vieja: verificador real de timestamp.
+api_modulo.alexa.verificar = _verificar_original
+from ask_sdk_webservice_support.verifier import TimestampVerifier as _TS  # noqa: E402
+api_modulo.alexa._verifiers = lambda: [_TS()]
+peticion_vieja = _peticion_launch()
+peticion_vieja["request"]["timestamp"] = "2020-01-01T00:00:00Z"
+try:
+    api_modulo.alexa.verificar({}, json.dumps(peticion_vieja))
+    prueba("timestamp viejo: no lanza (inesperado)", False)
+except Exception:
+    prueba("timestamp viejo: lanza", True)
+
+# Restaurar _verifiers real.
+api_modulo.alexa._verifiers = alexa_modulo._verifiers
+config.ALEXA_SKILL_ID = ""
+api_modulo.config.ALEXA_SKILL_ID = ""
+
+# Luz con confirmacion.
+_env_on = _envelope({
+    "version": "1.0",
+    "session": {"application": {"applicationId": "skill-pruebas"},
+                "user": {"userId": "amzn1.ask.account.U"}, "new": True},
+    "context": {"System": {"application": {"applicationId": "skill-pruebas"},
+                           "device": {"deviceId": "dev"}, "user": {"userId": "u"}}},
+    "request": {"type": "IntentRequest", "requestId": "r2",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "intent": {"name": "EncenderLuz"}},
+})
+api_modulo.alexa.verificar = lambda h, b: _env_on
+api_modulo.alexa.esperar_confirmacion_luz = lambda *a, **k: True
+publicador.publicado = [p for p in publicador.publicado if p[0] != "casa/sala/luz/set"]
+r = cliente.post("/alexa", json={})
+prueba("luz confirmada: 200", r.status_code == 200, r.status_code)
+if r.status_code == 200:
+    texto = r.json()["response"]["outputSpeech"]["text"]
+    prueba("luz confirmada: texto correcto", texto == "He encendido la luz", texto)
+pubs = [p for p in publicador.publicado if p[0] == "casa/sala/luz/set"]
+prueba("luz: publico en luz/set con origen alexa",
+       bool(pubs) and pubs[-1][1].get("origen") == "alexa", pubs[-1] if pubs else None)
+
+# Luz sin confirmacion (timeout).
+api_modulo.alexa.esperar_confirmacion_luz = lambda *a, **k: False
+r = cliente.post("/alexa", json={})
+prueba("luz sin confirmacion: 200", r.status_code == 200, r.status_code)
+if r.status_code == 200:
+    texto = r.json()["response"]["outputSpeech"]["text"]
+    prueba("luz sin confirmacion: texto correcto",
+           texto == "Pedí encender la luz, pero la casa no confirmó", texto)
+
+# Apagar.
+_env_off = _envelope({
+    "version": "1.0",
+    "session": {"application": {"applicationId": "skill-pruebas"},
+                "user": {"userId": "amzn1.ask.account.U"}, "new": True},
+    "context": {"System": {"application": {"applicationId": "skill-pruebas"},
+                           "device": {"deviceId": "dev"}, "user": {"userId": "u"}}},
+    "request": {"type": "IntentRequest", "requestId": "r3",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "intent": {"name": "ApagarLuz"}},
+})
+api_modulo.alexa.verificar = lambda h, b: _env_off
+api_modulo.alexa.esperar_confirmacion_luz = lambda *a, **k: True
+r = cliente.post("/alexa", json={})
+if r.status_code == 200:
+    texto = r.json()["response"]["outputSpeech"]["text"]
+    prueba("apagar confirmado: texto correcto", texto == "He apagado la luz", texto)
+
+# Ayuda.
+_env_ayuda = _envelope({
+    "version": "1.0",
+    "session": {"application": {"applicationId": "skill-pruebas"},
+                "user": {"userId": "amzn1.ask.account.U"}, "new": True},
+    "context": {"System": {"application": {"applicationId": "skill-pruebas"},
+                           "device": {"deviceId": "dev"}, "user": {"userId": "u"}}},
+    "request": {"type": "IntentRequest", "requestId": "r4",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "intent": {"name": "Ayuda"}},
+})
+api_modulo.alexa.verificar = lambda h, b: _env_ayuda
+publicador.publicado = [p for p in publicador.publicado if p[0] != "casa/sala/alerta/ayuda"]
+r = cliente.post("/alexa", json={})
+prueba("ayuda: 200", r.status_code == 200, r.status_code)
+if r.status_code == 200:
+    texto = r.json()["response"]["outputSpeech"]["text"]
+    prueba("ayuda: texto correcto",
+           texto == "No se preocupe, ya avisé a su familia.", texto)
+pubs = [p for p in publicador.publicado if p[0] == "casa/sala/alerta/ayuda"]
+prueba("ayuda: publico alerta/ayuda con origen alexa",
+       bool(pubs) and pubs[-1][1].get("origen") == "alexa", pubs[-1] if pubs else None)
+
+# Antirrebote de ayuda (base).
+base.insertar_alerta("ayuda-reciente-alexa", "ayuda", json.dumps({"origen": "alexa"}))
+# marcar un envio como enviado para que hay_ayuda_reciente sea true
+base.conexion.execute("UPDATE envios SET enviado_en = ? WHERE alerta_id = ? AND chat_id = ?",
+                      (int(time.time()), "ayuda-reciente-alexa", "111"))
+base.conexion.commit()
+api_modulo.alexa.verificar = lambda h, b: _env_ayuda
+publicador.publicado = [p for p in publicador.publicado if p[0] != "casa/sala/alerta/ayuda"]
+r = cliente.post("/alexa", json={})
+if r.status_code == 200:
+    texto = r.json()["response"]["outputSpeech"]["text"]
+    prueba("ayuda reciente: texto de reciente",
+           "hace un momento" in texto, texto)
+pubs = [p for p in publicador.publicado if p[0] == "casa/sala/alerta/ayuda"]
+prueba("ayuda reciente: no publica de nuevo", len(pubs) == 0, pubs)
+
+# Restaurar.
+api_modulo.alexa.verificar = _verificar_original
 
 cliente.__exit__(None, None, None)
 

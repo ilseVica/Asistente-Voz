@@ -31,3 +31,5 @@ paho-mqtt==2.1.0
 # hay ningún `Form(...)` ni subida de ficheros. Se deja fuera a propósito, porque es una
 # dependencia que se instala esperando a que alguien la use y un día hay un `Form` sin
 # darse cuenta.
+# Verificacion de peticiones de Alexa (skill personalizada, Fase A).
+ask-sdk-webservice-support==1.3.3

@@ -50,7 +50,7 @@ import time
 from datetime import datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -61,6 +61,11 @@ import panel_acceso
 import recordatorios
 import seguridad
 import estado as estado_modulo
+try:
+    import alexa as alexa_modulo
+except Exception:  # noqa: BLE001
+    alexa_modulo = None
+alexa = alexa_modulo
 from estado import ClienteEstado, EstadoSala
 
 registro = logging.getLogger("panel-api")
@@ -942,6 +947,38 @@ def _sin_secretos(error) -> str:
         return sanear.sanear(error)
     except Exception:  # noqa: BLE001
         return "error sin detalle"
+
+
+# --- Alexa -----------------------------------------------------------------
+
+
+@app.post("/alexa")
+async def alexa_endpoint(request: Request):
+    """Endpoint de la skill personalizada de Alexa.
+
+    Verifica la firma, la cadena de certificados, la marca de tiempo y el
+    applicationId. Sin detalles en los fallos: un 400 y nada más. Si la skill
+    está apagada, 404.
+    """
+    if not getattr(config, "ALEXA_SKILL_HABILITADO", False):
+        raise HTTPException(404)
+    if alexa_modulo is None:
+        raise HTTPException(503)
+    cuerpo = await request.body()
+    try:
+        texto = cuerpo.decode("utf-8")
+    except UnicodeDecodeError:
+        return Response(status_code=400)
+    cabeceras = dict(request.headers)
+    try:
+        envelope = alexa_modulo.verificar(cabeceras, texto)
+    except Exception:  # noqa: BLE001
+        registro.warning("alexa: peticion rechazada")
+        return Response(status_code=400)
+    estado, carga = alexa_modulo.despachar(envelope, mqtt, estados, base)
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(status_code=estado, content=carga)
 
 
 # --- El WebSocket ------------------------------------------------------------

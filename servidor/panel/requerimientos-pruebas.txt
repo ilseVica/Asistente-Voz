@@ -24,3 +24,5 @@ httpx2==2.13.1
 # Es la misma versión que la del servidor a propósito: si el servidor y el cliente no
 # hablan el mismo dialecto, la prueba pasa y el navegador no.
 websockets==17.2
+# Verificacion de Alexa en las pruebas.
+ask-sdk-webservice-support==1.3.3

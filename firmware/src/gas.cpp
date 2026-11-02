@@ -63,9 +63,6 @@ void gas_iniciar() {
            static_cast<int>(GAS_CIERRE_SOSTENIDO_S));
 }
 
-void gas_fijar_lectura_forzada(int valor_adc) {
-  sensores_fijar_gas_prueba(valor_adc);
-}
 
 bool gas_episodio_abierto() {
   return episodio_abierto;
@@ -155,8 +152,26 @@ void cerrar_episodio(int gas_adc) {
 
 }  // namespace
 
+void gas_fijar_lectura_forzada(int valor_adc) {
+  sensores_fijar_gas_prueba(valor_adc);
+  if (valor_adc < 0) {
+    if (episodio_abierto) {
+      cerrar_episodio(ultima_lectura);
+    }
+    lecturas_sobre_umbral = 0;
+    aviso_sin_dato = false;
+  }
+}
+
 void gas_tarea() {
   const uint32_t ahora = millis();
+
+  // Si la simulacion de gas expiro por tiempo, volver a la lectura real y limpiar
+  // el episodio, para no dejar la lectura fija ni el buzzer pegado.
+  if (sensores_gas_prueba_expirado()) {
+    log_info(ETIQUETA, "simulacion de gas expirada: vuelta a lectura real");
+    gas_fijar_lectura_forzada(-1);
+  }
 
   // El buzzer va ANTES del muestreo, a la cadencia del loop (50 ms). Si fuera
   // despues del gate de 1 Hz, un pitido de 120 ms no tendria resolucion: el pin se

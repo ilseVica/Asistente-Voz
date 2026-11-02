@@ -28,7 +28,6 @@
 #include "persistencia.h"
 #include "registro.h"
 #include "sensores.h"
-#include "wifi_gestor.h"
 
 namespace {
 // Cadencia del loop. Es una tareas corta, no un delay: los modulos deciden si toca
@@ -103,13 +102,23 @@ void manejar_comandos_de_prueba() {
       continue;
     }
     if (linea.startsWith(COMANDO_GAS)) {
-      const int valor = linea.substring(static_cast<int>(strlen(COMANDO_GAS))).toInt();
-      if (valor <= 0) {
-        log_aviso("pruebas", "comando '%s' sin valor valido", linea.c_str());
-        continue;
+      String arg = linea.substring(static_cast<int>(strlen(COMANDO_GAS)));
+      arg.trim();
+      const bool es_clear = (arg == "0" || arg.equalsIgnoreCase("OFF") ||
+                             arg.equalsIgnoreCase("REAL") ||
+                             arg.equalsIgnoreCase("AUTO"));
+      if (es_clear) {
+        log_info("pruebas", "GAS real por serie: fin de la simulacion");
+        gas_fijar_lectura_forzada(-1);
+      } else {
+        const int valor = arg.toInt();
+        if (valor <= 0 || valor > GAS_ADC_MAXIMO) {
+          log_aviso("pruebas", "comando '%s' sin valor valido", linea.c_str());
+          continue;
+        }
+        log_info("pruebas", "GAS %d por serie: alerta de gas sin broker", valor);
+        gas_fijar_lectura_forzada(valor);
       }
-      log_info("pruebas", "GAS %d por serie: alerta de gas sin broker", valor);
-      gas_fijar_lectura_forzada(valor);
     } else if (linea.startsWith(COMANDO_PIR)) {
       const int valor = linea.substring(static_cast<int>(strlen(COMANDO_PIR))).toInt();
       if (valor != 0 && valor != 1) {

@@ -45,6 +45,9 @@ Lectura sensores_leer();
 void sensores_fijar_gas_prueba(int valor_adc);
 int sensores_gas_prueba_actual();
 
+// True si habia un valor forzado y ya expiro por tiempo (para que gas_tarea lo limpie).
+bool sensores_gas_prueba_expirado();
+
 // Valor forzado del PIR por el comando serie PIR <0|1> (solo con PRUEBAS=1).
 // 0 o 1 simula el nivel del pin como si el sensor lo estuviera dando; -1 vuelve a
 // leer el pin real. El enclavamiento funciona igual con el valor forzado.

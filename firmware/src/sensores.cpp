@@ -15,6 +15,8 @@
 namespace {
 
 int gas_prueba = -1;
+uint32_t gas_prueba_hasta_ms = 0;
+constexpr uint32_t GAS_PRUEBA_TIMEOUT_MS = 60000UL;
 
 #if DHT22_HABILITADO
 // El DHT22 se lee como mucho una vez cada DHT22_MS_ENTRE_LECTURAS; tres lecturas
@@ -293,7 +295,23 @@ Lectura sensores_leer() {
 }
 
 void sensores_fijar_gas_prueba(int valor_adc) {
-  gas_prueba = valor_adc;
+  if (valor_adc < 0) {
+    gas_prueba = -1;
+    gas_prueba_hasta_ms = 0;
+  } else {
+    gas_prueba = valor_adc;
+    gas_prueba_hasta_ms = millis() + GAS_PRUEBA_TIMEOUT_MS;
+  }
+}
+
+bool sensores_gas_prueba_expirado() {
+  if (gas_prueba < 0) {
+    return false;
+  }
+  if (gas_prueba_hasta_ms == 0) {
+    return false;
+  }
+  return (int32_t)(gas_prueba_hasta_ms - millis()) <= 0;
 }
 
 int sensores_gas_prueba_actual() {

@@ -22,6 +22,7 @@ int red_indice_actual();
 // Forzado de red por comando serie (solo RAM/RTC, no NVS).
 int red_forzado();            // 0 = AUTO, 1/2/3 = forzada
 void red_forzar(int red);     // 0 borra el forzado
+void red_aplicar_seleccion(int red); // aplica 0=AUTO/1..3, marca reinicio si cambia
 void red_marcar_reinicio_por_red(); // marca RTC y solicita reinicio
 
 // mDNS, para resolver el nombre del broker y para que el nodo sea

@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 
 #include "config.h"
+#include "wifi_gestor.h"
 #include "hora.h"
 #include "luz.h"
 #include "persistencia.h"
@@ -19,6 +20,7 @@ SemaphoreHandle_t semaforo = nullptr;
 String pendiente_luz_set;
 String pendiente_nodo_config;
 String pendiente_prueba_gas;
+String pendiente_nodo_red_set;
 
 void bloquear() {
   if (semaforo != nullptr) {
@@ -189,6 +191,80 @@ void manejar_prueba_gas(const String &payload) {
   sensores_fijar_gas_prueba(valor);
 }
 
+void manejar_nodo_red_set(const String &payload) {
+  if (payload.isEmpty()) {
+    log_aviso(ETIQUETA, "nodo/red/set vacio, se descarta");
+    return;
+  }
+
+  JsonDocument documento;
+  if (deserializeJson(documento, payload)) {
+    log_aviso(ETIQUETA, "nodo/red/set no es JSON valido, se descarta");
+    return;
+  }
+
+  if (!documento["ts"].is<long>() && !documento["ts"].is<int>()) {
+    log_aviso(ETIQUETA, "nodo/red/set sin ts, se descarta");
+    return;
+  }
+  const long ts = documento["ts"].as<long>();
+  const long ahora = static_cast<long>(time(nullptr));
+  if (ahora > 1704067200L && ts > 0) {
+    long diff = ahora - ts;
+    if (diff < 0) diff = -diff;
+    if (diff > 30) {
+      log_aviso(ETIQUETA, "nodo/red/set con ts fuera de +/-30 s, se descarta");
+      return;
+    }
+  }
+
+  static long ultimo_ts_red = 0;
+  if (ts != 0 && ts == ultimo_ts_red) {
+    log_info(ETIQUETA, "nodo/red/set duplicado (ts=%ld), se ignora", ts);
+    return;
+  }
+
+  String red_str = "";
+  if (documento["red"].is<const char *>()) {
+    red_str = documento["red"].as<const char *>();
+  } else if (documento["red"].is<int>()) {
+    red_str = String(documento["red"].as<int>());
+  }
+  red_str.trim();
+  red_str.toUpperCase();
+
+  int red = -1;
+  if (red_str == "AUTO" || red_str == "0") {
+    red = 0;
+  } else if (red_str == "1" || red_str == "CASA") {
+    red = 1;
+  } else if (red_str == "2" || red_str == "HOTSPOT") {
+    red = 2;
+  } else if (red_str == "3" || red_str == "REPETIDOR") {
+    red = 3;
+  } else {
+    log_aviso(ETIQUETA, "nodo/red/set con red invalida '%s', se descarta", red_str.c_str());
+    return;
+  }
+
+  const int actual = red_forzado();
+  if (red == 0 && actual == 0) {
+    log_info(ETIQUETA, "nodo/red/set: ya en AUTO");
+    ultimo_ts_red = ts;
+    return;
+  }
+  if (red != 0 && red == actual) {
+    log_info(ETIQUETA, "nodo/red/set: ya en red %d, sin reinicio", red);
+    ultimo_ts_red = ts;
+    return;
+  }
+
+  log_info(ETIQUETA, "nodo/red/set: red %d (origen %s)", red,
+           documento["origen"].is<const char *>() ? documento["origen"].as<const char *>() : "?");
+  red_aplicar_seleccion(red);
+  ultimo_ts_red = ts;
+}
+
 }  // namespace
 
 void contrato_iniciar() {
@@ -207,6 +283,10 @@ void contrato_recibir_nodo_config(const String &payload) {
 
 void contrato_recibir_prueba_gas(const String &payload) {
   guardar(pendiente_prueba_gas, payload);
+}
+
+void contrato_recibir_nodo_red_set(const String &payload) {
+  guardar(pendiente_nodo_red_set, payload);
 }
 
 String contrato_tomar_luz_set() {
@@ -233,6 +313,14 @@ String contrato_tomar_prueba_gas() {
   return valor;
 }
 
+String contrato_tomar_nodo_red_set() {
+  bloquear();
+  const String valor = pendiente_nodo_red_set;
+  pendiente_nodo_red_set = "";
+  desbloquear();
+  return valor;
+}
+
 void contrato_tarea() {
   // Una sola etapa: se toma el payload crudo que dejo la tarea de ESP32MQTTClient,
   // se valida aqui y se aplica. La validacion NO puede vivir en el callback porque
@@ -251,5 +339,10 @@ void contrato_tarea() {
   const String prueba = contrato_tomar_prueba_gas();
   if (!prueba.isEmpty()) {
     manejar_prueba_gas(prueba);
+  }
+
+  const String red_set = contrato_tomar_nodo_red_set();
+  if (!red_set.isEmpty()) {
+    manejar_nodo_red_set(red_set);
   }
 }

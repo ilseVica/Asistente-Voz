@@ -24,6 +24,7 @@ void contrato_iniciar();
 void contrato_recibir_luz_set(const String &payload);
 void contrato_recibir_nodo_config(const String &payload);
 void contrato_recibir_prueba_gas(const String &payload);
+void contrato_recibir_nodo_red_set(const String &payload);
 
 // Vacia lo pendiente y lo aplica. Corre en el loop, no en el callback.
 void contrato_tarea();
@@ -31,3 +32,4 @@ void contrato_tarea();
 String contrato_tomar_luz_set();
 String contrato_tomar_nodo_config();
 String contrato_tomar_prueba_gas();
+String contrato_tomar_nodo_red_set();

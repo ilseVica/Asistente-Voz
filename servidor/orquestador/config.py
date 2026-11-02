@@ -199,6 +199,7 @@ TOPICO_ENLACE_SITIO = "$SYS/broker/connection/+/state"
 # (`servidor/mosquitto/config/acl.conf`) y prohibía LEERLO al panel: eso se
 # arregla al desplegar (Fase 3), no aquí.
 TOPICO_NODO_CONFIG = "casa/sala/nodo/config"
+TOPICO_NODO_RED_SET = "casa/sala/nodo/red/set"
 
 # El WebSocket. El servidor manda `latido` cada 20 s y espera un `pong`; si pasan
 # 45 s sin `pong`, cierra. Los dos lados tienen latido porque el navegador no puede
@@ -497,6 +498,7 @@ VENTANA_RESPUESTA_CHAT_S = int(os.environ.get("VENTANA_RESPUESTA_CHAT_S", "60"))
 # el endpoint /alexa vive en el panel. ALEXA_VIDEO_HABILITADO es solo la bandera
 # de la Fase B (videos): no se usa todavia.
 ALEXA_SKILL_HABILITADO = os.environ.get("ALEXA_SKILL_HABILITADO", "0").strip().lower() not in ("0", "false", "no", "")
+PANEL_SELECTOR_RED_HABILITADO = os.environ.get("PANEL_SELECTOR_RED_HABILITADO", "0").strip().lower() not in ("0", "false", "no", "")
 ALEXA_VIDEO_HABILITADO = os.environ.get("ALEXA_VIDEO_HABILITADO", "0").strip().lower() not in ("0", "false", "no", "")
 ALEXA_SKILL_ID = os.environ.get("ALEXA_SKILL_ID", "").strip()
 

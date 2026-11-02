@@ -148,6 +148,21 @@ void red_forzar(int red) {
            red > 0 ? "forzada" : "auto");
 }
 
+void red_aplicar_seleccion(int red) {
+  const int anterior = red_forzado();
+  if (red <= 0 || red > 3) {
+    red_forzar(0);
+    if (anterior != 0) {
+      red_marcar_reinicio_por_red();
+    }
+  } else {
+    red_forzar(red);
+    if (anterior != red) {
+      red_marcar_reinicio_por_red();
+    }
+  }
+}
+
 void red_marcar_reinicio_por_red() {
   rtc_marca_reinicio = RTC_MARCA_REINICIO_VAL;
   red_cambio_pendiente = true;

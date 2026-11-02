@@ -223,6 +223,7 @@ Esta sección es un **borrador**: se revisa y se congela al final del Paso 0, y 
 | `casa/sala/satelite/<client_id>/estado` | Satélite (*Last Will*, con *retain*) | Servidor | `{"conectado":true}` |
 | `casa/sala/nodo/estado` | ESP32 (al conectar y como *Last Will*, con *retain*) | Servidor | `{"conectado":true,"ts":"2026-10-03T18:46:07Z","ip":"192.168.1.123","fw":"1.0.0","gas_adc":312,"alertas_pendientes":0,"gas_episodio":false,"alexa":true,"red":1,"modo_red":"auto"}` |
 | `casa/sala/nodo/config` | Servidor (con *retain*) | ESP32 | `{"gas_on_adc":1800,"gas_off_adc":1550}` |
+| `casa/sala/nodo/red/set` | Panel (POST /api/red, sin *retain*) | ESP32 | `{"red":"2","ts":1759501234,"origen":"panel"}` |
 | `casa/sala/nodo/prueba_gas` | Laptop (`mosquitto_pub`) | ESP32 compilado con `PRUEBAS=1` | `{"gas_adc":3000}` |
 | `casa/sala/voz/texto` | Servidor (servicio de voz, Vosk) | Servidor (orquestador) | `{"frase_id":"arnes-001","texto":"enciende la luz","modo":"comandos","ts":1759501234,"marcas":{"primera_trama_ms":1759501234000,"ultima_trama_ms":1759501234100,"fin_ms":1759501234150,"final_ms":1759501234160,"publicado_ms":1759501234160}}` |
 | `$SYS/broker/connection/puente-sitio/state` | Puente (laptop, hotspot) | Servidor, Panel | `1` o `0` |
@@ -259,6 +260,7 @@ Reglas del contrato:
 | `casa/sala/alerta/inactividad` | 1 | No | No |
 | `casa/sala/satelite/decir` | 1 | No | Sí |
 | `casa/sala/nodo/config` | 1 | Sí | No |
+| `casa/sala/nodo/red/set` | 1 | No | Sí |
 | `casa/sala/nodo/prueba_gas` | 1 | No | No |
 | `casa/sala/voz/texto` | 1 | No | Sí |
 | `casa/sala/sensores` | 0 | No | No |

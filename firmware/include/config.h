@@ -126,6 +126,7 @@
 #define TOPIC_NODO_ESTADO "casa/sala/nodo/estado"
 #define TOPIC_NODO_CONFIG "casa/sala/nodo/config"
 #define TOPIC_PRUEBA_GAS "casa/sala/nodo/prueba_gas"
+#define TOPIC_NODO_RED_SET "casa/sala/nodo/red/set"
 #define TOPIC_ALERTA_GAS "casa/sala/alerta/gas"
 #define TOPIC_ALERTA_AYUDA "casa/sala/alerta/ayuda"
 
@@ -149,6 +150,7 @@
 #define QOS_LUZ_SET_SUSCRIPCION 1
 #define QOS_NODO_CONFIG_SUSCRIPCION 1
 #define QOS_PRUEBA_GAS_SUSCRIPCION 1
+#define QOS_NODO_RED_SET_SUSCRIPCION 1
 #define QOS_ALERTA_GAS 1
 #define QOS_ALERTA_AYUDA 1
 

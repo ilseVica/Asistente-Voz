@@ -309,3 +309,11 @@ Agregar canciones:
    - Reconstruir y recrear voz y orquestador: `docker compose build voz orquestador`
      y `docker compose up -d --no-deps voz orquestador`.
 
+## 12. Selector de red del nodo (T-69)
+
+Con `PANEL_SELECTOR_RED_HABILITADO=1`, un administrador puede cambiar la red del
+ESP32 desde el panel: Auto / Casa / Repetidor / Hotspot. El nodo se reinicia si
+la red cambia y, si no alcanza el broker en 60 s, vuelve a AUTO.
+
+Tópico MQTT: `casa/sala/nodo/red/set` (QoS 1, sin retenido), mensaje
+`{"red":"1|2|3|AUTO","ts":<epoch>,"origen":"panel"}`.

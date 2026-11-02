@@ -11,3 +11,4 @@ topic write casa/sala/nodo/estado
 topic read casa/sala/luz/set
 topic read casa/sala/nodo/config
 topic read casa/sala/nodo/prueba_gas
+topic read casa/sala/nodo/red/set

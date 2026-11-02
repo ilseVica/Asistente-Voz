@@ -37,7 +37,8 @@ bool mqtt_suscribir() {
   MessageReceivedCallback sin_callback = nullptr;
   const bool ok_luz = cliente.subscribe(TOPIC_LUZ_SET, sin_callback, QOS_LUZ_SET_SUSCRIPCION);
   const bool ok_cfg = cliente.subscribe(TOPIC_NODO_CONFIG, sin_callback, QOS_NODO_CONFIG_SUSCRIPCION);
-  bool ok = ok_luz && ok_cfg;
+  const bool ok_red = cliente.subscribe(TOPIC_NODO_RED_SET, sin_callback, QOS_NODO_RED_SET_SUSCRIPCION);
+  bool ok = ok_luz && ok_cfg && ok_red;
 #if PRUEBAS == 1
   // Este topic solo existe en el firmware de pruebas (6.10).
   const bool ok_prueba =
@@ -150,6 +151,8 @@ bool mqtt_iniciar() {
       contrato_recibir_luz_set(p);
     } else if (t == TOPIC_NODO_CONFIG) {
       contrato_recibir_nodo_config(p);
+    } else if (t == TOPIC_NODO_RED_SET) {
+      contrato_recibir_nodo_red_set(p);
     }
 #if PRUEBAS == 1
     else if (t == TOPIC_PRUEBA_GAS) {

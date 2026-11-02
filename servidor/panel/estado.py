@@ -323,7 +323,8 @@ class EstadoSala:
             else:
                 estado = SIN_DATOS
             return {"estado": estado, "recibido_en": None,
-                    "ip": carga.get("ip"), "fw": carga.get("fw")}
+                    "ip": carga.get("ip"), "fw": carga.get("fw"),
+                    "red": carga.get("red"), "modo_red": carga.get("modo_red")}
         if carga.get("conectado") is False:
             # El Last Will retenido es `{"conectado": false}` y eso es una caída YA
             # pasada: no hay que esperar los 90 s para contarla (P27).
@@ -331,7 +332,8 @@ class EstadoSala:
         else:
             estado = self._estado_por_antiguedad(entrada, ahora)
         return {"estado": estado, "recibido_en": entrada["recibido_en"],
-                "ip": carga.get("ip"), "fw": carga.get("fw")}
+                "ip": carga.get("ip"), "fw": carga.get("fw"),
+                "red": carga.get("red"), "modo_red": carga.get("modo_red")}
 
     def bloque_satelite(self, datos, ahora) -> dict:
         """El estado agregado de los satélites, con la MISMA forma de siempre.

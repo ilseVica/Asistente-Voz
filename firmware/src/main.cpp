@@ -29,6 +29,7 @@
 #include "persistencia.h"
 #include "registro.h"
 #include "sensores.h"
+#include "wifi_gestor.h"
 
 namespace {
 // Cadencia del loop. Es una tareas corta, no un delay: los modulos deciden si toca
@@ -78,9 +79,8 @@ void manejar_comandos_de_prueba() {
                  red_forzado() == 0 ? "auto" : "forzada", red_indice_actual());
       } else if (arg == "AUTO") {
         const int anterior = red_forzado();
-        red_forzar(0);
+        red_aplicar_seleccion(0);
         if (anterior != 0) {
-          red_marcar_reinicio_por_red();
           log_info("red", "Cambiando a red AUTO; reiniciando");
         } else {
           log_info("red", "ya en AUTO, red_actual=%d", red_indice_actual());
@@ -89,9 +89,8 @@ void manejar_comandos_de_prueba() {
         const int n = arg.toInt();
         if (n >= 1 && n <= 3) {
           const int anterior = red_forzado();
-          red_forzar(n);
+          red_aplicar_seleccion(n);
           if (anterior != n) {
-            red_marcar_reinicio_por_red();
             log_info("red", "Cambiando a red %d; reiniciando", n);
           } else {
             log_info("red", "ya en red %d, red_actual=%d", n, red_indice_actual());
@@ -155,9 +154,8 @@ void manejar_comandos_de_prueba() {
                red_forzado() == 0 ? "auto" : "forzada", red_indice_actual());
     } else if (arg == "AUTO") {
       const int anterior = red_forzado();
-      red_forzar(0);
+      red_aplicar_seleccion(0);
       if (anterior != 0) {
-        red_marcar_reinicio_por_red();
         log_info("red", "Cambiando a red AUTO; reiniciando");
       } else {
         log_info("red", "ya en AUTO, red_actual=%d", red_indice_actual());
@@ -166,9 +164,8 @@ void manejar_comandos_de_prueba() {
       const int n = arg.toInt();
       if (n >= 1 && n <= 3) {
         const int anterior = red_forzado();
-        red_forzar(n);
+        red_aplicar_seleccion(n);
         if (anterior != n) {
-          red_marcar_reinicio_por_red();
           log_info("red", "Cambiando a red %d; reiniciando", n);
         } else {
           log_info("red", "ya en red %d, red_actual=%d", n, red_indice_actual());

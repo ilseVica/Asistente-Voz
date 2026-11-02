@@ -1746,6 +1746,98 @@ prueba("ayuda reciente: no publica de nuevo", len(pubs) == 0, pubs)
 # Restaurar.
 api_modulo.alexa.verificar = _verificar_original
 
+# =============================================================================
+# 16. Selector de red del nodo (/api/red)
+# =============================================================================
+
+titulo("16. /api/red")
+
+# Nodo conectado para que el endpoint no rechace por desconectado.
+api_modulo.estados.recibir(
+    config.TOPICO_NODO_ESTADO,
+    json.dumps({"conectado": True, "red": 1, "modo_red": "auto"}),
+)
+
+# Bandera apagada por defecto -> 404.
+r = cliente.post("/api/red", json={"red": "auto"}, headers=cab(token_marta))
+prueba("bandera apagada: /api/red es 404", r.status_code == 404, r.status_code)
+
+# Activar la bandera y probar autorizacion.
+api_modulo.config.PANEL_SELECTOR_RED_HABILITADO = True
+
+# 401 sin sesion.
+r = cliente.post("/api/red", json={"red": "auto"})
+prueba("red sin sesion devuelve 401", r.status_code == 401, r.status_code)
+
+# 403 a un no administrador.
+token_luis = entrar("222")
+r = cliente.post("/api/red", json={"red": "casa"}, headers=cab(token_luis))
+prueba("red: no administrador recibe 403", r.status_code == 403, r.status_code)
+
+# Nodo desconectado -> 409.
+api_modulo.estados.recibir(config.TOPICO_NODO_ESTADO,
+                           json.dumps({"conectado": False}))
+r = cliente.post("/api/red", json={"red": "casa"}, headers=cab(token_marta))
+prueba("red con nodo desconectado devuelve 409", r.status_code == 409, r.status_code)
+# restaurar nodo conectado
+api_modulo.estados.recibir(config.TOPICO_NODO_ESTADO,
+                           json.dumps({"conectado": True, "red": 1, "modo_red": "auto"}))
+
+# Red invalida -> 422.
+r = cliente.post("/api/red", json={"red": "saturno"}, headers=cab(token_marta))
+prueba("red invalida devuelve 422", r.status_code == 422, r.status_code)
+
+# Red valida -> 202 y publica en el topico correcto, sin retenido.
+publicados_antes = len(publicador.publicado)
+r = cliente.post("/api/red", json={"red": "repetidor"}, headers=cab(token_marta))
+prueba("red valida es 202", r.status_code == 202, r.status_code)
+prueba("red publica en casa/sala/nodo/red/set",
+       any(p[0] == config.TOPICO_NODO_RED_SET for p in publicador.publicado[publicados_antes:]),
+       [p[0] for p in publicador.publicado[publicados_antes:]])
+pubs_red = [p for p in publicador.publicado[publicados_antes:]
+            if p[0] == config.TOPICO_NODO_RED_SET]
+if pubs_red:
+    prueba("red publica sin retenido", pubs_red[-1][3] is False, pubs_red[-1])
+    prueba("red publica con ts", isinstance(pubs_red[-1][1].get("ts"), int),
+           pubs_red[-1][1])
+    prueba("red publica origen panel", pubs_red[-1][1].get("origen") == "panel",
+           pubs_red[-1][1])
+
+# ts adelantado (1 s adelante) debe aceptarse (tolerancia +/-30 s).
+# Se simula publicando directamente con ts futuro y comprobando que el firmware
+# lo aceptaria; aqui solo verificamos que el panel publique el ts actual.
+r = cliente.post("/api/red", json={"red": "casa"}, headers=cab(token_marta))
+prueba("red publica ts entero", isinstance(r.json()["publicado"]["ts"], int),
+       r.json())
+
+# Mapeo numero <-> nombre: repetidor debe ir a 3 y hotspot a 2.
+publicados_antes2 = len(publicador.publicado)
+r = cliente.post("/api/red", json={"red": "repetidor"}, headers=cab(token_marta))
+prueba("repetidor -> 3", any(p[1].get("red") == "3"
+       for p in publicador.publicado[publicados_antes2:]
+       if p[0] == config.TOPICO_NODO_RED_SET), None)
+publicados_antes3 = len(publicador.publicado)
+r = cliente.post("/api/red", json={"red": "hotspot"}, headers=cab(token_marta))
+prueba("hotspot -> 2", any(p[1].get("red") == "2"
+       for p in publicador.publicado[publicados_antes3:]
+       if p[0] == config.TOPICO_NODO_RED_SET), None)
+
+# Misma red no provoca error (el firmware decide no reiniciar); el panel publica igual.
+r = cliente.post("/api/red", json={"red": "casa"}, headers=cab(token_marta))
+prueba("red valida (misma) es 202", r.status_code == 202, r.status_code)
+
+# Sin broker -> 503.
+api_modulo.mqtt.conectado = False
+try:
+    r = cliente.post("/api/red", json={"red": "hotspot"}, headers=cab(token_marta))
+    prueba("red sin broker es 503", r.status_code == 503, r.status_code)
+finally:
+    api_modulo.mqtt.conectado = True
+
+# Restaurar bandera.
+api_modulo.config.PANEL_SELECTOR_RED_HABILITADO = False
+
+
 cliente.__exit__(None, None, None)
 
 print("\n" + "=" * 66)

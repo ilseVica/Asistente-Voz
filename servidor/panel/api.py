@@ -572,6 +572,66 @@ async def ajustar_inactividad(cuerpo: TiempoInactividad,
     return {"tiempo_min": minutos}
 
 
+# --- Selector de red del nodo ------------------------------------------------
+
+
+class RedSelector(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    red: str = Field(pattern="^(auto|casa|repetidor|hotspot|1|2|3)$")
+
+
+@app.post("/api/red", status_code=202)
+async def cambiar_red(cuerpo: RedSelector, sesion: dict = Depends(sesion_requerida)):
+    """Cambia la red del ESP32. Solo administradores y con el nodo conectado.
+
+    Publica en `casa/sala/nodo/red/set` (no retenido). El ESP32 aplica la misma
+    lógica que el comando serie `RED` y se reinicia si la red cambia. Si no
+    alcanza el broker en 60 s, vuelve a AUTO.
+    """
+    if not getattr(config, "PANEL_SELECTOR_RED_HABILITADO", False):
+        raise HTTPException(404, "No disponible.")
+    _exigir_admin(sesion)
+    if mqtt is None or not mqtt.conectado:
+        raise HTTPException(503, "El panel no puede comunicarse con la casa en "
+                                 "este momento. Inténtelo de nuevo en unos minutos.")
+    instantanea = estados.instantanea(base)
+    nodo = instantanea.get("nodo") or {}
+    if nodo.get("estado") in ("desconectado", "sin_datos"):
+        raise HTTPException(409, "El nodo no está conectado.")
+
+    mapa = {"auto": "AUTO", "casa": "1", "repetidor": "3", "hotspot": "2",
+            "1": "1", "2": "2", "3": "3"}
+    red_mqtt = mapa[cuerpo.red.lower()]
+    ts = int(time.time())
+    try:
+        mqtt.publicar(config.TOPICO_NODO_RED_SET,
+                      {"red": red_mqtt, "ts": ts, "origen": "panel"}, qos=1,
+                      retain=False)
+    except Exception as error:  # noqa: BLE001
+        registro.error("no se pudo publicar el cambio de red: %s",
+                       _sin_secretos(error))
+        raise HTTPException(502, "No se pudo enviar la orden. Inténtelo de nuevo.")
+
+    admin = _nombre_de(sesion) or "Administrador"
+    nombres = {"1": "Casa", "2": "Hotspot", "3": "Repetidor",
+               "AUTO": "Auto", None: "?"}
+    red_anterior_txt = nombres.get(str(nodo.get("red")), nodo.get("modo_red") or "?")
+    red_nueva_txt = nombres.get(red_mqtt, red_mqtt)
+    try:
+        base.crear_aviso_conversacion(
+            admin, sesion["chat_id"], "sistema",
+            "Cambio de red: %s -> %s" % (red_anterior_txt, red_nueva_txt), ahora=ts)
+    except Exception:  # noqa: BLE001
+        pass
+
+    return {
+        "aceptado": True,
+        "publicado": {"red": red_mqtt, "ts": ts},
+        "nota": "la orden está publicada; el nodo se reinicia si la red cambia",
+    }
+
+
 # --- Las alertas -------------------------------------------------------------
 
 

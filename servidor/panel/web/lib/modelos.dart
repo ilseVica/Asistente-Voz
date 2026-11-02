@@ -77,10 +77,14 @@ class Componente {
     this.fuente,
     this.satelites,
     this.satelitesHablar,
+    this.red,
+    this.modoRed,
   });
 
   final String estado;
   final int? recibidoEn;
+  final int? red;
+  final String? modoRed;
 
   /// Sólo lo lleva el bloque del sitio (`nodo` o `puente`). Dice de dónde sale la
   /// respuesta, y no es lo mismo que la ruta del propio sitio, que siempre existe.
@@ -100,6 +104,8 @@ class Componente {
             (k, v) => MapEntry(k.toString(), v == true)),
         satelitesHablar: (json['satelites_hablar'] as Map?)?.map(
             (k, v) => MapEntry(k.toString(), v == true)),
+        red: json['red'] as int?,
+        modoRed: json['modo_red'] as String?,
       );
 }
 

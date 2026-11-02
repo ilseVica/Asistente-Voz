@@ -19,6 +19,10 @@ String red_ip();
 // Indice de la red a la que esta conectado: 1 (casa) o 2 (hotspot). 0 si no
 // hay conexion. Se usa para elegir el broker MQTT y el servidor NTP.
 int red_indice_actual();
+// Forzado de red por comando serie (solo RAM/RTC, no NVS).
+int red_forzado();            // 0 = AUTO, 1/2/3 = forzada
+void red_forzar(int red);     // 0 borra el forzado
+void red_marcar_reinicio_por_red(); // marca RTC y solicita reinicio
 
 // mDNS, para resolver el nombre del broker y para que el nodo sea
 // easier-asistente.local en la red.

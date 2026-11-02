@@ -50,6 +50,34 @@ bool mqtt_suscribir() {
 
 }  // namespace
 
+
+namespace {
+bool ip_hotspot_valida(const String &ip) {
+  int octetos[4];
+  int n = 0;
+  int inicio = 0;
+  for (int i = 0; i <= (int)ip.length(); ++i) {
+    if (i == (int)ip.length() || ip[i] == '.') {
+      if (i == inicio) return false;
+      String parte = ip.substring(inicio, i);
+      for (unsigned j = 0; j < parte.length(); ++j) {
+        if (!isdigit((unsigned char)parte[j])) return false;
+      }
+      if (parte.length() > 3) return false;
+      int v = parte.toInt();
+      if (v < 0 || v > 255) return false;
+      if (n >= 4) return false;
+      octetos[n++] = v;
+      inicio = i + 1;
+    }
+  }
+  if (n != 4) return false;
+  if (octetos[0] != 172 || octetos[1] != 20 || octetos[2] != 10) return false;
+  if (octetos[3] < 1 || octetos[3] > 14) return false;
+  return true;
+}
+}  // namespace
+
 bool mqtt_iniciar() {
   const bool es_red2 = (red_indice_actual() == 2);
   String host_primario;
@@ -65,6 +93,11 @@ bool mqtt_iniciar() {
 
   String broker = red_resolver_broker(host_primario);
   bool uso_respaldo = false;
+  if (es_red2 && !broker.isEmpty() && !ip_hotspot_valida(broker)) {
+    log_aviso(ETIQUETA, "broker resuelto %s no esta en 172.20.10.0/28; se ignora",
+              broker.c_str());
+    broker = "";
+  }
   if (es_red2 && broker.isEmpty() && !host_respaldo.isEmpty() && host_respaldo != "cambia-esto") {
     log_aviso(ETIQUETA, "mDNS no resolvio %s; usando respaldo %s",
               host_primario.c_str(), host_respaldo.c_str());

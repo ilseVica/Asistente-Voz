@@ -1,6 +1,8 @@
 #include "wifi_gestor.h"
+#include "mqtt_gestor.h"
 
 #include <ESPmDNS.h>
+#include <esp_attr.h>
 #include <WiFi.h>
 
 #include <time.h>
@@ -35,6 +37,12 @@ bool conectado = false;
 int red_actual = 0;
 int red_ultima_conectada = 0;
 bool red_cambio_pendiente = false;
+RTC_NOINIT_ATTR static uint32_t rtc_magico = 0;
+RTC_NOINIT_ATTR static int8_t rtc_red_forzada = 0;
+RTC_NOINIT_ATTR static uint32_t rtc_marca_reinicio = 0;
+static constexpr uint32_t RTC_MAGICO_VAL = 0xA5A55A5AU;
+static constexpr uint32_t RTC_MARCA_REINICIO_VAL = 0x52454401U;
+static uint32_t forzado_inicio_ms = 0;
 bool mdns_activo = false;
 uint32_t espera_actual_ms = MS_ESPERA_MINIMA;
 uint32_t proximo_intento_ms = 0;
@@ -49,7 +57,32 @@ int red_de_ssid(const String &ssid) {
 }
 
 // Devuelve el numero de red preferida disponible en el escaneo, o 0 si ninguna.
+const APConocido *ap_por_red(int red);
 int escanear_preferida() {
+  const int forzada = red_forzado();
+  if (forzada != 0) {
+    const APConocido *ap = ap_por_red(forzada);
+    if (ap != nullptr) {
+      const int n = WiFi.scanNetworks();
+      if (n > 0) {
+        for (int i = 0; i < n; ++i) {
+          String ssid_scan;
+          int32_t rssi_scan;
+          uint8_t sec_scan;
+          uint8_t *bssid_scan;
+          int32_t chan_scan;
+          WiFi.getNetworkInfo(i, ssid_scan, sec_scan, rssi_scan, bssid_scan, chan_scan);
+          if (ssid_scan == String(ap->ssid)) {
+            WiFi.scanDelete();
+            return forzada;
+          }
+        }
+      }
+      WiFi.scanDelete();
+    }
+    return 0;
+  }
+
   const int n = WiFi.scanNetworks();
   if (n <= 0) {
     WiFi.scanDelete();
@@ -91,6 +124,36 @@ void manejar_cambio_de_red(int nuevo) {
 }
 }  // namespace
 
+
+int red_forzado() {
+  if (rtc_magico != RTC_MAGICO_VAL) {
+    return 0;
+  }
+  if (rtc_red_forzada < 0 || rtc_red_forzada > 3) {
+    return 0;
+  }
+  return rtc_red_forzada;
+}
+
+void red_forzar(int red) {
+  if (red <= 0 || red > 3) {
+    rtc_magico = 0;
+    rtc_red_forzada = 0;
+  } else {
+    rtc_magico = RTC_MAGICO_VAL;
+    rtc_red_forzada = static_cast<int8_t>(red);
+  }
+  forzado_inicio_ms = (red > 0) ? millis() : 0;
+  log_info(ETIQUETA, "red forzada: %d (%s)", red > 0 ? red : 0,
+           red > 0 ? "forzada" : "auto");
+}
+
+void red_marcar_reinicio_por_red() {
+  rtc_marca_reinicio = RTC_MARCA_REINICIO_VAL;
+  red_cambio_pendiente = true;
+  log_info(ETIQUETA, "marcado reinicio por RED");
+}
+
 void red_iniciar() {
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
@@ -99,29 +162,41 @@ void red_iniciar() {
 
   const uint32_t ahora = millis();
   proximo_intento_ms = ahora + MS_ESPERA_MINIMA;
+  if (rtc_marca_reinicio == RTC_MARCA_REINICIO_VAL) {
+    log_info(ETIQUETA, "arranque por RED: no cuenta para el limite");
+    rtc_marca_reinicio = 0;
+  }
+  if (red_forzado() != 0) {
+    forzado_inicio_ms = millis();
+  }
   log_info(ETIQUETA, "conectando (3 redes, por preferencia)");
 }
 
 void red_tarea() {
   if (red_cambio_pendiente) {
     red_cambio_pendiente = false;
-    uint8_t cnt = persistencia_reinicios_red_cnt();
-    uint32_t epoch_guardado = persistencia_reinicios_red_epoch();
-    const uint32_t ahora_epoch = static_cast<uint32_t>(time(nullptr));
-    bool dentro_ventana = (epoch_guardado != 0 && ahora_epoch >= epoch_guardado &&
-                           (ahora_epoch - epoch_guardado) <= 300U);
-    uint8_t nuevo_cnt = dentro_ventana ? static_cast<uint8_t>(cnt + 1) : 1U;
-    if (nuevo_cnt >= 3U) {
-      log_aviso(ETIQUETA,
-                "limite de reinicios por cambio de red alcanzado (%u en 5 min); "
-                "me quedo en la red actual",
-                static_cast<unsigned>(nuevo_cnt));
+    const bool manual = (rtc_marca_reinicio == RTC_MARCA_REINICIO_VAL);
+    if (!manual) {
+      uint8_t cnt = persistencia_reinicios_red_cnt();
+      uint32_t epoch_guardado = persistencia_reinicios_red_epoch();
+      const uint32_t ahora_epoch = static_cast<uint32_t>(time(nullptr));
+      bool dentro_ventana = (epoch_guardado != 0 && ahora_epoch >= epoch_guardado &&
+                             (ahora_epoch - epoch_guardado) <= 300U);
+      uint8_t nuevo_cnt = dentro_ventana ? static_cast<uint8_t>(cnt + 1) : 1U;
+      if (nuevo_cnt >= 3U) {
+        log_aviso(ETIQUETA,
+                  "limite de reinicios por cambio de red alcanzado (%u en 5 min); "
+                  "me quedo en la red actual",
+                  static_cast<unsigned>(nuevo_cnt));
+        persistencia_fijar_reinicios_red(nuevo_cnt, ahora_epoch);
+        return;
+      }
       persistencia_fijar_reinicios_red(nuevo_cnt, ahora_epoch);
-      return;
+      log_info(ETIQUETA, "cambio de red detectado; reiniciando (reinicio %u/3)",
+               static_cast<unsigned>(nuevo_cnt));
+    } else {
+      log_info(ETIQUETA, "cambio manual de red; reiniciando sin contar");
     }
-    persistencia_fijar_reinicios_red(nuevo_cnt, ahora_epoch);
-    log_info(ETIQUETA, "cambio de red detectado; reiniciando (reinicio %u/3)",
-             static_cast<unsigned>(nuevo_cnt));
     delay(200);
     ESP.restart();
     return;
@@ -148,6 +223,23 @@ void red_tarea() {
     log_aviso(ETIQUETA, "sin red, reintento en %lu ms",
               static_cast<unsigned long>(MS_ESPERA_MINIMA * 2));
     return;
+  }
+
+  // Seguro del modo forzado: si no conecta (Wi-Fi + broker) en 60 s, vuelve a AUTO.
+  if (red_forzado() != 0) {
+    if (conectado && mqtt_conectado() && red_actual == red_forzado()) {
+      forzado_inicio_ms = 0;
+    } else {
+      if (forzado_inicio_ms == 0) {
+        forzado_inicio_ms = millis();
+      } else if (millis() - forzado_inicio_ms >= 60000UL) {
+        log_aviso(ETIQUETA, "red forzada %d no conecto en 60 s; vuelvo a AUTO",
+                  red_forzado());
+        red_forzar(0);
+        red_marcar_reinicio_por_red();
+        forzado_inicio_ms = 0;
+      }
+    }
   }
 
   const uint32_t ahora = millis();
@@ -254,7 +346,11 @@ String red_resolver_broker(const String &host) {
     }
   }
 
-  IPAddress resuelta = MDNS.begin(host.c_str());
+  String nombre = host;
+  if (nombre.endsWith(".local")) {
+    nombre = nombre.substring(0, nombre.length() - 6);
+  }
+  IPAddress resuelta = MDNS.queryHost(nombre.c_str(), 2000);
   if (resuelta != INADDR_NONE) {
     const String direccion(resuelta.toString());
     log_info(ETIQUETA, "broker %s resuelto a %s", host.c_str(), direccion.c_str());

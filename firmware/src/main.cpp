@@ -69,6 +69,39 @@ void manejar_comandos_de_prueba() {
     // readStringUntil('\n'), que leia la linea SIGUIENTE: el comando se perdia.
     String linea = Serial.readStringUntil('\n');
     linea.trim();
+    if (linea.startsWith("RED")) {
+      String arg = linea.length() > 3 ? linea.substring(4) : "";
+      arg.trim();
+      arg.toUpperCase();
+      if (arg.length() == 0) {
+        log_info("red", "modo=%s red_actual=%d",
+                 red_forzado() == 0 ? "auto" : "forzada", red_indice_actual());
+      } else if (arg == "AUTO") {
+        const int anterior = red_forzado();
+        red_forzar(0);
+        if (anterior != 0) {
+          red_marcar_reinicio_por_red();
+          log_info("red", "Cambiando a red AUTO; reiniciando");
+        } else {
+          log_info("red", "ya en AUTO, red_actual=%d", red_indice_actual());
+        }
+      } else {
+        const int n = arg.toInt();
+        if (n >= 1 && n <= 3) {
+          const int anterior = red_forzado();
+          red_forzar(n);
+          if (anterior != n) {
+            red_marcar_reinicio_por_red();
+            log_info("red", "Cambiando a red %d; reiniciando", n);
+          } else {
+            log_info("red", "ya en red %d, red_actual=%d", n, red_indice_actual());
+          }
+        } else {
+          log_aviso("red", "uso: RED 1|2|3|AUTO");
+        }
+      }
+      continue;
+    }
     if (linea.startsWith(COMANDO_GAS)) {
       const int valor = linea.substring(static_cast<int>(strlen(COMANDO_GAS))).toInt();
       if (valor <= 0) {
@@ -93,9 +126,49 @@ void manejar_comandos_de_prueba() {
   }
 }
 #else
-// En el firmware normal el monitor serie no ejecuta comandos. Se mantiene la
-// funcion vacia para que main.cpp no necesite condicionales.
-void manejar_comandos_de_prueba() {}
+// En el firmware normal solo se acepta el comando RED (selector de red).
+void manejar_comandos_de_prueba() {
+  while (Serial.available() > 0) {
+    String linea = Serial.readStringUntil('\n');
+    linea.trim();
+    if (!linea.startsWith("RED")) {
+      if (linea.length() > 0) {
+        log_info("red", "comando '%s' desconocido", linea.c_str());
+      }
+      continue;
+    }
+    String arg = linea.length() > 3 ? linea.substring(4) : "";
+    arg.trim();
+    arg.toUpperCase();
+    if (arg.length() == 0) {
+      log_info("red", "modo=%s red_actual=%d",
+               red_forzado() == 0 ? "auto" : "forzada", red_indice_actual());
+    } else if (arg == "AUTO") {
+      const int anterior = red_forzado();
+      red_forzar(0);
+      if (anterior != 0) {
+        red_marcar_reinicio_por_red();
+        log_info("red", "Cambiando a red AUTO; reiniciando");
+      } else {
+        log_info("red", "ya en AUTO, red_actual=%d", red_indice_actual());
+      }
+    } else {
+      const int n = arg.toInt();
+      if (n >= 1 && n <= 3) {
+        const int anterior = red_forzado();
+        red_forzar(n);
+        if (anterior != n) {
+          red_marcar_reinicio_por_red();
+          log_info("red", "Cambiando a red %d; reiniciando", n);
+        } else {
+          log_info("red", "ya en red %d, red_actual=%d", n, red_indice_actual());
+        }
+      } else {
+        log_aviso("red", "uso: RED 1|2|3|AUTO");
+      }
+    }
+  }
+}
 #endif
 
 }  // namespace
@@ -124,6 +197,10 @@ void setup() {
   contrato_iniciar();
   nodo_estado_iniciar();
   alexa_iniciar();
+  if (motivo == ESP_RST_POWERON) {
+    red_forzar(0);
+    log_info("main", "poweron: forzado de red borrado (AUTO)");
+  }
   red_iniciar();
 
   log_info("main", "listo");

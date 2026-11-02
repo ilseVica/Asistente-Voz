@@ -50,6 +50,8 @@ String nodo_estado_json() {
   carga += ",\"alertas_pendientes\":" + String(alertas_pendientes());
   carga += ",\"gas_episodio\":" + String(gas_episodio_abierto() ? "true" : "false");
   carga += ",\"alexa\":" + String(alexa_habilitado() ? "true" : "false");
+  carga += ",\"red\":" + String(red_indice_actual());
+  carga += ",\"modo_red\":\"" + String(red_forzado() == 0 ? "auto" : "forzada") + "\"";
   carga += "}";
   return carga;
 }

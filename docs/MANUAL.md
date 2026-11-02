@@ -19,6 +19,7 @@ hacer si algo falla, respaldos y cambio del token del bot.
 - **Panel web.** Estado de la casa (Equipos, alertas, historial), control de luz y
   marcar alertas como atendidas.
 - **Conexiones del nodo:** `docs/CONEXIONES.md`.
+- **Broker de la laptop (hotspot del iPhone):** Mosquitto 2.1 en `ilse`, IP fija 172.20.10.10/28, bridge `puente-sitio` al broker del servidor (100.116.194.116:1883), usuario `puente`, QoS 1, cleansession false. Dispatcher `90-mosquitto-hotspot` reinicia Mosquitto al levantar el hotspot. Orden de conexión: laptop, luego Echo y ESP32; hotspot con «Maximizar compatibilidad».
 
 ## 2. Arranque para una demostración
 
@@ -275,9 +276,10 @@ docker compose up -d --no-deps --force-recreate orquestador
 - [ ] Satélite conectado (panel → Equipos).
 - [ ] ESP32 «con hora» en Equipos.
 - [ ] Cargador del foco conectado.
-- [ ] Buzzer probado: GAS 3000, luego GAS 300 y pulsar EN.
+- [ ] Buzzer probado (T-35): GAS 3000 (alerta), luego GAS OFF (o esperar 60 s); la lectura vuelve sola, sin pulsar EN.
 - [ ] `/alertas` responde en Telegram.
 - [ ] «Enciende la luz» funciona por voz.
+- [ ] Skill de Alexa (si `ALEXA_SKILL_HABILITADO=1`): «Alexa, abre asistente de casa» y «enciende la luz» responden; rollback disponible con `asistente-panel:pre-alexa`.
 
 ## Después de la demo
 
@@ -306,3 +308,4 @@ Agregar canciones:
    - `VIDEO_INGLES_HABILITADO=1` en `servidor/.env` (lo edita Ilse).
    - Reconstruir y recrear voz y orquestador: `docker compose build voz orquestador`
      y `docker compose up -d --no-deps voz orquestador`.
+

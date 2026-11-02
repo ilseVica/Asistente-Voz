@@ -1,0 +1,23 @@
+# Bridge a la VM. Copiar a /etc/mosquitto/conf.d/bridge.conf y poner la
+# contrasena de "puente" en remote_password. Permisos 640 root:mosquitto.
+
+connection puente-sitio
+address 100.116.194.116:1883
+bridge_protocol_version mqttv311
+try_private true
+cleansession false
+restart_timeout 10 30
+notifications true
+
+remote_username puente
+remote_password <PONER_AQUI>
+
+topic casa/sala/luz/estado out 1
+topic casa/sala/sensores out 1
+topic casa/sala/alerta/gas out 1
+topic casa/sala/alerta/ayuda out 1
+topic casa/sala/nodo/estado out 1
+
+topic casa/sala/luz/set in 1
+topic casa/sala/nodo/config in 1
+topic casa/sala/nodo/prueba_gas in 1

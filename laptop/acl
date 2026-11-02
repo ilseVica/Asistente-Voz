@@ -1,0 +1,13 @@
+# ACL de la laptop: bloque de "nodo" copiado de la VM.
+# Sin usuario "puente": el bridge es local y usa las credenciales de puente
+# en el broker de la VM.
+
+user nodo
+topic write casa/sala/luz/estado
+topic write casa/sala/sensores
+topic write casa/sala/alerta/gas
+topic write casa/sala/alerta/ayuda
+topic write casa/sala/nodo/estado
+topic read casa/sala/luz/set
+topic read casa/sala/nodo/config
+topic read casa/sala/nodo/prueba_gas

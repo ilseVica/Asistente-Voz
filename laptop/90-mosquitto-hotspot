@@ -1,0 +1,7 @@
+#!/bin/bash
+# Reinicia Mosquitto cuando el hotspot queda "up", porque bind_interface
+# toma la IP de la interfaz al arrancar. Solo actua para esa conexion.
+
+[[ "$2" == "up" && "$CONNECTION_ID" == "iPhone de Ilse" ]] || exit 0
+
+systemctl restart mosquitto

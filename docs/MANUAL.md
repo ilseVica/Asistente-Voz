@@ -62,6 +62,13 @@ camino principal; la sección 2b es el respaldo.
    - Alexa: «Alexa, abre asistente de casa» y «enciende la luz» responden.
    - Telegram: `/alertas` en el bot responde.
 
+Simular gas (ESP32 en el enchufe, sin monitor serie):
+```bash
+cd /home/ilse/Servidores/Asistente-Voz
+./herramientas/gas.sh 3000
+```
+La simulación se apaga sola a los 60 s. Para apagarla antes: `./herramientas/gas.sh 0`.
+
 ## 2b. Arranque para la demostración en el lugar (hotspot del iPhone, respaldo)
 
 Cuándo se usa: en el lugar de la presentación, sin depender de la red de la

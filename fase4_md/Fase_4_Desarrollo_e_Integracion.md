@@ -422,7 +422,7 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 | P26 | Se corta el Internet de la casa, se genera una alerta, se reinicia la VM y vuelve el Internet | La alerta se entrega una sola vez | A | Parcial. Prueba completa en la presentación formal (riesgo antes de la entrega). |
 | P27 | Se desconecta el ESP32 | El panel lo marca como desconectado | R | Aprobada |
 | P28 | Se reinicia el ESP32 y se vuelve a publicar el comando de prueba de gas | La alerta llega con un id nuevo y Telegram la recibe | A | Aprobada |
-| P29 | Orden de voz mientras suena la alarma de gas | El asistente avisa del gas una vez por episodio y ejecuta la orden; el buzzer sigue sonando | A | Pendiente |
+| P29 | Orden de voz mientras suena la alarma de gas | El asistente avisa del gas una vez por episodio y ejecuta la orden; el buzzer sigue sonando | A | Aprobada (2 nov): con el episodio de gas abierto (GAS 3000), la orden de voz enciende y apaga la luz, el aviso de gas se dice una vez por episodio y el buzzer sigue sonando. |
 | P30 | Orden de luz desde el panel | El relé se activa, el panel se actualiza y el asistente no habla | A | Aprobada |
 | P31 | Botón físico de luz | El relé alterna y el estado se publica con origen «boton» | R | Aprobada |
 | P32 | Variante mínima con el servidor apagado: botón de luz y alarma de gas | Las dos funcionan sin servidor. Alexa no: desde el 1 nov usa la skill, que pasa por el servidor | A | Pendiente |

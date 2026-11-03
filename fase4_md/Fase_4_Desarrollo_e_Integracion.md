@@ -306,6 +306,8 @@ try_private true
 cleansession false
 restart_timeout 10 30
 notifications true
+remote_clientid puente-sitio
+keepalive_interval 15
 
 remote_username puente
 remote_password <PONER_AQUI>
@@ -321,7 +323,7 @@ topic casa/sala/nodo/config in 1
 topic casa/sala/nodo/prueba_gas in 1
 ```
 
-Mosquitto no lee variables de entorno, así que el `remote_password` del puente queda en claro en este archivo de la laptop: por eso va con permisos 600 y fuera del repositorio.
+Con `keepalive_interval 15`, el servidor detecta una caída silenciosa de Tailscale en unos 22 segundos y publica el `0` del *Last Will*. El nombre del tópico `$SYS/broker/connection/puente-sitio/state` sale del `remote_clientid` del puente. Mosquitto no lee variables de entorno, así que el `remote_password` del puente queda en claro en este archivo de la laptop: por eso va con permisos 600 y fuera del repositorio.
 
 ### Configuración del broker del servidor
 

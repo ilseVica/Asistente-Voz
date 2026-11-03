@@ -2,12 +2,14 @@
 # contrasena de "puente" en remote_password. Permisos 640 root:mosquitto.
 
 connection puente-sitio
+remote_clientid puente-sitio
 address 100.116.194.116:1883
 bridge_protocol_version mqttv311
 try_private true
 cleansession false
 restart_timeout 10 30
 notifications true
+keepalive_interval 15
 
 remote_username puente
 remote_password <PONER_AQUI>

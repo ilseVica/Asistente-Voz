@@ -735,7 +735,16 @@ class _Enlace {
     if (componente.estado == desconectado) {
       return 'Sin conexión · ${hace(componente.recibidoEn, ahora: ahoraRef)}';
     }
-    return 'Conectado · ${hace(componente.recibidoEn, ahora: ahoraRef)}';
+    final String redTxt = componente.red == null
+        ? ''
+        : (componente.modoRed == 'forzada' ? 'Forzada' : 'Auto') +
+            ' · ' +
+            (componente.red == 1
+                ? 'Casa'
+                : (componente.red == 2 ? 'Hotspot' : 'Repetidor'));
+    return redTxt.isEmpty
+        ? 'Conectado · ${hace(componente.recibidoEn, ahora: ahoraRef)}'
+        : 'Conectado · $redTxt · ${hace(componente.recibidoEn, ahora: ahoraRef)}';
   }
 }
 

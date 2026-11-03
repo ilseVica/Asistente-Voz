@@ -66,3 +66,6 @@ herramientas/piper/
 herramientas/voces/
 herramientas/wav_pruebas/
 servidor/panel/web_build*/
+
+# Reportes de sesion: nunca van en el repositorio (van en /home/ilse/Servidores/Archivos_text/Asistente-Voz/resultados/).
+resultados/

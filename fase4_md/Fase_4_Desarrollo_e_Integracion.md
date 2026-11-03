@@ -108,7 +108,7 @@ Corte al 1 de noviembre de 2026. El desarrollo avanzó con arranque anticipado y
 - [ ] Corregir los comandos de prueba: publicar y escuchar con el usuario `orquestador`, publicar `prueba_gas` con `puente` y cargar las contraseñas del `.env`.
 - [ ] Unificar el formato del campo `ts`: en `luz/set` y `satelite/decir` es epoch en segundos, pero en `nodo/estado` el firmware lo envía como texto ISO 8601.
 - [x] Aplicar la configuración de chrony para servir NTP a la red local. (30 oct)
-- [ ] Configurar la identidad de git (los commits salen como `ilse@localhost`).
+- [x] Configurar la identidad de git (los commits salen como `ilsevica <ilsevillaca@gmail.com>`, 2 nov).
 - [ ] Pruebas en hardware: arranque, polaridad del LED, P42, P46, P31, P27, P09, P28, P45 y frecuencia de sensores; con el Echo Pop, el descubrimiento, P05 y P06.
 - [x] Broker MQTT de la laptop para el hotspot (commit 2b9d029): Mosquitto 2.1, IP fija 172.20.10.10/28, bridge `puente-sitio`, dispatcher `90-mosquitto-hotspot`.
 - [x] Selector de red por serie (commit 170a57c): comandos `RED`, `RED 1|2|3`, `RED AUTO`.

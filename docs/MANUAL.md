@@ -27,31 +27,40 @@ Cuándo se usa: presentación por videollamada, con el servidor, el ESP32 y
 el satélite en la red de la casa con Internet (modo instalación). Es el
 camino principal; la sección 2b es el respaldo.
 
-1. Arrancar la VM y los contenedores:
+1. En la VM: los contenedores arrancan solos (restart: unless-stopped).
+   Comprobar que todos estén «running/healthy»:
    ```bash
    cd /home/ilse/Servidores/Asistente-Voz/servidor
-   docker compose up -d mosquitto orquestador voz panel tailscale
+   docker compose ps
    ```
-   (revisar con `docker compose ps`).
-2. Encender el ESP32 con cargador de pared, al menos 3 minutos antes (el
-   MQ-2 necesita estabilizarse), en la red 1 (red de la casa).
-3. Conectar el receptor USB-C del micrófono inalámbrico y encender el
-   micrófono **antes** de arrancar el satélite. Comprobar:
+   Si alguno no está arriba, levantarlo por su nombre real:
+   mosquitto, orquestador, voz, panel, tailscale.
+   ```bash
+   docker compose up -d <servicio>
+   ```
+2. En el ESP32: encender con cargador de pared, al menos 3 minutos antes
+   (el MQ-2 necesita estabilizarse), en la red 1 (red de la casa).
+3. En la laptop: conectar el receptor USB-C del micrófono inalámbrico y
+   encender el micrófono **antes** de arrancar el satélite. Comprobar:
    ```bash
    pactl list short sources | grep -iv monitor
    ```
-4. Arrancar el satélite (sin sudo):
+4. En la laptop: arrancar el satélite (sin sudo):
    ```bash
    systemctl --user start asistente-satelite
    ```
-5. Encender el Echo Pop en la red de la casa y verificar que responda a
-   «Alexa, abre asistente de casa».
+5. Con el Echo: encender el Echo Pop en la red de la casa y verificar que
+   responda a «Alexa, abre asistente de casa».
 6. Comprobaciones:
    - Panel (`https://asistente.tail722206.ts.net` o
      `http://192.168.1.169:8080`) → Equipos: nodo y satélite conectados;
      el ESP32 debe aparecer «con hora».
+   - Panel → Equipos: la IP del nodo empieza con 192.168.1. Si es
+     172.20.10.x, el ESP32 quedó en el hotspot: por el monitor serie,
+     `RED AUTO` (o desconectar y reconectar la alimentación).
    - Voz: decir «enciende la luz»: la luz enciende y el satélite responde.
    - Alexa: «Alexa, abre asistente de casa» y «enciende la luz» responden.
+   - Telegram: `/alertas` en el bot responde.
 
 ## 2b. Arranque para la demostración en el lugar (hotspot del iPhone, respaldo)
 

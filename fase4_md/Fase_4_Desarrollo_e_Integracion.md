@@ -489,7 +489,7 @@ Al cierre de la semana 7, la fase entrega lo siguiente:
 - [x] Documento del contrato MQTT congelado, con la gramática de Vosk y la tabla de intenciones (`fase4_md/Fase_4_Desarrollo_e_Integracion.md`).
 - [x] Tabla de pruebas con resultados obtenidos (`fase4_md/Fase_4_Desarrollo_e_Integracion.md`, sección Plan de pruebas).
 - [x] Manual breve de instalación y arranque del sistema (Paso 5): `docs/MANUAL.md`.
-- [ ] Video de demostración del flujo completo, que también sirve de respaldo en la presentación.
+- [ ] Video de demostración del flujo completo, que también sirve de respaldo en la presentación. (No se entrega: la demostración es en vivo por videollamada, decisión del 1 nov.)
 - [ ] Documentos de las Etapas 3 y 5 actualizados.
 - [x] Guion de la demostración, con su variante 100 % local: `herramientas/GUION.md`.
 - [ ] Diagrama de arquitectura general del sistema, actualizado con la versión final (Paso 5).

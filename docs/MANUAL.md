@@ -21,7 +21,42 @@ hacer si algo falla, respaldos y cambio del token del bot.
 - **Conexiones del nodo:** `docs/CONEXIONES.md`.
 - **Broker de la laptop (hotspot del iPhone):** Mosquitto 2.1 en `ilse`, IP fija 172.20.10.10/28, bridge `puente-sitio` al broker del servidor (100.116.194.116:1883), usuario `puente`, QoS 1, cleansession false. Dispatcher `90-mosquitto-hotspot` reinicia Mosquitto al levantar el hotspot. Orden de conexión: laptop, luego Echo y ESP32; hotspot con «Maximizar compatibilidad».
 
-## 2. Arranque para una demostración
+## 2a. Arranque para la videollamada (red de la casa)
+
+Cuándo se usa: presentación por videollamada, con el servidor, el ESP32 y
+el satélite en la red de la casa con Internet (modo instalación). Es el
+camino principal; la sección 2b es el respaldo.
+
+1. Arrancar la VM y los contenedores:
+   ```bash
+   cd /home/ilse/Servidores/Asistente-Voz/servidor
+   docker compose up -d mosquitto orquestador voz panel tailscale
+   ```
+   (revisar con `docker compose ps`).
+2. Encender el ESP32 con cargador de pared, al menos 3 minutos antes (el
+   MQ-2 necesita estabilizarse), en la red 1 (red de la casa).
+3. Conectar el receptor USB-C del micrófono inalámbrico y encender el
+   micrófono **antes** de arrancar el satélite. Comprobar:
+   ```bash
+   pactl list short sources | grep -iv monitor
+   ```
+4. Arrancar el satélite (sin sudo):
+   ```bash
+   systemctl --user start asistente-satelite
+   ```
+5. Encender el Echo Pop en la red de la casa y verificar que responda a
+   «Alexa, abre asistente de casa».
+6. Comprobaciones:
+   - Panel (`https://asistente.tail722206.ts.net` o
+     `http://192.168.1.169:8080`) → Equipos: nodo y satélite conectados;
+     el ESP32 debe aparecer «con hora».
+   - Voz: decir «enciende la luz»: la luz enciende y el satélite responde.
+   - Alexa: «Alexa, abre asistente de casa» y «enciende la luz» responden.
+
+## 2b. Arranque para la demostración en el lugar (hotspot del iPhone, respaldo)
+
+Cuándo se usa: en el lugar de la presentación, sin depender de la red de la
+casa (hotspot del iPhone). Es el respaldo.
 
 1. Revisar que Storyteller e Immich no tengan tareas en curso; detenerlos solo
    si están procesando, para dejar CPU y memoria libres para Vosk.

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 540" width="680" height="540" font-family="DejaVu Sans, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 620" width="680" height="620" font-family="DejaVu Sans, Arial, sans-serif">
 <defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#73726c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
 <rect width="680" height="540" fill="#ffffff"/>
 <rect x="40" y="30" width="600" height="110" rx="16" fill="none" stroke="#888780" stroke-width="0.8" stroke-dasharray="4 4"/>
@@ -25,4 +25,26 @@
 <line x1="424" y1="348" x2="456" y2="348" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
 <line x1="140" y1="380" x2="140" y2="446" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
 <line x1="540" y1="380" x2="540" y2="446" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
+
+<rect x="40" y="516" width="600" height="96" rx="16" fill="none" stroke="#888780" stroke-width="0.8" stroke-dasharray="4 4"/>
+<text x="60" y="536" dominant-baseline="central" font-size="14" font-weight="600" fill="#2C2C2A">Alexa (Echo Pop)</text>
+<rect x="60" y="552" width="200" height="44" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.8"/>
+<text x="160.0" y="568" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="600" fill="#085041">Echo Pop</text>
+<text x="160.0" y="586" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">«Alexa, abre asistente de casa»</text>
+<text x="278" y="574" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#5F5E5A">nube Amazon</text>
+<path d="M260 574 L300 574" stroke="#73726c" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<rect x="304" y="552" width="200" height="44" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.8"/>
+<text x="404.0" y="568" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="600" fill="#3C3489">Tailscale Funnel</text>
+<text x="404.0" y="586" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#534AB7">/alexa · Skill «Asistente de casa»</text>
+<path d="M504 574 L540 574" stroke="#73726c" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<rect x="544" y="552" width="96" height="44" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.8"/>
+<text x="592.0" y="568" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="#3C3489">Panel</text>
+<text x="592.0" y="586" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#534AB7">FastAPI</text>
+<path d="M592 552 L592 420 L340 420 L340 376" stroke="#73726c" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<text x="466" y="410" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#5F5E5A">MQTT → orquestador / ESP32</text>
+<text x="44" y="150" dominant-baseline="central" font-size="11" font-weight="600" fill="#2C2C2A">Caminos del nodo:</text>
+<text x="44" y="166" dominant-baseline="central" font-size="10" fill="#5F5E5A">• Casa: ESP32 → broker VM (directo)</text>
+<text x="44" y="180" dominant-baseline="central" font-size="10" fill="#5F5E5A">• Hotspot: ESP32 → Mosquitto laptop →</text>
+<text x="44" y="194" dominant-baseline="central" font-size="10" fill="#5F5E5A">  bridge puente-sitio → broker VM</text>
+
 </svg>

@@ -19,6 +19,7 @@
 #include "alertas.h"
 #include "alexa.h"
 #include "config.h"
+#include "wifi_gestor.h"
 #include "contrato.h"
 #include "gas.h"
 #include "hora.h"

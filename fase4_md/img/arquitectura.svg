@@ -1,42 +1,81 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 770" width="680" height="770" font-family="DejaVu Sans, Arial, sans-serif">
-<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#73726c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
-<rect width="680" height="770" fill="#ffffff"/>
-<rect x="40" y="30" width="600" height="190" rx="16" fill="none" stroke="#888780" stroke-width="0.8" stroke-dasharray="4 4"/>
-<text x="60" y="50" dominant-baseline="central" font-size="14" font-weight="600" fill="#2C2C2A">Sala (casa)</text>
-<rect x="60" y="64" width="260" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.8"/><text x="190.0" y="82" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#085041">Nodo ESP32</text><text x="190.0" y="102" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0F6E56">DHT22, MQ-2, PIR, relé, buzzer</text>
-<rect x="360" y="64" width="260" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.8"/><text x="490.0" y="82" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#085041">Satélite (laptop)</text><text x="490.0" y="102" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0F6E56">Micrófono, Piper, mpv y YouTube</text>
-<rect x="60" y="134" width="260" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.8"/><text x="190.0" y="152" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#085041">Echo Pop</text><text x="190.0" y="172" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0F6E56">skill «Asistente de casa»</text>
-<rect x="360" y="134" width="260" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.8" stroke-dasharray="4 4"/><text x="490.0" y="152" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#085041">Mosquitto de la laptop</text><text x="490.0" y="172" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0F6E56">solo con hotspot del iPhone</text>
-<rect x="40" y="240" width="600" height="210" rx="16" fill="none" stroke="#888780" stroke-width="0.8" stroke-dasharray="4 4"/>
-<text x="380" y="436" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#2C2C2A">Servidor (VM, Docker Compose)</text>
-<rect x="60" y="270" width="260" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.8"/><text x="190.0" y="288" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#3C3489">Broker Mosquitto</text><text x="190.0" y="308" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#534AB7">MQTT con ACL por usuario</text>
-<rect x="360" y="270" width="260" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.8"/><text x="490.0" y="288" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#3C3489">Servidor de voz</text><text x="490.0" y="308" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#534AB7">Vosk con gramática</text>
-<rect x="60" y="370" width="160" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.8"/><text x="140.0" y="388" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#3C3489">Orquestador</text><text x="140.0" y="408" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#534AB7">Reglas y SQLite</text>
-<rect x="260" y="370" width="160" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.8"/><text x="340.0" y="388" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#3C3489">Panel web</text><text x="340.0" y="408" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#534AB7">FastAPI y Flutter</text>
-<rect x="460" y="370" width="160" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.8"/><text x="540.0" y="388" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#3C3489">Tailscale</text><text x="540.0" y="408" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#534AB7">Funnel HTTPS</text>
-<rect x="40" y="470" width="600" height="170" rx="16" fill="none" stroke="#888780" stroke-width="0.8" stroke-dasharray="4 4"/>
-<text x="60" y="490" dominant-baseline="central" font-size="14" font-weight="600" fill="#2C2C2A">Enlace externo</text>
-<rect x="60" y="504" width="260" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.8"/><text x="190.0" y="522" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#2C2C2A">Telegram del familiar</text><text x="190.0" y="542" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5F5E5A">Alertas y chat</text>
-<rect x="360" y="504" width="260" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.8"/><text x="490.0" y="522" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#2C2C2A">Navegador del familiar</text><text x="490.0" y="542" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5F5E5A">Panel por enlace público</text>
-<rect x="60" y="574" width="260" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.8"/><text x="190.0" y="592" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#2C2C2A">Nube de Amazon (Alexa)</text><text x="190.0" y="612" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5F5E5A">Skill «Asistente de casa»</text>
-<path d="M190 120 L55 120 L55 298 L186 298" stroke="#73726c" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
-<text x="60" y="195" dominant-baseline="central" font-size="11" fill="#5F5E5A">MQTT (red de la casa)</text>
-<path d="M190 120 L190 128 L355 128 L355 162" stroke="#73726c" stroke-width="1.5" fill="none" stroke-dasharray="4 4" marker-end="url(#a)"/>
-<text x="270" y="120" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#5F5E5A">MQTT (hotspot)</text>
-<path d="M490 190 L625 190 L625 298 L320 298" stroke="#73726c" stroke-width="1.5" fill="none" stroke-dasharray="4 4" marker-end="url(#a)"/>
-<text x="560" y="240" dominant-baseline="central" font-size="11" fill="#5F5E5A">bridge por Tailscale</text>
-<path d="M490 120 L490 128 L340 128 L340 266" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
-<text x="370" y="120" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#5F5E5A">MQTT</text>
-<path d="M510 120 L622 120 L622 266 L500 266 L500 270" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
-<text x="550" y="195" dominant-baseline="central" font-size="11" fill="#5F5E5A">Audio WebSocket</text>
-<line x1="324" y1="298" x2="356" y2="298" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
-<line x1="140" y1="326" x2="140" y2="370" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
-<line x1="290" y1="326" x2="290" y2="370" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
-<line x1="424" y1="398" x2="456" y2="398" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
-<path d="M320 162 L660 162 L660 598 L320 598" stroke="#73726c" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
-<text x="322" y="154" dominant-baseline="central" font-size="11" fill="#5F5E5A">voz</text>
-<path d="M190 574 L190 460 L540 460 L540 426" stroke="#73726c" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
-<text x="440" y="452" dominant-baseline="central" font-size="11" fill="#5F5E5A">HTTPS /alexa</text>
-<line x1="140" y1="426" x2="140" y2="500" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
-<line x1="540" y1="426" x2="540" y2="500" stroke="#73726c" stroke-width="1.5" fill="none" marker-start="url(#a)" marker-end="url(#a)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 650" width="830" height="650" font-family="DejaVu Sans, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#73726c"/>
+    </marker>
+  </defs>
+  <rect width="830" height="650" fill="#ffffff"/>
+  <rect x="30" y="30" width="740" height="210" rx="12" fill="none" stroke="#b4b2a9" stroke-dasharray="5 4"/>
+  <text x="50" y="56" font-size="14" font-weight="bold" fill="#2c2c2a">Sala (casa)</text>
+  <rect x="30" y="280" width="740" height="206" rx="12" fill="none" stroke="#b4b2a9" stroke-dasharray="5 4"/>
+  <text x="755" y="302" font-size="14" font-weight="bold" fill="#2c2c2a" text-anchor="end">Servidor (VM, Docker Compose)</text>
+  <rect x="30" y="526" width="740" height="100" rx="12" fill="none" stroke="#b4b2a9" stroke-dasharray="5 4"/>
+  <text x="50" y="546" font-size="14" font-weight="bold" fill="#2c2c2a">Fuera de la casa</text>
+  <g font-size="12">
+    <rect x="50" y="70" width="220" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56"/>
+    <text x="160" y="93" text-anchor="middle" font-size="14" font-weight="bold" fill="#0F6E56">Nodo ESP32</text>
+    <text x="160" y="112" text-anchor="middle" fill="#0F6E56">DHT22, MQ-2, PIR, relé, buzzer</text>
+    <rect x="300" y="70" width="220" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56"/>
+    <text x="410" y="93" text-anchor="middle" font-size="14" font-weight="bold" fill="#0F6E56">Satélite (laptop)</text>
+    <text x="410" y="112" text-anchor="middle" fill="#0F6E56">Micrófono, Piper, mpv y YouTube</text>
+    <rect x="550" y="70" width="200" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56"/>
+    <text x="650" y="93" text-anchor="middle" font-size="14" font-weight="bold" fill="#0F6E56">Echo Pop</text>
+    <text x="650" y="112" text-anchor="middle" fill="#0F6E56">Alexa</text>
+    <rect x="170" y="164" width="220" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-dasharray="5 3"/>
+    <text x="280" y="187" text-anchor="middle" font-size="14" font-weight="bold" fill="#0F6E56">Mosquitto de la laptop</text>
+    <text x="280" y="206" text-anchor="middle" fill="#0F6E56">solo con hotspot del iPhone</text>
+  </g>
+  <g font-size="12">
+    <rect x="50" y="310" width="280" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7"/>
+    <text x="190" y="333" text-anchor="middle" font-size="14" font-weight="bold" fill="#3C3489">Broker Mosquitto</text>
+    <text x="190" y="352" text-anchor="middle" fill="#534AB7">MQTT con ACL por usuario</text>
+    <rect x="440" y="310" width="310" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7"/>
+    <text x="595" y="333" text-anchor="middle" font-size="14" font-weight="bold" fill="#3C3489">Servidor de voz</text>
+    <text x="595" y="352" text-anchor="middle" fill="#534AB7">Vosk con gramática</text>
+    <rect x="50" y="410" width="200" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7"/>
+    <text x="150" y="433" text-anchor="middle" font-size="14" font-weight="bold" fill="#3C3489">Orquestador</text>
+    <text x="150" y="452" text-anchor="middle" fill="#534AB7">Reglas y SQLite</text>
+    <rect x="300" y="410" width="200" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7"/>
+    <text x="400" y="433" text-anchor="middle" font-size="14" font-weight="bold" fill="#3C3489">Panel web</text>
+    <text x="400" y="452" text-anchor="middle" fill="#534AB7">FastAPI y Flutter</text>
+    <rect x="550" y="410" width="200" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7"/>
+    <text x="650" y="433" text-anchor="middle" font-size="14" font-weight="bold" fill="#3C3489">Tailscale</text>
+    <text x="650" y="452" text-anchor="middle" fill="#534AB7">Funnel HTTPS</text>
+  </g>
+  <g font-size="12">
+    <rect x="50" y="556" width="200" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A"/>
+    <text x="150" y="579" text-anchor="middle" font-size="14" font-weight="bold" fill="#2c2c2a">Telegram del familiar</text>
+    <text x="150" y="598" text-anchor="middle" fill="#5F5E5A">Alertas y chat</text>
+    <rect x="300" y="556" width="200" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A"/>
+    <text x="400" y="579" text-anchor="middle" font-size="14" font-weight="bold" fill="#2c2c2a">Navegador del familiar</text>
+    <text x="400" y="598" text-anchor="middle" fill="#5F5E5A">Panel por enlace público</text>
+    <rect x="550" y="556" width="200" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A"/>
+    <text x="650" y="579" text-anchor="middle" font-size="14" font-weight="bold" fill="#2c2c2a">Nube de Amazon</text>
+    <text x="650" y="598" text-anchor="middle" fill="#5F5E5A">Skill «Asistente de casa»</text>
+  </g>
+  <g fill="none" stroke="#73726c" stroke-width="1.3">
+    <path d="M80,126 L80,310" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M220,126 L220,164" stroke-dasharray="5 3" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M260,220 L260,310" stroke-dasharray="5 3" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M420,126 L420,294 L315,294 L315,310" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M480,126 L480,310" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M330,338 L440,338" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M150,366 L150,410" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M315,366 L315,410" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M500,438 L550,438" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M200,466 L200,556" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M600,466 L600,506 L400,506 L400,556" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M700,556 L700,466" marker-end="url(#a)"/>
+    <path d="M750,98 L800,98 L800,584 L750,584" marker-end="url(#a)"/>
+  </g>
+  <g font-size="11" fill="#5F5E5A">
+    <text x="88" y="186">MQTT</text>
+    <text x="88" y="200">(casa)</text>
+    <text x="227" y="149">MQTT (hotspot)</text>
+    <text x="266" y="265">bridge por Tailscale</text>
+    <text x="426" y="265">MQTT</text>
+    <text x="486" y="265">audio (WebSocket)</text>
+    <text x="785" y="91" text-anchor="middle">voz</text>
+    <text x="706" y="510">HTTPS /alexa</text>
+  </g>
 </svg>

@@ -492,5 +492,5 @@ Al cierre de la semana 7, la fase entrega lo siguiente:
 - [ ] Video de demostración del flujo completo, que también sirve de respaldo en la presentación. (No se entrega: la demostración es en vivo por videollamada, decisión del 1 nov.)
 - [ ] Documentos de las Etapas 3 y 5 actualizados.
 - [x] Guion de la demostración, con su variante 100 % local: `herramientas/GUION.md`.
-- [ ] Diagrama de arquitectura general del sistema, actualizado con la versión final (Paso 5).
+- [x] Diagrama de arquitectura general del sistema, actualizado con la versión final (Paso 5): `fase4_md/img/arquitectura.svg`.
 - [ ] Mediciones de latencia por etapa.

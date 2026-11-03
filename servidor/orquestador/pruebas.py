@@ -3372,7 +3372,7 @@ if ruta_firmware:
 
     # Hora (decision 7). El NTP primario es el de la VM y el respaldo el publico.
     prueba("el NTP primario es el de la VM y el respaldo el publico",
-           'NTP_PRIMARIO[] = "192.168.1.169"' in hora_cpp
+           'NTP_CASA[] = "192.168.1.169"' in hora_cpp
            and 'NTP_RESPALDO[] = "pool.ntp.org"' in hora_cpp, hora_cpp[:400])
     prueba("el reintento sin hora baja de 60 s a 5 s",
            "MS_REINTENTO_SIN_HORA = 5000UL" in hora_cpp, None)

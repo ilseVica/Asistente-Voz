@@ -388,6 +388,8 @@ Las mediciones de la etapa A (11-10-2026, con el arnés y audio sintético): del
 
 Si la velocidad de subida medida en el lugar es menor a 1 Mbit/s, la demostración usa la variante mínima y el video.
 
+Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a «botón de luz y alarma de gas», porque desde el 1 nov Alexa usa la skill (pasa por el servidor) y ya no funciona con el servidor apagado.
+
 ### Casos de prueba
 
 | ID | Caso de prueba | Resultado esperado | Tipo | Resultado |
@@ -415,15 +417,15 @@ Si la velocidad de subida medida en el lugar es menor a 1 Mbit/s, la demostraci�
 | P21 | Con Tailscale cortado, publicar 10 alertas QoS 1 en la laptop y reconectar | Llegan las 10 al servidor, cada una una sola vez | R | Aprobada |
 | P22 | Se cortan los datos del hotspot 2 minutos y se publica el comando de prueba de gas desde la laptop | Suena el buzzer; el panel muestra «sitio sin conexión» en menos de 90 s; al volver, se reenvían los mensajes pendientes | A | Aprobada |
 | P23 | Se corta Tailscale entre la laptop y el servidor durante 2 minutos | El panel muestra «sitio sin conexión» en menos de 90 s y se recupera solo | R | Aprobada |
-| P24 | Reinicio ordenado del servidor | La VM, Docker y el nodo de Funnel arrancan solos; el puente y el satélite se reconectan | R | Parcial (reinicio no planeado) Reinicio ordenado no ejecutado antes del 4 nov (riesgo antes de la entrega). |
+| P24 | Reinicio ordenado del servidor | La VM, Docker y el nodo de Funnel arrancan solos; el puente y el satélite se reconectan | R | Parcial (reinicio no planeado). Reinicio ordenado no ejecutado antes del 4 nov (riesgo antes de la entrega). |
 | P25 | Corte y regreso de la corriente del host | El host enciende solo, los servicios vuelven y la hora es correcta | A | No ejecutada antes del 4 nov: cortar la corriente del host es un riesgo antes de la entrega. |
-| P26 | Se corta el Internet de la casa, se genera una alerta, se reinicia la VM y vuelve el Internet | La alerta se entrega una sola vez | A | Parcial Prueba completa en la presentación formal (riesgo antes de la entrega). |
+| P26 | Se corta el Internet de la casa, se genera una alerta, se reinicia la VM y vuelve el Internet | La alerta se entrega una sola vez | A | Parcial. Prueba completa en la presentación formal (riesgo antes de la entrega). |
 | P27 | Se desconecta el ESP32 | El panel lo marca como desconectado | R | Aprobada |
 | P28 | Se reinicia el ESP32 y se vuelve a publicar el comando de prueba de gas | La alerta llega con un id nuevo y Telegram la recibe | A | Aprobada |
 | P29 | Orden de voz mientras suena la alarma de gas | El asistente avisa del gas una vez por episodio y ejecuta la orden; el buzzer sigue sonando | A | Pendiente |
 | P30 | Orden de luz desde el panel | El relé se activa, el panel se actualiza y el asistente no habla | A | Aprobada |
 | P31 | Botón físico de luz | El relé alterna y el estado se publica con origen «boton» | R | Aprobada |
-| P32 | Variante mínima con el servidor apagado: botón de luz, Alexa y alarma de gas | Las tres funcionan | A | Pendiente |
+| P32 | Variante mínima con el servidor apagado: botón de luz y alarma de gas | Las dos funcionan sin servidor. Alexa no: desde el 1 nov usa la skill, que pasa por el servidor | A | Pendiente |
 | P33 | Modo instalación: servidor y sitio en la misma red, sin Internet y con el navegador sin caché | Voz, reglas y panel funcionan sin ningún recurso externo; las alertas quedan en cola | A | No ejecutada antes del 4 nov: requiere apagar el Internet de la casa (riesgo antes de la entrega). |
 | P34 | Se apaga el hotspot principal y se enciende el de respaldo, sin tocar ningún dispositivo | La laptop, el ESP32 y el Echo Pop se reconectan solos | A | Presentación formal: requiere el hotspot. |
 | P35 | Primer turno después de arrancar el satélite | Se mide; si pasa de 2.5 s, el satélite precarga Piper al arrancar | A | Parcial |
@@ -435,7 +437,7 @@ Si la velocidad de subida medida en el lugar es menor a 1 Mbit/s, la demostraci�
 | P41 | El usuario responde por voz al familiar (opcional) | La respuesta aparece transcrita en el chat | A | Aprobada |
 | P42 | Publicar una orden de luz con ts de hace 60 segundos | La luz no se enciende y el ESP32 registra el descarte por antigüedad | R | Aprobada |
 | P43 | Publicar en satelite/decir, con ts de hace 60 segundos, una respuesta y un recordatorio | La respuesta no se dice; el recordatorio sí | R | Sin dato |
-| P44 | Reiniciar el ESP32 en modo instalación, sin Internet | Obtiene la hora del NTP del servidor y las órdenes de voz funcionan | A | Parcial Prueba sin Internet en la presentación formal. |
+| P44 | Reiniciar el ESP32 en modo instalación, sin Internet | Obtiene la hora del NTP del servidor y las órdenes de voz funcionan | A | Parcial. Prueba sin Internet en la presentación formal. |
 | P45 | Con el Wi-Fi del ESP32 cortado, disparar el gas por monitor serie, esperar 2 minutos y restaurar la red | La alerta llega una sola vez, con el mismo id que se generó durante el corte | A | Aprobada |
 | P46 | Publicar una orden de luz sin el campo ts | La luz no cambia y el ESP32 registra el descarte | R | Aprobada |
 

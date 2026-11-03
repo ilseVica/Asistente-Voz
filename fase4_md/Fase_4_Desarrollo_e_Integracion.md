@@ -393,7 +393,7 @@ Si la velocidad de subida medida en el lugar es menor a 1 Mbit/s, la demostraci�
 | ID | Caso de prueba | Resultado esperado | Tipo | Resultado |
 | --- | --- | --- | --- | --- |
 | P01 | «Enciende la luz» a 1 y 1.5 m con el servidor remoto, 10 repeticiones por distancia | Mediana ≤ 2.5 s y ningún caso > 3 s; se reportan mediana y máximo | A | Pendiente |
-| P02 | El mismo comando a 3 m, con conversación grabada de fondo | Se registra la tasa de aciertos (informativa, no bloquea la entrega) | A | Pendiente |
+| P02 | El mismo comando a 3 m, con conversación grabada de fondo | Se registra la tasa de aciertos (informativa, no bloquea la entrega) | A | Informativa, no bloquea la entrega. No medida antes del 4 nov. |
 | P03 | Frase fuera de la gramática | El asistente pide repetir sin ejecutar nada | A | Aprobada |
 | P04 | El usuario dice «necesito ayuda» | Llega una alerta a Telegram con el botón «Abrir panel» y el panel muestra la ayuda activa | A | Aprobada |
 | P05 | «Alexa, necesito ayuda», dicho dos veces en 30 s | Llega una sola alerta a Telegram | A | Parcial |
@@ -406,7 +406,7 @@ Si la velocidad de subida medida en el lugar es menor a 1 Mbit/s, la demostraci�
 | P12 | Verificar la hora del servidor y crear desde el panel un recordatorio para dentro de 2 minutos | El asistente lo dice en voz alta a la hora indicada (±15 s) | A | Parcial |
 | P13 | Cancelar un recordatorio desde el panel | No suena | A | Pendiente |
 | P14 | El asistente habla con la pausa del micrófono activa | El satélite no envía audio mientras Piper suena | R | Sin dato |
-| P15 | El asistente habla con la captura forzada (sin pausa) | No ejecuta ninguna orden a partir de su propia voz | A | Pendiente |
+| P15 | El asistente habla con la captura forzada (sin pausa) | No ejecuta ninguna orden a partir de su propia voz | A | No ejecutada antes del 4 nov: no bloquea la entrega. |
 | P16 | Una alerta llega dos veces al servidor, con un reinicio del servidor entre ambas | Telegram recibe un solo mensaje | R | Aprobada |
 | P17 | Botón «Ya lo atendí» en Telegram, en el aviso de cada familiar | La alerta se marca como resuelta y el asistente avisa al usuario; lo puede pulsar cualquiera de los familiares registrados y el mensaje se reescribe en su chat | A | Aprobada |
 | P18 | Acceso al panel desde un celular con datos móviles (sin Tailscale) | El panel se abre en `https://asistente.tail722206.ts.net` sin instalar nada; el WebSocket se conecta | R | Aprobada |
@@ -415,19 +415,19 @@ Si la velocidad de subida medida en el lugar es menor a 1 Mbit/s, la demostraci�
 | P21 | Con Tailscale cortado, publicar 10 alertas QoS 1 en la laptop y reconectar | Llegan las 10 al servidor, cada una una sola vez | R | Aprobada |
 | P22 | Se cortan los datos del hotspot 2 minutos y se publica el comando de prueba de gas desde la laptop | Suena el buzzer; el panel muestra «sitio sin conexión» en menos de 90 s; al volver, se reenvían los mensajes pendientes | A | Aprobada |
 | P23 | Se corta Tailscale entre la laptop y el servidor durante 2 minutos | El panel muestra «sitio sin conexión» en menos de 90 s y se recupera solo | R | Aprobada |
-| P24 | Reinicio ordenado del servidor | La VM, Docker y el nodo de Funnel arrancan solos; el puente y el satélite se reconectan | R | Parcial (reinicio no planeado) |
-| P25 | Corte y regreso de la corriente del host | El host enciende solo, los servicios vuelven y la hora es correcta | A | Pendiente |
-| P26 | Se corta el Internet de la casa, se genera una alerta, se reinicia la VM y vuelve el Internet | La alerta se entrega una sola vez | A | Parcial |
+| P24 | Reinicio ordenado del servidor | La VM, Docker y el nodo de Funnel arrancan solos; el puente y el satélite se reconectan | R | Parcial (reinicio no planeado) Reinicio ordenado no ejecutado antes del 4 nov (riesgo antes de la entrega). |
+| P25 | Corte y regreso de la corriente del host | El host enciende solo, los servicios vuelven y la hora es correcta | A | No ejecutada antes del 4 nov: cortar la corriente del host es un riesgo antes de la entrega. |
+| P26 | Se corta el Internet de la casa, se genera una alerta, se reinicia la VM y vuelve el Internet | La alerta se entrega una sola vez | A | Parcial Prueba completa en la presentación formal (riesgo antes de la entrega). |
 | P27 | Se desconecta el ESP32 | El panel lo marca como desconectado | R | Aprobada |
 | P28 | Se reinicia el ESP32 y se vuelve a publicar el comando de prueba de gas | La alerta llega con un id nuevo y Telegram la recibe | A | Aprobada |
 | P29 | Orden de voz mientras suena la alarma de gas | El asistente avisa del gas una vez por episodio y ejecuta la orden; el buzzer sigue sonando | A | Pendiente |
 | P30 | Orden de luz desde el panel | El relé se activa, el panel se actualiza y el asistente no habla | A | Aprobada |
 | P31 | Botón físico de luz | El relé alterna y el estado se publica con origen «boton» | R | Aprobada |
 | P32 | Variante mínima con el servidor apagado: botón de luz, Alexa y alarma de gas | Las tres funcionan | A | Pendiente |
-| P33 | Modo instalación: servidor y sitio en la misma red, sin Internet y con el navegador sin caché | Voz, reglas y panel funcionan sin ningún recurso externo; las alertas quedan en cola | A | Pendiente |
-| P34 | Se apaga el hotspot principal y se enciende el de respaldo, sin tocar ningún dispositivo | La laptop, el ESP32 y el Echo Pop se reconectan solos | A | Pendiente |
+| P33 | Modo instalación: servidor y sitio en la misma red, sin Internet y con el navegador sin caché | Voz, reglas y panel funcionan sin ningún recurso externo; las alertas quedan en cola | A | No ejecutada antes del 4 nov: requiere apagar el Internet de la casa (riesgo antes de la entrega). |
+| P34 | Se apaga el hotspot principal y se enciende el de respaldo, sin tocar ningún dispositivo | La laptop, el ESP32 y el Echo Pop se reconectan solos | A | Presentación formal: requiere el hotspot. |
 | P35 | Primer turno después de arrancar el satélite | Se mide; si pasa de 2.5 s, el satélite precarga Piper al arrancar | A | Parcial |
-| P36 | Consumo de datos durante un ensayo de 30 minutos | Se registra y se compara con el paquete del celular | A | Pendiente |
+| P36 | Consumo de datos durante un ensayo de 30 minutos | Se registra y se compara con el paquete del celular | A | Presentación formal: requiere datos móviles. |
 | P37 | Panel en Safari del iPhone, agregado a la pantalla de inicio | Abre desde el ícono; si la versión de iOS no lo permite, se usa desde Safari | A | Aprobada |
 | P38 | APK en Android con datos móviles | Entra por Tailscale con su token y muestra lo mismo que la web | A | No aplica (APK fuera del alcance; en Android se usa la web) |
 | P39 | Con el panel abierto, se corta el Internet del iPhone durante 1 minuto | Al volver, el panel muestra el estado actual sin recargar | R | Aprobada |
@@ -435,7 +435,7 @@ Si la velocidad de subida medida en el lugar es menor a 1 Mbit/s, la demostraci�
 | P41 | El usuario responde por voz al familiar (opcional) | La respuesta aparece transcrita en el chat | A | Aprobada |
 | P42 | Publicar una orden de luz con ts de hace 60 segundos | La luz no se enciende y el ESP32 registra el descarte por antigüedad | R | Aprobada |
 | P43 | Publicar en satelite/decir, con ts de hace 60 segundos, una respuesta y un recordatorio | La respuesta no se dice; el recordatorio sí | R | Sin dato |
-| P44 | Reiniciar el ESP32 en modo instalación, sin Internet | Obtiene la hora del NTP del servidor y las órdenes de voz funcionan | A | Parcial |
+| P44 | Reiniciar el ESP32 en modo instalación, sin Internet | Obtiene la hora del NTP del servidor y las órdenes de voz funcionan | A | Parcial Prueba sin Internet en la presentación formal. |
 | P45 | Con el Wi-Fi del ESP32 cortado, disparar el gas por monitor serie, esperar 2 minutos y restaurar la red | La alerta llega una sola vez, con el mismo id que se generó durante el corte | A | Aprobada |
 | P46 | Publicar una orden de luz sin el campo ts | La luz no cambia y el ESP32 registra el descarte | R | Aprobada |
 

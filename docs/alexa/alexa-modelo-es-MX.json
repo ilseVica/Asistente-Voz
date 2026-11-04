@@ -3,59 +3,45 @@
     "languageModel": {
       "invocationName": "asistente de casa",
       "intents": [
-        {
-          "name": "AMAZON.CancelIntent",
-          "samples": []
-        },
-        {
-          "name": "AMAZON.HelpIntent",
-          "samples": []
-        },
-        {
-          "name": "AMAZON.StopIntent",
-          "samples": []
-        },
-        {
-          "name": "AMAZON.NavigateHomeIntent",
-          "samples": []
-        },
+        { "name": "AMAZON.CancelIntent", "samples": [] },
+        { "name": "AMAZON.HelpIntent", "samples": [] },
+        { "name": "AMAZON.StopIntent", "samples": [] },
+        { "name": "AMAZON.FallbackIntent", "samples": [] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": [] },
         {
           "name": "EncenderLuz",
           "slots": [],
           "samples": [
-            "enciende la luz",
-            "prende la luz",
-            "encienda la luz",
-            "prenda la luz"
+            "enciende la luz", "prende la luz", "enciende la luz de la sala",
+            "prende la luz de la sala", "pon la luz", "activa la luz",
+            "enciéndeme la luz", "encienda la luz", "prenda la luz",
+            "que encienda la luz", "que prenda la luz"
           ]
         },
         {
           "name": "ApagarLuz",
           "slots": [],
           "samples": [
-            "apaga la luz",
-            "apague la luz"
+            "apaga la luz", "apaga la luz de la sala", "quita la luz",
+            "desactiva la luz", "apaga", "apaga la luz por favor",
+            "oscurece la sala", "apague la luz", "que apague la luz"
           ]
         },
         {
           "name": "Ayuda",
           "slots": [],
           "samples": [
-            "ayuda",
-            "necesito ayuda",
-            "pida ayuda",
-            "llame a mi familia"
+            "necesito ayuda", "auxilio", "ayúdame", "socorro",
+            "llama a mi familia", "pido ayuda", "pida ayuda",
+            "llame a mi familia", "que pida ayuda", "que llame a mi familia"
           ]
         },
         {
           "name": "NivelAgua",
           "slots": [],
           "samples": [
-            "el nivel del agua",
-            "nivel del agua",
-            "cuanta agua hay",
-            "cuanta agua queda",
-            "como esta el agua"
+            "el nivel del agua", "nivel del agua", "cuánta agua hay",
+            "cuánta agua queda", "cómo está el agua", "cuál es el nivel del agua"
           ]
         }
       ],

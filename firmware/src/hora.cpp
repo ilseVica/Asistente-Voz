@@ -15,7 +15,7 @@ constexpr char ETIQUETA[] = "hora";
 // VM todavia sin configurar chrony (6.5), la hora llegaba solo si habia internet,
 // que es exactamente lo que la VM esta puesta para no depender.
 constexpr char NTP_CASA[] = "192.168.1.169";
-constexpr char NTP_PUBLICO[] = "pool.ntp.org";
+constexpr char NTP_RESPALDO[] = "pool.ntp.org";
 constexpr char NTP_ZONA[] = "UTC0";  // se guarda UTC y se convierte al publicar
 
 // 2024-01-01T00:00:00Z. Antes de esto, el reloj no se considera ajustado. Sin
@@ -38,9 +38,9 @@ void intentar_sincronizar() {
   if (red_indice_actual() == 2) {
     // Hotspot: internet del celular. La laptop como segundo servidor (por mDNS o
     // respaldo) solo si sirve NTP; el repositorio no tiene evidencia de ello.
-    configTime(0, 0, NTP_PUBLICO, MQTT2_HOST_RESPALDO);
+    configTime(0, 0, NTP_RESPALDO, MQTT2_HOST_RESPALDO);
   } else {
-    configTime(0, 0, NTP_CASA, NTP_PUBLICO);
+    configTime(0, 0, NTP_CASA, NTP_RESPALDO);
   }
 }
 }  // namespace

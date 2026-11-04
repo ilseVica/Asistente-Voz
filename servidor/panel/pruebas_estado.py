@@ -223,6 +223,25 @@ prueba("los sensores se renombran (temp_c -> temperatura_c, etc.)",
        and inst["sensores"]["movimiento"] is True
        and inst["sensores"]["gas_adc"] == 300, inst["sensores"])
 
+# Nivel de agua: agua_estado calculado por el servidor (mismas constantes).
+for pct, esperado in ((19, "bajo"), (20, "normal"), (90, "normal"), (91, "lleno")):
+    sala.recibir(config.TOPICO_SENSORES,
+                 '{"temp_c":24.3,"hum_pct":51.0,"presencia":true,"gas_adc":300,'
+                 '"agua_pct":%d}' % pct)
+    inst = sala.instantanea(base1)
+    prueba("agua_estado con %d %% es %s" % (pct, esperado),
+           inst["sensores"].get("agua_pct") == pct
+           and inst["sensores"].get("agua_estado") == esperado,
+           inst["sensores"])
+# Sin lectura, agua_estado es null.
+sala.recibir(config.TOPICO_SENSORES,
+             '{"temp_c":24.3,"hum_pct":51.0,"presencia":true,"gas_adc":300,'
+             '"agua_pct":null}')
+inst = sala.instantanea(base1)
+prueba("agua_pct null deja agua_estado en null",
+       inst["sensores"].get("agua_pct") is None
+       and inst["sensores"].get("agua_estado") is None, inst["sensores"])
+
 # Un latido con los tres campos sin dato (null): el firmware los manda así cuando
 # el DHT22 falla, el MQ-2 calienta o la bandera del sensor está en false. El
 # servidor NO los convierte en ceros ni los descarta: los deja pasar como null, que

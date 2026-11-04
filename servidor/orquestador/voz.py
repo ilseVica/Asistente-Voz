@@ -725,7 +725,7 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
     if intencion == "AGUA":
         ts = _ultimos_sensores.get("ts")
         if ts is None or (int(time.time()) - int(ts)) > 300:
-            _publicar_respuesta(publicar, "No tengo lectura del agua.", frase_id)
+            _publicar_respuesta(publicar, textos.RESPUESTA_AGUA_SIN_LECTURA, frase_id)
             return True
         agua = _ultimos_sensores.get("agua_pct")
         try:
@@ -733,16 +733,10 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
         except (TypeError, ValueError):
             agua_txt = None
         if agua_txt is None:
-            _publicar_respuesta(publicar, "No tengo lectura del agua.", frase_id)
+            _publicar_respuesta(publicar, textos.RESPUESTA_AGUA_SIN_LECTURA, frase_id)
             return True
         pct = int(agua_txt)
-        if pct > 90:
-            respuesta = "El agua esta casi llena, al %d por ciento." % pct
-        elif pct <= 20:
-            respuesta = "El agua esta baja, al %d por ciento." % pct
-        else:
-            respuesta = "El agua esta al %d por ciento." % pct
-        _publicar_respuesta(publicar, respuesta, frase_id)
+        _publicar_respuesta(publicar, textos.respuesta_agua(pct), frase_id)
         return True
 
     if intencion == "RECORDATORIOS":

@@ -28,6 +28,8 @@ uint8_t agua_buffer_n = 0;
 uint8_t agua_buffer_idx = 0;
 bool agua_hay_mediana = false;
 int agua_cm_mediana = 0;
+uint32_t ultima_lectura_agua_valida_ms = 0;
+bool agua_perdida_log = false;
 
 #if DHT22_HABILITADO
 // El DHT22 se lee como mucho una vez cada DHT22_MS_ENTRE_LECTURAS; tres lecturas
@@ -198,6 +200,12 @@ void sensores_iniciar() {
   mq2_log_listo = false;
   log_info("sensores", "MQ-2 calentando (%lu s): gas_adc sale null hasta que este listo",
            static_cast<unsigned long>(MQ2_MS_CALIENTE / 1000UL));
+#endif
+
+#if AGUA_HABILITADO
+  pinMode(GPIO_PIN_AGUA_TRIG, OUTPUT);
+  digitalWrite(GPIO_PIN_AGUA_TRIG, LOW);
+  pinMode(GPIO_PIN_AGUA_ECHO, INPUT);
 #endif
 
   proxima_publicacion_minima_ms = 0;
@@ -503,6 +511,21 @@ void sensores_agua_tarea() {
   }
 #if AGUA_HABILITADO
   const uint32_t ahora = millis();
+
+  // Caducidad: 3 s sin lectura valida vacia el buffer.
+  if (agua_hay_mediana && ultima_lectura_agua_valida_ms != 0 &&
+      (int32_t)(ahora - ultima_lectura_agua_valida_ms) > 3000) {
+    agua_buffer_n = 0;
+    agua_buffer_idx = 0;
+    agua_hay_mediana = false;
+    agua_cm_mediana = 0;
+    ultima_lectura_agua_valida_ms = 0;
+    if (!agua_perdida_log) {
+      log_aviso("sensores", "nivel de agua sin lectura valida: se publica null");
+      agua_perdida_log = true;
+    }
+  }
+
   if (proxima_medicion_agua_ms != 0 &&
       (int32_t)(ahora - proxima_medicion_agua_ms) < 0) {
     return;
@@ -523,6 +546,11 @@ void sensores_agua_tarea() {
   if (cm < AGUA_ZONA_CIEGA_CM || cm > AGUA_DISTANCIA_MAX_CM) {
     return;
   }
+  if (agua_perdida_log) {
+    log_info("sensores", "nivel de agua recuperado");
+    agua_perdida_log = false;
+  }
+  ultima_lectura_agua_valida_ms = ahora;
   agua_buffer[agua_buffer_idx] = cm;
   agua_buffer_idx = (agua_buffer_idx + 1) % AGUA_LECTURAS_MEDIANA;
   if (agua_buffer_n < AGUA_LECTURAS_MEDIANA) {

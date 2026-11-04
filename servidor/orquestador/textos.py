@@ -19,6 +19,7 @@ módulo en vez de copiar la frase, salvo las que comprueban la redacción exacta
 """
 
 import time
+import config
 
 # =============================================================================
 # Hablado (satelite/decir)
@@ -75,7 +76,9 @@ def eco(texto: str) -> str:
     return ECO.format(texto=texto.strip())
 
 
-def aviso_atendida(tipo: str) -> str:
+def aviso_atendida(tipo: str):
+    if tipo == "agua":
+        return None
     return AVISO_ATENDIDA.get(tipo, AVISO_ATENDIDA_OTRO)
 
 def aviso_falsa_alarma(cuando: int) -> str:
@@ -223,10 +226,20 @@ ALERTA_DESCONOCIDA = "Aviso de la casa: {texto}\n\nReferencia de la alerta: {id}
 
 ALERTA_AGUA = (
     "ALERTA DE NIVEL DE AGUA en la casa.\n\n"
-    "El agua del bote esta {estado} ({valor} %).\n\n"
+    "El agua del bote está {estado} ({valor} %).\n\n"
     "Referencia de la alerta: {id}"
 )
 
+
+RESPUESTA_AGUA_SIN_LECTURA = "No tengo lectura del agua."
+
+
+def respuesta_agua(pct: int) -> str:
+    if pct > config.AGUA_LLENO_ABRE_PCT:
+        return "El agua está casi llena, al %d por ciento." % pct
+    if pct < config.AGUA_BAJO_ABRE_PCT:
+        return "El agua está baja, al %d por ciento." % pct
+    return "El agua está al %d por ciento." % pct
 
 def alerta_gas(lugar: str, valor, id_alerta: str) -> str:
     return _contraer(ALERTA_GAS.format(lugar=lugar, valor=valor, id=id_alerta))
@@ -270,6 +283,7 @@ ATENDIDA_FRASE = {
     "gas": "La alerta de gas se marcó como atendida",
     "ayuda": "La petición de ayuda se marcó como atendida",
     "inactividad": "El aviso de inactividad se marcó como atendido",
+    "agua": "El aviso de nivel de agua se marcó como atendido",
 }
 ATENDIDA_FRASE_OTRO = "El aviso se marcó como atendido"
 
@@ -353,7 +367,8 @@ ALERTAS_ESTADOS = (
 ALERTAS_ULTIMAS = "Últimas cinco:"
 ALERTAS_NINGUNA = "Todavía no hay ninguna alerta."
 
-NOMBRE_TIPO = {"gas": "alerta de gas", "ayuda": "petición de ayuda"}
+NOMBRE_TIPO = {"gas": "alerta de gas", "ayuda": "petición de ayuda",
+               "agua": "aviso de nivel de agua"}
 NOMBRE_ESTADO = {"pendiente": "pendiente", "enviada": "enviada",
                  "resuelta": "atendida", "descartada": "descartada"}
 

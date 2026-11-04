@@ -352,11 +352,14 @@ def resolver(base, publicar, id_alerta: str, ahora: int = None,
         registro.info("alerta %s (inactividad) resuelta; no se habla por "
                       "satelite/decir, es una alerta silenciosa", id_alerta)
     elif fresca:
-        if publicar is None:
+        texto = textos.aviso_atendida(tipo)
+        if texto is None:
+            registro.info("alerta %s (%s) resuelta; no se habla en la sala",
+                          id_alerta, tipo)
+        elif publicar is None:
             registro.info("alerta %s resuelta; no hay cliente MQTT, no se avisa a "
                           "satelite/decir", id_alerta)
         else:
-            texto = textos.aviso_atendida(tipo)
             try:
                 publicar(
                     config.TOPICO_SATELITE_DECIR,

@@ -1746,6 +1746,40 @@ prueba("ayuda reciente: no publica de nuevo", len(pubs) == 0, pubs)
 # Restaurar.
 api_modulo.alexa.verificar = _verificar_original
 
+
+# Nivel de agua en Alexa.
+titulo("Alexa NivelAgua")
+api_modulo.alexa.verificar = lambda h, b: _env_launch
+for pct, esperado in ((None, "No tengo lectura del agua."),
+                      (15, "El agua está baja, al 15 por ciento."),
+                      (60, "El agua está al 60 por ciento."),
+                      (95, "El agua está casi llena, al 95 por ciento.")):
+    if pct is None:
+        api_modulo.estados.recibir(config.TOPICO_SENSORES,
+            '{"temp_c":24,"hum_pct":50,"presencia":true,"gas_adc":100,"agua_pct":null}')
+    else:
+        api_modulo.estados.recibir(config.TOPICO_SENSORES,
+            '{"temp_c":24,"hum_pct":50,"presencia":true,"gas_adc":100,"agua_pct":%d}' % pct)
+    env = _envelope({
+        "version": "1.0",
+        "session": {"application": {"applicationId": "skill-pruebas"},
+                    "user": {"userId": "amzn1.ask.account.U"}, "new": True},
+        "context": {"System": {"application": {"applicationId": "skill-pruebas"},
+                               "device": {"deviceId": "dev"}, "user": {"userId": "u"}}},
+        "request": {"type": "IntentRequest", "requestId": "ra",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "intent": {"name": "NivelAgua"}},
+    })
+    api_modulo.alexa.verificar = lambda h, b, env=env: env
+    r = cliente.post("/alexa", json={})
+    prueba("NivelAgua %s: 200" % ("null" if pct is None else pct),
+           r.status_code == 200, r.status_code)
+    if r.status_code == 200:
+        texto = r.json()["response"]["outputSpeech"]["text"]
+        prueba("NivelAgua %s: texto exacto" % ("null" if pct is None else pct),
+               texto == esperado, (texto, esperado))
+api_modulo.alexa.verificar = _verificar_original
+
 cliente.__exit__(None, None, None)
 
 print("\n" + "=" * 66)

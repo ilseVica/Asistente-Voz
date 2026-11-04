@@ -4590,6 +4590,15 @@ apuntes2, publicar2 = publicar_que_recoge()
 agua.registrar_sensores('{"agua_pct":12}', ahora=1002, publicar=publicar2)
 prueba("mientras sigue bajo no se repite la alerta", apuntes2 == [], apuntes2)
 
+# «Ya lo atendí» de agua no habla en la sala.
+apuntes3, publicar3 = publicar_que_recoge()
+alertas.resolver(base_a, publicar3, id_bajo, ahora=1002)
+prueba("resolver agua no publica en satelite/decir", apuntes3 == [], apuntes3)
+prueba("y atendida de agua existe",
+       "agua" in textos.ATENDIDA_FRASE, textos.ATENDIDA_FRASE.get("agua"))
+prueba("aviso_atendida(agua) es None",
+       textos.aviso_atendida("agua") is None)
+
 # Cierre por histeresis: >25 cierra
 agua.registrar_sensores('{"agua_pct":30}', ahora=1003, publicar=publicar)
 prueba("una lectura >25 cierra el episodio BAJO", agua.tipo_actual is None,

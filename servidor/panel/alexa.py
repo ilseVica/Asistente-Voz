@@ -166,17 +166,14 @@ def _agua(mqtt, estados, base) -> tuple:
         pct = estados.instantanea(base)["sensores"].get("agua_pct") if estados is not None else None
     except Exception:  # noqa: BLE001
         pct = None
+    import textos
     if pct is None:
-        return 200, _salida("No tengo lectura del agua.")
+        return 200, _salida(textos.RESPUESTA_AGUA_SIN_LECTURA)
     try:
         pct_int = int(round(float(pct)))
     except (TypeError, ValueError):
-        return 200, _salida("No tengo lectura del agua.")
-    if pct_int > 90:
-        return 200, _salida("El agua esta casi llena, al %d por ciento." % pct_int)
-    if pct_int <= 20:
-        return 200, _salida("El agua esta baja, al %d por ciento." % pct_int)
-    return 200, _salida("El agua esta al %d por ciento." % pct_int)
+        return 200, _salida(textos.RESPUESTA_AGUA_SIN_LECTURA)
+    return 200, _salida(textos.respuesta_agua(pct_int))
 
 def despachar(envelope, mqtt, estados, base) -> tuple:
     from ask_sdk_model.launch_request import LaunchRequest

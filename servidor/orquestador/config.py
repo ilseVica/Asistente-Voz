@@ -80,6 +80,7 @@ TOPICO_ALERTA_AYUDA = "casa/sala/alerta/ayuda"
 # reloj de inactividad vive aqui (`inactividad.py`) y publica en este topico, que
 # el panel escucha. La familia la recibe por Telegram por la cola, como las demas.
 TOPICO_ALERTA_INACTIVIDAD = "casa/sala/alerta/inactividad"
+TOPICO_ALERTA_AGUA = "casa/sala/alerta/agua"
 
 # Donde se publica lo que el asistente dice en voz alta. Lo usa el bot cuando el
 # familiar pulsa "Ya lo atendi", para que el sitio se entere de que alguien ya
@@ -140,6 +141,23 @@ GAS_OFF_ADC = int(os.environ.get("GAS_OFF_ADC", "1550"))
 if not (ADC_MINIMO < GAS_OFF_ADC < GAS_ON_ADC < ADC_MAXIMO):
     GAS_ON_ADC = 1800
     GAS_OFF_ADC = 1550
+
+# Calibracion del nivel de agua, en cm. El firmware las recibe por nodo/config
+# (retenido) y las guarda en NVS. Calibrar = medir, editar .env y reiniciar
+# el orquestador.
+AGUA_VACIO_CM = int(os.environ.get("AGUA_VACIO_CM", "30"))
+AGUA_LLENO_CM = int(os.environ.get("AGUA_LLENO_CM", "5"))
+if not (0 < AGUA_LLENO_CM < AGUA_VACIO_CM <= 400):
+    AGUA_VACIO_CM = 30
+    AGUA_LLENO_CM = 5
+
+# Episodios de agua. Se abre con una sola lectura fuera del umbral; la
+# histeresis (20/25 y 90/85) evita el parpadeo.
+AGUA_BAJO_ABRE_PCT = 20
+AGUA_BAJO_CIERRA_PCT = 25
+AGUA_LLENO_ABRE_PCT = 90
+AGUA_LLENO_CIERRA_PCT = 85
+AGUA_LECTURAS_PARA_ABRIR = 1
 
 # Orígenes que admite el contrato para las órdenes, el estado de la luz y las
 # alertas de ayuda (plan, línea 195).

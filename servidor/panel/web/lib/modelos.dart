@@ -48,6 +48,9 @@ class Sensores {
     required this.humedadPct,
     required this.movimiento,
     required this.gasAdc,
+    this.aguaPct,
+    this.aguaCm,
+    this.aguaEstado,
     required this.recibidoEn,
   });
 
@@ -56,6 +59,9 @@ class Sensores {
   final num? humedadPct;
   final bool? movimiento;
   final num? gasAdc;
+  final num? aguaPct;
+  final num? aguaCm;
+  final String? aguaEstado;
   final int? recibidoEn;
 
   factory Sensores.desde(Map<String, dynamic> json) => Sensores(
@@ -64,6 +70,9 @@ class Sensores {
         humedadPct: json['humedad_pct'] as num?,
         movimiento: json['movimiento'] as bool?,
         gasAdc: json['gas_adc'] as num?,
+        aguaPct: json['agua_pct'] as num?,
+        aguaCm: json['agua_cm'] as num?,
+        aguaEstado: json['agua_estado'] as String?,
         recibidoEn: json['recibido_en'] as int?,
       );
 }

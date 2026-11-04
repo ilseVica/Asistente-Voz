@@ -160,6 +160,24 @@ def _ayuda(mqtt, estados, base) -> tuple:
     return 200, _salida(textos.RESPUESTA_AYUDA)
 
 
+def _agua(mqtt, estados, base) -> tuple:
+    pct = None
+    try:
+        pct = estados.instantanea(base)["sensores"].get("agua_pct") if estados is not None else None
+    except Exception:  # noqa: BLE001
+        pct = None
+    if pct is None:
+        return 200, _salida("No tengo lectura del agua.")
+    try:
+        pct_int = int(round(float(pct)))
+    except (TypeError, ValueError):
+        return 200, _salida("No tengo lectura del agua.")
+    if pct_int > 90:
+        return 200, _salida("El agua esta casi llena, al %d por ciento." % pct_int)
+    if pct_int <= 20:
+        return 200, _salida("El agua esta baja, al %d por ciento." % pct_int)
+    return 200, _salida("El agua esta al %d por ciento." % pct_int)
+
 def despachar(envelope, mqtt, estados, base) -> tuple:
     from ask_sdk_model.launch_request import LaunchRequest
     from ask_sdk_model.intent_request import IntentRequest
@@ -193,4 +211,6 @@ def despachar(envelope, mqtt, estados, base) -> tuple:
             return _luz("off", mqtt, estados, base)
         if nombre in ("Ayuda", "PedirAyuda", "SolicitarAyuda", "NecesitoAyuda"):
             return _ayuda(mqtt, estados, base)
+        if nombre == "NivelAgua":
+            return _agua(mqtt, estados, base)
     return 200, _salida("No le entendí.")

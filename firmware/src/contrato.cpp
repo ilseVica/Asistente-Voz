@@ -19,6 +19,7 @@ SemaphoreHandle_t semaforo = nullptr;
 String pendiente_luz_set;
 String pendiente_nodo_config;
 String pendiente_prueba_gas;
+String pendiente_prueba_agua;
 
 void bloquear() {
   if (semaforo != nullptr) {
@@ -122,6 +123,12 @@ void manejar_nodo_config(const String &payload) {
   if (documento["gas_on_adc"].is<int>()) {
     persistencia_fijar_umbral_gas(documento["gas_on_adc"].as<int>());
   }
+  if (documento["agua_vacio_cm"].is<int>()) {
+    persistencia_fijar_agua_vacio_cm(documento["agua_vacio_cm"].as<int>());
+  }
+  if (documento["agua_lleno_cm"].is<int>()) {
+    persistencia_fijar_agua_lleno_cm(documento["agua_lleno_cm"].as<int>());
+  }
 }
 
 // El payload es un entero y nada mas: opcional menos y solo digitos. Sirve para
@@ -189,6 +196,40 @@ void manejar_prueba_gas(const String &payload) {
   sensores_fijar_gas_prueba(valor);
 }
 
+void manejar_prueba_agua(const String &payload) {
+  if (payload.isEmpty()) {
+    log_aviso(ETIQUETA, "prueba_agua vacio, se descarta");
+    return;
+  }
+  int valor = 0;
+  bool desde_json = false;
+  JsonDocument documento;
+  if (!deserializeJson(documento, payload) && documento[JSON_CLAVE_AGUA_PCT].is<int>()) {
+    valor = documento[JSON_CLAVE_AGUA_PCT].as<int>();
+    desde_json = true;
+  } else if (es_entero(payload)) {
+    valor = payload.toInt();
+    log_aviso(ETIQUETA, "prueba_agua en texto plano; el contrato es {\"%s\":N}",
+              JSON_CLAVE_AGUA_PCT);
+  }
+  if (valor < 0 || valor > 100) {
+    // OFF se maneja por texto plano "OFF": valor 0? El usuario pide AGUA OFF.
+    // Aceptamos 0 como nivel valido (bote vacio), asi que OFF llega como texto.
+    if (payload.equalsIgnoreCase("OFF") || payload.equalsIgnoreCase("REAL") ||
+        payload.equalsIgnoreCase("AUTO")) {
+      log_info(ETIQUETA, "prueba_agua real por serie");
+      sensores_fijar_agua_prueba(-1);
+      return;
+    }
+    log_aviso(ETIQUETA, "prueba_agua '%s' fuera de 0..100, se descarta",
+              payload.c_str());
+    return;
+  }
+  log_info(ETIQUETA, "prueba_agua (%s): agua forzada a %d %%",
+           desde_json ? "json" : "texto plano", valor);
+  sensores_fijar_agua_prueba(valor);
+}
+
 }  // namespace
 
 void contrato_iniciar() {
@@ -207,6 +248,10 @@ void contrato_recibir_nodo_config(const String &payload) {
 
 void contrato_recibir_prueba_gas(const String &payload) {
   guardar(pendiente_prueba_gas, payload);
+}
+
+void contrato_recibir_prueba_agua(const String &payload) {
+  guardar(pendiente_prueba_agua, payload);
 }
 
 String contrato_tomar_luz_set() {
@@ -233,6 +278,14 @@ String contrato_tomar_prueba_gas() {
   return valor;
 }
 
+String contrato_tomar_prueba_agua() {
+  bloquear();
+  const String valor = pendiente_prueba_agua;
+  pendiente_prueba_agua = "";
+  desbloquear();
+  return valor;
+}
+
 void contrato_tarea() {
   // Una sola etapa: se toma el payload crudo que dejo la tarea de ESP32MQTTClient,
   // se valida aqui y se aplica. La validacion NO puede vivir en el callback porque
@@ -251,5 +304,10 @@ void contrato_tarea() {
   const String prueba = contrato_tomar_prueba_gas();
   if (!prueba.isEmpty()) {
     manejar_prueba_gas(prueba);
+  }
+
+  const String prueba_agua = contrato_tomar_prueba_agua();
+  if (!prueba_agua.isEmpty()) {
+    manejar_prueba_agua(prueba_agua);
   }
 }

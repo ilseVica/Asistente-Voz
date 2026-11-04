@@ -19,9 +19,12 @@ struct Lectura {
   bool hay_temp = false;
   bool hay_hum = false;
   bool hay_gas = false;
+  bool hay_agua = false;
   float temp_c = 0.0;
   int hum_pct = 0;
   int gas_adc = 0;
+  int agua_pct = 0;
+  int agua_cm = 0;
   bool presencia = false;
 };
 
@@ -53,3 +56,14 @@ bool sensores_gas_prueba_expirado();
 // leer el pin real. El enclavamiento funciona igual con el valor forzado.
 void sensores_fijar_pir_prueba(int valor);
 int sensores_pir_prueba_actual();
+
+// Medicion no bloqueante del nivel de agua: una sola lectura por llamada.
+// Se llama desde el loop cada AGUA_INTERVALO_MS. La mediana de las ultimas
+// AGUA_LECTURAS_MEDIANA validas queda cacheada para sensores_leer().
+void sensores_agua_tarea();
+
+// Valor forzado por nodo/prueba_agua y por el comando AGUA del monitor serie
+// (solo con PRUEBAS=1). -1 vuelve a la lectura real.
+void sensores_fijar_agua_prueba(int valor_pct);
+int sensores_agua_prueba_actual();
+bool sensores_agua_prueba_expirado();

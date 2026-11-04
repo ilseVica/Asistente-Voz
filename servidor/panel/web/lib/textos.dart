@@ -89,6 +89,7 @@ class Textos {
   static const String temperatura = 'Temperatura';
   static const String humedad = 'Humedad';
   static const String gas = 'Gas';
+  static const String agua = 'Agua';
   static const String movimiento = 'Movimiento';
   static const String noSeDetectaGas = 'No se detecta gas';
   static const String ahoraMismo = 'Ahora mismo';
@@ -153,6 +154,9 @@ class Textos {
   static const String ayudaGenerica = 'Se pidió ayuda.';
   static const String seRecibioUnAviso = 'Se recibió un aviso.';
   static const String alertaDeGas = 'Alerta de gas';
+  static const String alertaDeAgua = 'Alerta de agua';
+  static const String aguaBajaEnLaSala = 'Nivel de agua bajo';
+  static const String aguaLlenaEnLaSala = 'Nivel de agua alto';
   static const String peticionDeAyuda = 'Petición de ayuda';
   static const String sinMovimientoEnLaCasa = 'Sin movimiento en la casa';
   static const String haDichoTenerMiedo = 'Ha dicho que tiene miedo';
@@ -261,6 +265,9 @@ class Textos {
   // --- La tarjeta de gas -----------------------------------------------------
 
   static const String gasNormal = 'Normal';
+  static const String aguaNormal = 'Normal';
+  static const String aguaBaja = 'Nivel bajo';
+  static const String aguaLlena = 'Nivel alto';
   static const String gasElevado = 'Gas elevado';
   static const String gasDetectado = 'Gas detectado';
   static const String lectura = 'Lectura: ';
@@ -516,6 +523,8 @@ String tituloAlerta(String tipo) {
       return Textos.peticionDeAyuda;
     case 'inactividad':
       return Textos.sinMovimientoEnLaCasa;
+    case 'agua':
+      return Textos.alertaDeAgua;
     case 'miedo':
       return Textos.haDichoTenerMiedo;
     default:

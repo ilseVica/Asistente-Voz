@@ -40,10 +40,12 @@ bool mqtt_suscribir() {
   bool ok = ok_luz && ok_cfg;
 #if PRUEBAS == 1
   // Este topic solo existe en el firmware de pruebas (6.10).
-  const bool ok_prueba =
+  const bool ok_prueba_gas =
       cliente.subscribe(TOPIC_PRUEBA_GAS, sin_callback, QOS_PRUEBA_GAS_SUSCRIPCION);
-  ok = ok && ok_prueba;
-  log_info(ETIQUETA, "PRUEBAS=1: suscrito a %s y comandos GAS por serie", TOPIC_PRUEBA_GAS);
+  const bool ok_prueba_agua =
+      cliente.subscribe(TOPIC_PRUEBA_AGUA, sin_callback, QOS_PRUEBA_GAS_SUSCRIPCION);
+  ok = ok && ok_prueba_gas && ok_prueba_agua;
+  log_info(ETIQUETA, "PRUEBAS=1: suscrito a %s y %s", TOPIC_PRUEBA_GAS, TOPIC_PRUEBA_AGUA);
 #endif
   return ok;
 }
@@ -154,6 +156,8 @@ bool mqtt_iniciar() {
 #if PRUEBAS == 1
     else if (t == TOPIC_PRUEBA_GAS) {
       contrato_recibir_prueba_gas(p);
+    } else if (t == TOPIC_PRUEBA_AGUA) {
+      contrato_recibir_prueba_agua(p);
     }
 #endif
   });

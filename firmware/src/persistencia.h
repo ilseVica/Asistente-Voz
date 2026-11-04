@@ -28,6 +28,13 @@ void persistencia_fijar_umbral_gas(int valor);
 int persistencia_umbral_cierre_gas();
 void persistencia_fijar_umbral_cierre_gas(int valor);
 
+// Calibracion del nivel de agua, en cm (vacio > lleno). Llegan por nodo/config.
+int persistencia_agua_vacio_cm();
+void persistencia_fijar_agua_vacio_cm(int valor);
+
+int persistencia_agua_lleno_cm();
+void persistencia_fijar_agua_lleno_cm(int valor);
+
 // Ultimo host del broker que funciono, como respaldo si secrets.h no resuelve.
 // Se guarda en claro: no es un secreto.
 String persistencia_host_previo();

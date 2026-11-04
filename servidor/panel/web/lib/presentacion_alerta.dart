@@ -58,6 +58,18 @@ PresentacionAlerta presentacionAlerta(
         colorFondo: Tema.peligro,
         peligro: true,
       );
+    case 'agua':
+      final String tipoAgua = c['tipo']?.toString() ?? 'bajo';
+      final bool bajo = tipoAgua == 'bajo';
+      return PresentacionAlerta(
+        pildora: bajo ? Textos.aguaBaja : Textos.aguaLlena,
+        titulo: bajo ? Textos.aguaBajaEnLaSala : Textos.aguaLlenaEnLaSala,
+        cuerpo: bajo ? Textos.aguaBaja : Textos.aguaLlena,
+        icono: Icons.water_drop,
+        colorTexto: Tema.tarjeta,
+        colorFondo: bajo ? Tema.peligro : Tema.ambarFondo,
+        peligro: bajo,
+      );
     case 'inactividad':
       final int min = (c['minutos'] as num?)?.toInt() ?? 0;
       return PresentacionAlerta(

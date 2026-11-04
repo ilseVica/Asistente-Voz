@@ -286,11 +286,22 @@ class EstadoSala:
             "estado": self._estado_por_antiguedad(entrada, ahora),
         }
 
+    def _agua_estado(self, carga) -> str | None:
+        pct = carga.get("agua_pct") if isinstance(carga, dict) else None
+        if not isinstance(pct, (int, float)):
+            return None
+        if pct < config.AGUA_BAJO_ABRE_PCT:
+            return "bajo"
+        if pct > config.AGUA_LLENO_ABRE_PCT:
+            return "lleno"
+        return "normal"
+
     def bloque_sensores(self, datos, ahora) -> dict:
         entrada = datos.get("sensores")
         if entrada is None:
             return {"temperatura_c": None, "humedad_pct": None, "movimiento": None,
-                    "gas_adc": None, "recibido_en": None, "estado": SIN_DATOS}
+                    "gas_adc": None, "agua_pct": None, "agua_cm": None,
+                    "agua_estado": None, "recibido_en": None, "estado": SIN_DATOS}
         carga = entrada["carga"] if isinstance(entrada["carga"], dict) else {}
         if entrada.get("recibido_en") is None:
             return {
@@ -298,6 +309,9 @@ class EstadoSala:
                 "humedad_pct": carga.get("hum_pct"),
                 "movimiento": carga.get("presencia"),
                 "gas_adc": carga.get("gas_adc"),
+                "agua_pct": carga.get("agua_pct"),
+                "agua_cm": carga.get("agua_cm"),
+                "agua_estado": self._agua_estado(carga),
                 "recibido_en": None,
                 "estado": SIN_DATOS,
             }
@@ -308,6 +322,9 @@ class EstadoSala:
             "humedad_pct": carga.get("hum_pct"),
             "movimiento": carga.get("presencia"),
             "gas_adc": carga.get("gas_adc"),
+            "agua_pct": carga.get("agua_pct"),
+            "agua_cm": carga.get("agua_cm"),
+            "agua_estado": self._agua_estado(carga),
             "recibido_en": entrada["recibido_en"],
             "estado": self._estado_por_antiguedad(entrada, ahora),
         }

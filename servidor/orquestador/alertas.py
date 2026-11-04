@@ -249,6 +249,9 @@ def texto_para_telegram(carga: dict, tipo: str) -> str:
                              "decir con palabras; el aviso dice «desde la casa»",
                              id_alerta, origen)
         return textos.alerta_ayuda(origen, id_alerta)
+    if tipo == "agua":
+        tipo_agua = carga.get("tipo", "bajo")
+        return textos.alerta_agua(tipo_agua, carga.get("agua_pct", "?"), id_alerta)
     if tipo == "inactividad":
         # La origina el propio orquestador (`inactividad.py`), no llega por MQTT,
         # pero el texto vive en `textos.py` como el de las otras dos para que un

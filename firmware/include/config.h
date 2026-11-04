@@ -67,6 +67,12 @@
 #define DHT22_HABILITADO true
 #define MQ2_HABILITADO true
 
+// HC-SR04/JSN-SR04T de nivel de agua sobre el bote. Pin TRIG de salida y ECHO de
+// solo entrada (GPIO 36), con divisor 1 kOhm / 2 kOhm a 3.3 V. Con false sale null.
+#define AGUA_HABILITADO false
+#define GPIO_PIN_AGUA_TRIG 13
+#define GPIO_PIN_AGUA_ECHO 36
+
 // El buzzer todavia no tiene modulo en la pared, pero el pin queda cableado.
 // El modulo de rele ya llego, asi que RELE_HABILITADO esta en true. Cambiar
 // cualquiera de las dos banderas no toca codigo.
@@ -128,6 +134,7 @@
 #define TOPIC_PRUEBA_GAS "casa/sala/nodo/prueba_gas"
 #define TOPIC_ALERTA_GAS "casa/sala/alerta/gas"
 #define TOPIC_ALERTA_AYUDA "casa/sala/alerta/ayuda"
+#define TOPIC_PRUEBA_AGUA "casa/sala/nodo/prueba_agua"
 
 // Claves del JSON, para que el typo se note en un solo lugar.
 #define JSON_CLAVE_ID "id"
@@ -138,6 +145,8 @@
 #define JSON_CLAVE_HUM "hum_pct"
 #define JSON_CLAVE_GAS "gas_adc"
 #define JSON_CLAVE_PRESENCIA "presencia"
+#define JSON_CLAVE_AGUA_PCT "agua_pct"
+#define JSON_CLAVE_AGUA_CM "agua_cm"
 #define JSON_CLAVE_ORIGEN "origen"
 
 // ---------------------------------------------------------------------------
@@ -188,6 +197,16 @@
 // que comprueba nodo_simulado/contrato.py. Si cambia en un sitio, cambia en los
 // tres: el nodo no puede publicar un valor que el servidor vaya a rechazar.
 #define GAS_ADC_MAXIMO 4095
+
+// Agua: una medicion por vuelta cada 400 ms y mediana de las ultimas 5 validas.
+// Rango del HC-SR04; la zona ciega cambia para JSN-SR04T (poner ~20).
+#define AGUA_INTERVALO_MS 400UL
+#define AGUA_LECTURAS_MEDIANA 5
+#define AGUA_ZONA_CIEGA_CM 2
+#define AGUA_DISTANCIA_MAX_CM 100
+#define AGUA_PULSE_TIMEOUT_US 6000UL
+#define AGUA_VACIO_CM_DEFECTO 30
+#define AGUA_LLENO_CM_DEFECTO 5
 
 // Luz. El plan define luz/set con {"estado":"on"|"off","origen":...,"ts":epoch} y
 // luz/estado con {"estado":"on"|"off","origen":...}. El ESP32 hace eco del origen

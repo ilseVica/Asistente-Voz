@@ -16,6 +16,8 @@ constexpr char CLAVE_UMBRAL[] = "umbral_gas";
 // (17) y el write fallaba en silencio. Esta clave nunca llego a grabarse, asi
 // que renombrarla no requiere migrar datos.
 constexpr char CLAVE_UMBRAL_CIERRE[] = "cierre_gas";
+constexpr char CLAVE_AGUA_VACIO[] = "agua_vacio";
+constexpr char CLAVE_AGUA_LLENO[] = "agua_lleno";
 constexpr char CLAVE_HOST[] = "host_previo";
 constexpr char CLAVE_RR_CNT[] = "rr_cnt";
 constexpr char CLAVE_RR_EPOCH[] = "rr_epoch";
@@ -25,6 +27,8 @@ uint16_t arranque_actual = 0;
 uint16_t contador_alerta = 0;
 int umbral_gas = 0;
 int umbral_cierre_gas = 0;
+int agua_vacio_cm = 0;
+int agua_lleno_cm = 0;
 String host_previo;
 uint8_t reinicios_red_cnt = 0;
 uint32_t reinicios_red_epoch = 0;
@@ -37,6 +41,8 @@ void persistencia_iniciar() {
     contador_alerta = 0;
     umbral_gas = GAS_UMBRAL_APERTURA;
     umbral_cierre_gas = GAS_UMBRAL_CIERRE;
+    agua_vacio_cm = AGUA_VACIO_CM_DEFECTO;
+    agua_lleno_cm = AGUA_LLENO_CM_DEFECTO;
     return;
   }
 
@@ -51,9 +57,17 @@ void persistencia_iniciar() {
   // clave no existe y sale el valor por defecto del contrato, que es lo correcto:
   // antes el cierre venia de restar 150 y ahora sale de aqui.
   umbral_cierre_gas = nvs.getInt(CLAVE_UMBRAL_CIERRE, GAS_UMBRAL_CIERRE);
+  agua_vacio_cm = nvs.getInt(CLAVE_AGUA_VACIO, AGUA_VACIO_CM_DEFECTO);
+  agua_lleno_cm = nvs.getInt(CLAVE_AGUA_LLENO, AGUA_LLENO_CM_DEFECTO);
   // Un cierre que no sea menor que la apertura dejaria el episodio abierto para
   // siempre: nunca se podria cumplir «menor que el de cierre». Se corrige aqui, en
   // el arranque, en vez de solo al escribir el valor.
+  if (agua_lleno_cm <= 0 || agua_lleno_cm >= agua_vacio_cm) {
+    log_aviso(ETIQUETA, "calibracion agua invalida (%d/%d), se usan defaults",
+              agua_vacio_cm, agua_lleno_cm);
+    agua_vacio_cm = AGUA_VACIO_CM_DEFECTO;
+    agua_lleno_cm = AGUA_LLENO_CM_DEFECTO;
+  }
   if (umbral_cierre_gas >= umbral_gas) {
     log_aviso(ETIQUETA, "cierre %d no es menor que apertura %d, se usa %d",
               umbral_cierre_gas, umbral_gas, GAS_UMBRAL_CIERRE);
@@ -65,8 +79,9 @@ void persistencia_iniciar() {
   reinicios_red_epoch = nvs.getULong(CLAVE_RR_EPOCH, 0);
 
   nvs.end();
-  log_info(ETIQUETA, "arranque=%u contador=%u umbral_gas=%d cierre_gas=%d",
-           arranque_actual, contador_alerta, umbral_gas, umbral_cierre_gas);
+  log_info(ETIQUETA, "arranque=%u contador=%u umbral_gas=%d cierre_gas=%d agua=%d/%d",
+           arranque_actual, contador_alerta, umbral_gas, umbral_cierre_gas,
+           agua_vacio_cm, agua_lleno_cm);
 }
 
 uint16_t persistencia_arranque_actual() {
@@ -123,6 +138,46 @@ void persistencia_fijar_umbral_cierre_gas(int valor) {
     nvs.end();
   }
   log_info(ETIQUETA, "umbral_cierre_gas ahora %d", valor);
+}
+
+
+int persistencia_agua_vacio_cm() {
+  return agua_vacio_cm;
+}
+
+void persistencia_fijar_agua_vacio_cm(int valor) {
+  if (valor <= 0 || valor > AGUA_DISTANCIA_MAX_CM) {
+    log_aviso(ETIQUETA, "vacio %d invalido, se conserva %d", valor, agua_vacio_cm);
+    return;
+  }
+  if (agua_lleno_cm > 0 && valor <= agua_lleno_cm) {
+    log_aviso(ETIQUETA, "vacio %d no es mayor que lleno %d, se conserva %d",
+              valor, agua_lleno_cm, agua_vacio_cm);
+    return;
+  }
+  agua_vacio_cm = valor;
+  if (nvs.begin(ESPACIO, false)) {
+    nvs.putInt(CLAVE_AGUA_VACIO, valor);
+    nvs.end();
+  }
+  log_info(ETIQUETA, "agua_vacio_cm ahora %d", valor);
+}
+
+int persistencia_agua_lleno_cm() {
+  return agua_lleno_cm;
+}
+
+void persistencia_fijar_agua_lleno_cm(int valor) {
+  if (valor <= 0 || valor >= agua_vacio_cm) {
+    log_aviso(ETIQUETA, "lleno %d invalido, se conserva %d", valor, agua_lleno_cm);
+    return;
+  }
+  agua_lleno_cm = valor;
+  if (nvs.begin(ESPACIO, false)) {
+    nvs.putInt(CLAVE_AGUA_LLENO, valor);
+    nvs.end();
+  }
+  log_info(ETIQUETA, "agua_lleno_cm ahora %d", valor);
 }
 
 String persistencia_host_previo() {

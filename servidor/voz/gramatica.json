@@ -116,6 +116,12 @@
       "cierra el video",
       "quita el video",
       "para el video"
+    ],
+    "AGUA": [
+      "cuanta agua hay",
+      "nivel del agua",
+      "como esta el agua",
+      "cuanta agua queda"
     ]
   }
 }

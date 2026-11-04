@@ -1,0 +1,65 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "asistente de casa",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "EncenderLuz",
+          "slots": [],
+          "samples": [
+            "enciende la luz",
+            "prende la luz",
+            "encienda la luz",
+            "prenda la luz"
+          ]
+        },
+        {
+          "name": "ApagarLuz",
+          "slots": [],
+          "samples": [
+            "apaga la luz",
+            "apague la luz"
+          ]
+        },
+        {
+          "name": "Ayuda",
+          "slots": [],
+          "samples": [
+            "ayuda",
+            "necesito ayuda",
+            "pida ayuda",
+            "llame a mi familia"
+          ]
+        },
+        {
+          "name": "NivelAgua",
+          "slots": [],
+          "samples": [
+            "el nivel del agua",
+            "nivel del agua",
+            "cuanta agua hay",
+            "cuanta agua queda",
+            "como esta el agua"
+          ]
+        }
+      ],
+      "types": []
+    }
+  }
+}

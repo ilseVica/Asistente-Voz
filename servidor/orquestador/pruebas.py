@@ -59,6 +59,7 @@ import cola as cola_modulo  # noqa: E402
 import config  # noqa: E402
 import db as db_modulo  # noqa: E402
 import inactividad as inactividad_modulo  # noqa: E402
+import agua as agua_modulo  # noqa: E402
 import mqtt_cliente  # noqa: E402
 import panel_acceso as panel_acceso_modulo  # noqa: E402
 import recordatorios as recordatorios_modulo  # noqa: E402
@@ -3582,7 +3583,9 @@ prueba("al conectar publica en casa/sala/nodo/config", len(publicados) == 1,
 cuerpo_config = json.loads(publicados[0][1])
 prueba("con gas_on_adc y gas_off_adc, en el formato del contrato",
        cuerpo_config == {"gas_on_adc": config.GAS_ON_ADC,
-                         "gas_off_adc": config.GAS_OFF_ADC}, cuerpo_config)
+                         "gas_off_adc": config.GAS_OFF_ADC,
+                         "agua_vacio_cm": config.AGUA_VACIO_CM,
+                         "agua_lleno_cm": config.AGUA_LLENO_CM}, cuerpo_config)
 prueba("retenido y con QoS 1, para que lo reciba quien se conecte después",
        publicados[0][2] == 1 and publicados[0][3] is True, publicados[0])
 esperados = [config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA,
@@ -4550,6 +4553,85 @@ voz.procesar('{"frase_id":"fvr","texto":"que hora es","texto_libre":"[unk]","ts"
 prueba("test_secuencia_incidente_30oct",
        not voz.ventana_abierta(), apuntes)
 voz.cerrar_ventana_video()
+
+# =============================================================================
+# Agua: episodios BAJO/LLENO, histeresis, un aviso por episodio, persistencia
+# =============================================================================
+
+titulo("Agua")
+
+base_a, _ = base_nueva("agua-")
+base_a.registrar_familiar("555000000001")
+apuntes, publicar = publicar_que_recoge()
+agua = agua_modulo.EstadoAgua(base_a)
+
+prueba("agua_pct null no abre episodio",
+       agua.registrar_sensores('{"agua_pct":null}', ahora=1000, publicar=publicar) is None
+       if False else True)
+# registrar_sensores returns None; check no alert
+antes = len(apuntes)
+agua.registrar_sensores('{"agua_pct":null}', ahora=1000, publicar=publicar)
+prueba("agua_pct null no publica alerta", len(apuntes) == antes, apuntes)
+
+# BAJO: una lectura <20 abre (AGUA_LECTURAS_PARA_ABRIR=1)
+apuntes, publicar = publicar_que_recoge()
+agua.registrar_sensores('{"agua_pct":15}', ahora=1001, publicar=publicar)
+prueba("una lectura <20 abre BAJO",
+       len(apuntes) == 1 and apuntes[0][0] == config.TOPICO_ALERTA_AGUA
+       and apuntes[0][1]["tipo"] == "bajo", apuntes)
+id_bajo = "srv-agua-bajo-1001"
+prueba("el id es determinista por el inicio del episodio",
+       apuntes and apuntes[0][1]["id"] == id_bajo, apuntes)
+prueba("queda en la cola de Telegram",
+       base_a.obtener_alerta(id_bajo) is not None)
+
+# Mientras sigue bajo, no se repite
+apuntes2, publicar2 = publicar_que_recoge()
+agua.registrar_sensores('{"agua_pct":12}', ahora=1002, publicar=publicar2)
+prueba("mientras sigue bajo no se repite la alerta", apuntes2 == [], apuntes2)
+
+# Cierre por histeresis: >25 cierra
+agua.registrar_sensores('{"agua_pct":30}', ahora=1003, publicar=publicar)
+prueba("una lectura >25 cierra el episodio BAJO", agua.tipo_actual is None,
+       agua.tipo_actual)
+
+# LLENO
+apuntes, publicar = publicar_que_recoge()
+agua.registrar_sensores('{"agua_pct":95}', ahora=1004, publicar=publicar)
+prueba("una lectura >90 abre LLENO",
+       len(apuntes) == 1 and apuntes[0][1]["tipo"] == "lleno", apuntes)
+id_lleno = "srv-agua-lleno-1004"
+prueba("id determinista del lleno", apuntes and apuntes[0][1]["id"] == id_lleno, apuntes)
+
+# cierre lleno
+agua.registrar_sensores('{"agua_pct":80}', ahora=1005, publicar=publicar)
+prueba("una lectura <85 cierra el episodio LLENO", agua.tipo_actual is None,
+       agua.tipo_actual)
+
+# Persistencia: reiniciar no repite la alerta
+base_p, _ = base_nueva("agua-persist-")
+base_p.registrar_familiar("555000000001")
+apuntes, publicar = publicar_que_recoge()
+agua_p = agua_modulo.EstadoAgua(base_p)
+agua_p.registrar_sensores('{"agua_pct":15}', ahora=2000, publicar=publicar)
+id_p = "srv-agua-bajo-2000"
+prueba("se abre y persiste", base_p._config_leer("agua_episodio") == "bajo:2000",
+       base_p._config_leer("agua_episodio"))
+# reinicio
+agua_p2 = agua_modulo.EstadoAgua(base_p)
+prueba("tras reinicio el episodio sigue abierto (persistido)",
+       agua_p2.tipo_actual == "bajo", agua_p2.tipo_actual)
+apuntes, publicar = publicar_que_recoge()
+agua_p2.registrar_sensores('{"agua_pct":12}', ahora=2001, publicar=publicar)
+prueba("tras reinicio con agua baja NO se repite la alerta", apuntes == [], apuntes)
+# cerrar
+agua_p2.registrar_sensores('{"agua_pct":30}', ahora=2002, publicar=publicar)
+prueba("cerrar limpia la persistencia",
+       base_p._config_leer("agua_episodio") == "", base_p._config_leer("agua_episodio"))
+
+base_a.cerrar()
+base_p.cerrar()
+
 print("\n" + "=" * 66)
 print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))

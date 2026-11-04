@@ -10,6 +10,7 @@
 #endif
 
 #include "mqtt_gestor.h"
+#include "persistencia.h"
 #include "registro.h"
 
 namespace {
@@ -17,6 +18,16 @@ namespace {
 int gas_prueba = -1;
 uint32_t gas_prueba_hasta_ms = 0;
 constexpr uint32_t GAS_PRUEBA_TIMEOUT_MS = 60000UL;
+
+int agua_prueba = -1;
+uint32_t agua_prueba_hasta_ms = 0;
+constexpr uint32_t AGUA_PRUEBA_TIMEOUT_MS = 60000UL;
+uint32_t proxima_medicion_agua_ms = 0;
+int agua_buffer[AGUA_LECTURAS_MEDIANA] = {0};
+uint8_t agua_buffer_n = 0;
+uint8_t agua_buffer_idx = 0;
+bool agua_hay_mediana = false;
+int agua_cm_mediana = 0;
 
 #if DHT22_HABILITADO
 // El DHT22 se lee como mucho una vez cada DHT22_MS_ENTRE_LECTURAS; tres lecturas
@@ -105,6 +116,7 @@ uint32_t proximo_latido_ms = 0;
 constexpr float UMBRAL_TEMP_C = 0.3f;
 constexpr float UMBRAL_HUM_PCT = 2.0f;
 constexpr int UMBRAL_GAS_ADC = 50;
+constexpr int UMBRAL_AGUA_PCT = 2;
 
 #if PIR_HABILITADO
 
@@ -191,6 +203,11 @@ void sensores_iniciar() {
   proxima_publicacion_minima_ms = 0;
   proximo_latido_ms = 0;
   hay_publicado = false;
+  proxima_medicion_agua_ms = 0;
+  agua_buffer_n = 0;
+  agua_buffer_idx = 0;
+  agua_hay_mediana = false;
+  agua_cm_mediana = 0;
 #if PIR_HABILITADO
   pir_listo_en_ms = 0;
   pir_log_listo = false;
@@ -225,6 +242,26 @@ Lectura sensores_leer() {
 #endif
 
   Lectura lectura;
+
+  // --- Agua. El valor forzado manda sobre la bandera y la medicion real.
+  if (agua_prueba >= 0) {
+    lectura.hay_agua = true;
+    lectura.agua_pct = agua_prueba;
+    lectura.agua_cm = 0;
+  } else if (agua_hay_mediana) {
+    lectura.hay_agua = true;
+    lectura.agua_cm = agua_cm_mediana;
+    const int vacio = persistencia_agua_vacio_cm();
+    const int lleno = persistencia_agua_lleno_cm();
+    if (vacio > lleno && vacio > 0) {
+      float pct = (float)(vacio - agua_cm_mediana) / (float)(vacio - lleno) * 100.0f;
+      if (pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      lectura.agua_pct = (int)(pct + 0.5f);
+    } else {
+      lectura.hay_agua = false;
+    }
+  }
 
   // --- Gas. Lo primero es el valor forzado: manda sobre la bandera y sobre el
   // calentamiento, porque es la via con la que se prueba la alarma sin sensor.
@@ -372,6 +409,12 @@ bool hay_cambio_relevante(const Lectura &lectura) {
   if (lectura.hay_gas && abs(lectura.gas_adc - publicado.gas_adc) >= UMBRAL_GAS_ADC) {
     return true;
   }
+  if (lectura.hay_agua != publicado.hay_agua) {
+    return true;
+  }
+  if (lectura.hay_agua && abs(lectura.agua_pct - publicado.agua_pct) >= UMBRAL_AGUA_PCT) {
+    return true;
+  }
   return false;
 }
 
@@ -386,6 +429,10 @@ String construir_payload(const Lectura &lectura) {
   carga += lectura.hay_hum ? String(lectura.hum_pct) : String("null");
   carga += ",\"" JSON_CLAVE_GAS "\":";
   carga += lectura.hay_gas ? String(lectura.gas_adc) : String("null");
+  carga += ",\"" JSON_CLAVE_AGUA_PCT "\":";
+  carga += lectura.hay_agua ? String(lectura.agua_pct) : String("null");
+  carga += ",\"" JSON_CLAVE_AGUA_CM "\":";
+  carga += lectura.hay_agua ? String(lectura.agua_cm) : String("null");
   carga += ",\"" JSON_CLAVE_PRESENCIA "\":" + String(lectura.presencia ? "true" : "false");
   carga += "}";
   return carga;
@@ -448,4 +495,76 @@ void sensores_tarea() {
     strcpy(motivo, "cambio");
   }
   log_info("sensores", "%s: %s", motivo, carga.c_str());
+}
+
+void sensores_agua_tarea() {
+  if (sensores_agua_prueba_expirado()) {
+    sensores_fijar_agua_prueba(-1);
+  }
+#if AGUA_HABILITADO
+  const uint32_t ahora = millis();
+  if (proxima_medicion_agua_ms != 0 &&
+      (int32_t)(ahora - proxima_medicion_agua_ms) < 0) {
+    return;
+  }
+  proxima_medicion_agua_ms = ahora + AGUA_INTERVALO_MS;
+
+  digitalWrite(GPIO_PIN_AGUA_TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(GPIO_PIN_AGUA_TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(GPIO_PIN_AGUA_TRIG, LOW);
+
+  const unsigned long duracion = pulseIn(GPIO_PIN_AGUA_ECHO, HIGH, AGUA_PULSE_TIMEOUT_US);
+  if (duracion == 0) {
+    return;
+  }
+  const int cm = (int)(duracion / 58UL);
+  if (cm < AGUA_ZONA_CIEGA_CM || cm > AGUA_DISTANCIA_MAX_CM) {
+    return;
+  }
+  agua_buffer[agua_buffer_idx] = cm;
+  agua_buffer_idx = (agua_buffer_idx + 1) % AGUA_LECTURAS_MEDIANA;
+  if (agua_buffer_n < AGUA_LECTURAS_MEDIANA) {
+    ++agua_buffer_n;
+  }
+  if (agua_buffer_n == 0) {
+    return;
+  }
+  int copia[AGUA_LECTURAS_MEDIANA];
+  for (uint8_t i = 0; i < agua_buffer_n; ++i) {
+    copia[i] = agua_buffer[i];
+  }
+  for (uint8_t i = 1; i < agua_buffer_n; ++i) {
+    int clave = copia[i];
+    int j = i;
+    while (j > 0 && copia[j - 1] > clave) {
+      copia[j] = copia[j - 1];
+      --j;
+    }
+    copia[j] = clave;
+  }
+  agua_cm_mediana = copia[agua_buffer_n / 2];
+  agua_hay_mediana = true;
+#endif
+}
+
+void sensores_fijar_agua_prueba(int valor_pct) {
+  if (valor_pct < 0) {
+    agua_prueba = -1;
+    agua_prueba_hasta_ms = 0;
+  } else {
+    agua_prueba = valor_pct;
+    agua_prueba_hasta_ms = millis() + AGUA_PRUEBA_TIMEOUT_MS;
+  }
+}
+
+bool sensores_agua_prueba_expirado() {
+  if (agua_prueba < 0) return false;
+  if (agua_prueba_hasta_ms == 0) return false;
+  return (int32_t)(agua_prueba_hasta_ms - millis()) <= 0;
+}
+
+int sensores_agua_prueba_actual() {
+  return agua_prueba;
 }

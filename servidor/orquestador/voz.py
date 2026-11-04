@@ -29,7 +29,7 @@ CONTADOR_AYUDA = [0]
 
 # Estado en memoria que actualizan los mensajes MQTT (orquestador.enrutar).
 _estado_luz = {"valor": None}   # "on" | "off" | None
-_ultimos_sensores = {"temperatura": None, "humedad": None, "ts": None}
+_ultimos_sensores = {"temperatura": None, "humedad": None, "agua_pct": None, "ts": None}
 _nodo_conectado = {"valor": None}  # True | False | None
 _ventana_hasta = {"valor": 0.0}
 _ventana_reintentos = {"valor": 0}
@@ -183,6 +183,8 @@ def actualizar_sensores(cuerpo: str) -> None:
             _ultimos_sensores["temperatura"] = carga.get("temperatura_c")
         if "humedad_pct" in carga:
             _ultimos_sensores["humedad"] = carga.get("humedad_pct")
+        if "agua_pct" in carga:
+            _ultimos_sensores["agua_pct"] = carga.get("agua_pct")
         _ultimos_sensores["ts"] = int(time.time())
 
 
@@ -716,6 +718,30 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
             respuesta = "En la sala hay %s grados y %s por ciento de humedad." % (temp_txt, hum_txt)
         else:
             respuesta = "En la sala hay %s grados." % temp_txt
+        _publicar_respuesta(publicar, respuesta, frase_id)
+        return True
+
+
+    if intencion == "AGUA":
+        ts = _ultimos_sensores.get("ts")
+        if ts is None or (int(time.time()) - int(ts)) > 300:
+            _publicar_respuesta(publicar, "No tengo lectura del agua.", frase_id)
+            return True
+        agua = _ultimos_sensores.get("agua_pct")
+        try:
+            agua_txt = str(int(round(float(agua)))) if agua is not None else None
+        except (TypeError, ValueError):
+            agua_txt = None
+        if agua_txt is None:
+            _publicar_respuesta(publicar, "No tengo lectura del agua.", frase_id)
+            return True
+        pct = int(agua_txt)
+        if pct > 90:
+            respuesta = "El agua esta casi llena, al %d por ciento." % pct
+        elif pct <= 20:
+            respuesta = "El agua esta baja, al %d por ciento." % pct
+        else:
+            respuesta = "El agua esta al %d por ciento." % pct
         _publicar_respuesta(publicar, respuesta, frase_id)
         return True
 

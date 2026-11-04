@@ -221,6 +221,12 @@ AYUDA_SIN_ORIGEN = "Se pidió ayuda desde la casa."
 
 ALERTA_DESCONOCIDA = "Aviso de la casa: {texto}\n\nReferencia de la alerta: {id}"
 
+ALERTA_AGUA = (
+    "ALERTA DE NIVEL DE AGUA en la casa.\n\n"
+    "El agua del bote esta {estado} ({valor} %).\n\n"
+    "Referencia de la alerta: {id}"
+)
+
 
 def alerta_gas(lugar: str, valor, id_alerta: str) -> str:
     return _contraer(ALERTA_GAS.format(lugar=lugar, valor=valor, id=id_alerta))
@@ -248,6 +254,11 @@ def alerta_inactividad(minutos, id_alerta: str) -> str:
     llegara se imprime lo que sea antes que romper el aviso.
     """
     return ALERTA_INACTIVIDAD.format(minutos=minutos, id=id_alerta)
+
+
+def alerta_agua(estado: str, valor, id_alerta: str) -> str:
+    texto_estado = "bajo" if estado == "bajo" else "casi lleno"
+    return ALERTA_AGUA.format(estado=texto_estado, valor=valor, id=id_alerta)
 
 
 def alerta_desconocida(texto: str, id_alerta: str) -> str:

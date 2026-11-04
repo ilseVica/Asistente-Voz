@@ -41,6 +41,7 @@ uint32_t ultimo_ciclo_ms = 0;
 // broker (ajuste C).
 constexpr char COMANDO_GAS[] = "GAS ";
 constexpr char COMANDO_PIR[] = "PIR ";
+constexpr char COMANDO_AGUA[] = "AGUA ";
 
 // Motivo del ultimo reinicio (V4 del reporte de pruebas). El contador de arranques
 // ya lo registra persistencia_iniciar(); esto anade el POR QUE, que es lo que
@@ -130,6 +131,23 @@ void manejar_comandos_de_prueba() {
       log_info("pruebas", "PIR %d por serie: presencia %s forzada",
                valor, valor == 1 ? "true" : "false");
       sensores_fijar_pir_prueba(valor);
+    } else if (linea.startsWith(COMANDO_AGUA)) {
+      String arg = linea.substring(static_cast<int>(strlen(COMANDO_AGUA)));
+      arg.trim();
+      const bool es_clear = (arg.equalsIgnoreCase("OFF") || arg.equalsIgnoreCase("REAL") ||
+                             arg.equalsIgnoreCase("AUTO") || arg == "0");
+      if (es_clear) {
+        log_info("pruebas", "AGUA real por serie: fin de la simulacion");
+        sensores_fijar_agua_prueba(-1);
+      } else {
+        const int valor = arg.toInt();
+        if (valor < 0 || valor > 100) {
+          log_aviso("pruebas", "comando '%s' sin valor valido (0..100)", linea.c_str());
+          continue;
+        }
+        log_info("pruebas", "AGUA %d por serie: nivel forzado", valor);
+        sensores_fijar_agua_prueba(valor);
+      }
     } else if (linea.length() > 0) {
       log_info("pruebas", "comando '%s' desconocido", linea.c_str());
     }
@@ -221,6 +239,7 @@ void loop() {
   if ((int32_t)(ahora - ultimo_ciclo_ms) < (int32_t)MS_TAREA_LOOP) {
     return;
   }
+  const uint32_t inicio_ciclo_ms = millis();
   ultimo_ciclo_ms = ahora;
 
   manejar_comandos_de_prueba();
@@ -234,6 +253,7 @@ void loop() {
   // GAS de la P45 la alerta nunca se llegaba a encolar.
   botones_tarea();
   gas_tarea();
+  sensores_agua_tarea();
   alexa_tarea();
   luz_tarea();
   contrato_tarea();
@@ -289,4 +309,12 @@ void loop() {
   nodo_estado_tarea();
   sensores_tarea();
   alertas_tarea();
+#if PRUEBAS == 1
+  static uint32_t proximo_log_ciclo_ms = 0;
+  if (proximo_log_ciclo_ms == 0 || (int32_t)(ahora - proximo_log_ciclo_ms) >= 0) {
+    proximo_log_ciclo_ms = ahora + 5000UL;
+    log_depurar("main", "duracion vuelta loop: %lu ms",
+                (unsigned long)(millis() - inicio_ciclo_ms));
+  }
+#endif
 }

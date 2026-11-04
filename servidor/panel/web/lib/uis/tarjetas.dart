@@ -147,6 +147,9 @@ class TarjetaAmbiente extends StatelessWidget {
             humedadPct: null,
             movimiento: null,
             gasAdc: null,
+            aguaPct: null,
+            aguaCm: null,
+            aguaEstado: null,
             recibidoEn: null);
     final int ahora = estado.ahoraServidor();
     final bool nodoConectado = estado.estado?.nodo.estado == conectado;
@@ -331,6 +334,9 @@ class TarjetaGas extends StatelessWidget {
             humedadPct: null,
             movimiento: null,
             gasAdc: null,
+            aguaPct: null,
+            aguaCm: null,
+            aguaEstado: null,
             recibidoEn: null);
     final bool nodoConectado = estado.estado?.nodo.estado == conectado;
     final num? umbral = estado.estado?.gasOnAdc;
@@ -405,6 +411,9 @@ class TarjetaMovimiento extends StatelessWidget {
             humedadPct: null,
             movimiento: null,
             gasAdc: null,
+            aguaPct: null,
+            aguaCm: null,
+            aguaEstado: null,
             recibidoEn: null);
     final bool nodoConectado = e?.nodo.estado == conectado;
 
@@ -859,6 +868,73 @@ class PiePanel extends StatelessWidget {
       ),
     );
     if (seguro == true) await estado.cerrarSesion();
+  }
+}
+
+/// La tarjeta de nivel de agua: porcentaje, barra y estado.
+class TarjetaAgua extends StatelessWidget {
+  const TarjetaAgua({super.key});
+
+  @override
+  Widget build(BuildContext contexto) {
+    final EstadoPanel estado = PanelScope.de(contexto);
+    final Sensores s = estado.estado?.sensores ??
+        const Sensores(
+            estado: sinDatos,
+            temperaturaC: null,
+            humedadPct: null,
+            movimiento: null,
+            gasAdc: null,
+            aguaPct: null,
+            aguaCm: null,
+            aguaEstado: null,
+            recibidoEn: null);
+    final bool nodoConectado = estado.estado?.nodo.estado == conectado;
+    final String? aguaEstado = s.aguaEstado;
+    String valor;
+    if (!nodoConectado) {
+      valor = Textos.sinDatos;
+    } else if (s.aguaPct == null) {
+      valor = Textos.sinSensor;
+    } else {
+      switch (aguaEstado) {
+        case 'bajo':
+          valor = Textos.aguaBaja;
+          break;
+        case 'lleno':
+          valor = Textos.aguaLlena;
+          break;
+        default:
+          valor = Textos.aguaNormal;
+      }
+    }
+    final bool hayDato = nodoConectado && s.aguaPct != null;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Icon(Icons.water_drop, color: Tema.secundario, size: 20),
+                const SizedBox(width: 8),
+                Flexible(child: Text(Textos.agua,
+                    style: const TextStyle(
+                        fontSize: 16, color: Tema.secundario,
+                        fontWeight: FontWeight.w700, fontFamily: Tema.familia))),
+                const SizedBox(width: 12),
+                Text(hayDato ? '${_num(s.aguaPct)} %' : valor,
+                    style: TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w700,
+                        color: hayDato ? Tema.primario : Tema.secundario,
+                        fontFamily: Tema.familia)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

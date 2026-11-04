@@ -275,7 +275,9 @@ class ClienteMQTT:
         self.publicar(
             config.TOPICO_NODO_CONFIG,
             {"gas_on_adc": config.GAS_ON_ADC,
-             "gas_off_adc": config.GAS_OFF_ADC},
+             "gas_off_adc": config.GAS_OFF_ADC,
+             "agua_vacio_cm": config.AGUA_VACIO_CM,
+             "agua_lleno_cm": config.AGUA_LLENO_CM},
             qos=1,
             retain=True,
         )

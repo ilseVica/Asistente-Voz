@@ -21,3 +21,4 @@ topic casa/sala/nodo/estado out 1
 topic casa/sala/luz/set in 1
 topic casa/sala/nodo/config in 1
 topic casa/sala/nodo/prueba_gas in 1
+topic casa/sala/nodo/prueba_agua in 1

@@ -29,6 +29,7 @@ import config
 import db
 import cola
 import inactividad
+import agua as agua_modulo
 import mqtt_cliente
 import recordatorios
 import registro
@@ -252,7 +253,7 @@ def tarea_conversacion(base, publicar, remitente, satelites, parando) -> None:
 
 
 def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
-            reloj=None) -> None:
+            reloj=None, agua=None) -> None:
     """Reparte un mensaje de MQTT a quien lo procesa.
 
     Es una funcion y no un `if` suelto para que se pueda probar sola, y para que el
@@ -286,6 +287,8 @@ def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
                                    satelites=satelites)
     elif reloj is not None and topico == config.TOPICO_SENSORES:
         reloj.registrar_sensores(cuerpo)
+        if agua is not None:
+            agua.registrar_sensores(cuerpo, publicar=publicar)
         voz.actualizar_sensores(cuerpo)
     elif reloj is not None and topico == config.TOPICO_NODO_ESTADO:
         reloj.registrar_nodo(cuerpo)
@@ -395,11 +398,12 @@ def main() -> int:
     # lo mueven los mensajes de sensores/nodo/enlace (en el hilo de red de paho) y
     # el ciclo de su hilo. Lleva su propio cerrojo dentro.
     reloj = inactividad.Estado(base)
+    agua = agua_modulo.EstadoAgua(base)
 
     cliente = mqtt_cliente.ClienteMQTT(
         lambda topico, cuerpo, retenido=False: enrutar(topico, cuerpo, base,
                                                        publicar_eco, retenido,
-                                                       satelites, reloj),
+                                                       satelites, reloj, agua),
         # El gancho de reconexión reinicia el reloj tras un corte de MQTT (no en la
         # primera conexión): durante el corte no llegaron los `presencia`, así que
         # avisar justo al reconectar sería una alarma ciega.

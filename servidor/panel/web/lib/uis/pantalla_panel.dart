@@ -50,6 +50,8 @@ class PantallaPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
+          const TarjetaAgua(),
+          const SizedBox(height: 20),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -88,6 +90,8 @@ class PantallaPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
+          const TarjetaAgua(),
+          const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -111,6 +115,8 @@ class PantallaPanel extends StatelessWidget {
           luz,
           const SizedBox(height: 16),
           const _RejillaMovil(),
+          const SizedBox(height: 16),
+          const TarjetaAgua(),
           const SizedBox(height: 16),
           const _ProximoRecordatorioCompacto(),
           const SizedBox(height: 16),
@@ -267,6 +273,9 @@ class _RejillaMovil extends StatelessWidget {
             humedadPct: null,
             movimiento: null,
             gasAdc: null,
+            aguaPct: null,
+            aguaCm: null,
+            aguaEstado: null,
             recibidoEn: null);
     final bool nodoConectado = e?.nodo.estado == conectado;
     final int ahora = estado.ahoraServidor();

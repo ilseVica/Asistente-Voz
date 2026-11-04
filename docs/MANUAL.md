@@ -69,6 +69,21 @@ cd /home/ilse/Servidores/Asistente-Voz
 ```
 La simulación se apaga sola a los 60 s. Para apagarla antes: `./herramientas/gas.sh 0`.
 
+Simular nivel de agua (ESP32 en el enchufe, sin monitor serie):
+```bash
+cd /home/ilse/Servidores/Asistente-Voz
+./herramientas/agua.sh 30
+```
+La simulación se apaga sola a los 60 s. Para apagarla antes: `./herramientas/agua.sh 0` (o `REAL`).
+
+Calibración del bote (nivel de agua):
+1. Medir la distancia del sensor al fondo con el bote vacío = `AGUA_VACIO_CM`.
+2. Medir la distancia del sensor a la superficie con el bote lleno = `AGUA_LLENO_CM`.
+3. Editar `servidor/.env`: `AGUA_VACIO_CM=...` y `AGUA_LLENO_CM=...`.
+4. Reiniciar el orquestador: `docker compose up -d orquestador` (publica `nodo/config` retenido).
+5. El ESP32 guarda los valores en NVS. Valores por defecto: vacío 30 cm, lleno 5 cm.
+JSN-SR04T: cambiar `AGUA_ZONA_CIEGA_CM` (2 -> 20) y recalibrar.
+
 ## 2b. Arranque para la demostración en el lugar (hotspot del iPhone, respaldo)
 
 Cuándo se usa: en el lugar de la presentación, sin depender de la red de la

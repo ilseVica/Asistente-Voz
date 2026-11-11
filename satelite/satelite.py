@@ -74,6 +74,11 @@ from websockets.exceptions import ConnectionClosed
 
 import textos
 
+try:
+    import vosk as _vosk_mod
+except Exception:  # noqa: BLE001
+    _vosk_mod = None
+
 # --- Constantes del contrato ------------------------------------------------
 
 TASA = 16000                 # Hz de captura y del contrato.
@@ -337,6 +342,11 @@ class Config:
     salida_modo: str = "audio"
     salida_carpeta: str = ""
     salida_max: int = MAX_SALIDAS
+    # Palabra de activacion «Lucia» (Vosk local). Apagada por defecto.
+    lucia_activa: bool = False
+    lucia_umbral: float = 0.5
+    lucia_saludo: bool = False
+    lucia_modelo: str = ""
 
 
 def _expandir(ruta: str) -> str:
@@ -418,6 +428,11 @@ def cargar_config(ruta: str) -> Config:
         raise ValueError("salida.modo = %r; se admite %s"
                          % (cfg.salida_modo, MODOS_SALIDA))
     cfg.salida_carpeta = salida.get("carpeta", cfg.salida_carpeta)
+    lucia = doc.get("lucia", {})
+    cfg.lucia_activa = bool(lucia.get("activa", cfg.lucia_activa))
+    cfg.lucia_umbral = float(lucia.get("umbral", cfg.lucia_umbral))
+    cfg.lucia_saludo = bool(lucia.get("saludo", cfg.lucia_saludo))
+    cfg.lucia_modelo = lucia.get("modelo", cfg.lucia_modelo)
     cfg.salida_max = int(salida.get("maximo", cfg.salida_max))
     if cfg.salida_modo == "archivo" and not cfg.salida_carpeta:
         raise ValueError("salida.modo = \"archivo\" necesita salida.carpeta")
@@ -962,6 +977,54 @@ PRIORIDAD_ALERTA = 0
 PRIORIDAD_NORMAL = 1
 
 
+class DetectorLucia:
+    """Detector in-process de la palabra de activacion con Vosk (gramatica cerrada)."""
+
+    def __init__(self, modelo_ruta: str = "", umbral: float = 0.5):
+        self.umbral = float(umbral)
+        self.modelo = None
+        self.rec = None
+        self._ultimo = 0.0
+        self._tramas = 0
+        if (_vosk_mod is not None and modelo_ruta
+                and os.path.isdir(_expandir(modelo_ruta))):
+            self.modelo = _vosk_mod.Model(_expandir(modelo_ruta))
+            gramatica = json.dumps(["lucía","luz","lucas","busca","lucha","alexa","gracias","hola","[unk]"], ensure_ascii=False)
+            self.rec = _vosk_mod.KaldiRecognizer(self.modelo, TASA, gramatica)
+
+    def disponible(self) -> bool:
+        return self.rec is not None
+
+    def alimentar(self, trama: bytes) -> bool:
+        """Devuelve True si se detecto «lucia» en esta trama (con enfriamiento)."""
+        if self.rec is None:
+            return False
+        self._tramas += 1
+        ahora = time.time()
+        if ahora - self._ultimo < 2.0:
+            # enfriamiento: no disparar dos veces seguidas
+            try:
+                self.rec.AcceptWaveform(trama)
+            except Exception:  # noqa: BLE001
+                pass
+            self._tramas = 0
+            return False
+        try:
+            _fin = self.rec.AcceptWaveform(trama)
+            if not _fin:
+                return False
+            res = json.loads(self.rec.Result())
+            texto = (res.get("text") or "").strip().lower()
+            duracion_ok = self._tramas <= 15
+            self._tramas = 0
+        except Exception:  # noqa: BLE001
+            self._tramas = 0
+            return False
+        if (texto == "lucia" or texto == "lucía") and duracion_ok:
+            self._ultimo = ahora
+            return True
+        return False
+
 class Nucleo:
     def __init__(self, cfg: Config, reproductor: Reproductor,
                  registro_lat: RegistroLatencias, loop):
@@ -1015,6 +1078,26 @@ class Nucleo:
             self._encolar_habla(MENSAJE_SIN_CONEXION, "local")
             return
         self.abrir_frase(origen="tecla")
+
+    def lucia_activa(self) -> bool:
+        return bool(getattr(self.cfg, "lucia_activa", False))
+
+    def puede_despertar(self) -> bool:
+        if not self.lucia_activa():
+            return False
+        if self.hablando:
+            return False
+        if self.frase is not None:
+            return False
+        if self.ws is None or not self.ws.listo:
+            return False
+        return True
+
+    def despertar_lucia(self) -> bool:
+        if not self.puede_despertar():
+            return False
+        self.abrir_frase(origen="lucia")
+        return True
 
     def soltar(self) -> None:
         if self.frase is not None:
@@ -1682,6 +1765,12 @@ async def ejecutar(args) -> int:
         registro.info("fin del modo archivo")
         await asyncio.sleep(1.0)
         parando.set()
+
+    if cfg.lucia_saludo:
+        try:
+            await reproductor.decir("Hola, soy Lucía.")
+        except Exception as error:  # noqa: BLE001
+            registro.warning("no se pudo decir el saludo de Lucía: %s", error)
 
     try:
         await parando.wait()

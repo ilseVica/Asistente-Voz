@@ -375,3 +375,11 @@ Agregar canciones:
    - Reconstruir y recrear voz y orquestador: `docker compose build voz orquestador`
      y `docker compose up -d --no-deps voz orquestador`.
 
+
+## Palabra de activación «Lucía»
+
+El satélite puede escuchar continuamente la palabra «Lucía» (opción `lucia.activa = true`
+en el config). Al detectarla, suena un tono corto y empieza a escuchar la frase, igual
+que con F9. Si en 5 s no se dice nada, se cierra sin responder. F9 y el botón
+«Mantener para hablar» del panel siguen funcionando como respaldo. Por defecto está
+desactivada (`lucia.activa = false`).

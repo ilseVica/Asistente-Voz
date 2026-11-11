@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import satelite  # noqa: E402
 from satelite import (  # noqa: E402
+    DetectorLucia,
     Config, Frase, Nucleo, PuenteMQTT, RegistroLatencias, ServidorTecla,
     aceptar_por_antiguedad, reloj_ms, topico_estado_de, MENSAJE_REPETIR,
     MENSAJE_SIN_CONEXION, TRAMA_BYTES,
@@ -1334,6 +1335,38 @@ class TestIdioma(Base):
         n.ws = ws
         n.abrir_frase(origen="tecla")
         self.assertEqual(ws.json[-1].get("idioma"), "es")
+
+class TestLucia(unittest.TestCase):
+    def test_detector_no_disponible_sin_modelo(self):
+        d = DetectorLucia(modelo_ruta="", umbral=0.5)
+        self.assertFalse(d.disponible())
+
+    def test_puede_despertar_respeta_guardas(self):
+        n = Nucleo.__new__(Nucleo)
+        # configuracion minima
+        n.cfg = Config() if False else None
+        # usar Config real
+        from satelite import Config
+        n.cfg = Config()
+        n.cfg.lucia_activa = True
+        n.hablando = False
+        n.frase = None
+        n.ws = None
+        self.assertFalse(n.puede_despertar())  # sin ws
+        ws = FakeWS()
+        n.ws = ws
+        self.assertTrue(n.puede_despertar())
+        n.hablando = True
+        self.assertFalse(n.puede_despertar())
+        n.hablando = False
+        n.frase = object()
+        self.assertFalse(n.puede_despertar())
+
+    def test_lucia_desactivada_por_defecto(self):
+        from satelite import Config
+        c = Config()
+        self.assertFalse(c.lucia_activa)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

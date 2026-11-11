@@ -77,3 +77,10 @@ noise_w = 1.0
 # Socket Unix local del aviso de la tecla. Si se omite:
 # $XDG_RUNTIME_DIR/asistente-satelite.sock
 socket = "$XDG_RUNTIME_DIR/asistente-satelite.sock"
+
+# [lucia]
+# Palabra de activacion con Vosk local (apagada por defecto; F9 sigue de respaldo).
+# activa = false
+# umbral = 0.5
+# saludo = false
+# modelo = "/home/USUARIO/.local/share/asistente-satelite/voces/vosk-model-small-es-0.42"

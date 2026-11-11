@@ -4204,11 +4204,19 @@ class _RelojFijo:
 
 # HORA casos
 casos_hora = [
-    ("Es la una y cinco de la tarde.", datetime(2026,10,28,13,5,0, tzinfo=ZoneInfo("America/Mazatlan"))),
-    ("Son las doce del día.", datetime(2026,10,28,12,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
-    ("Es medianoche.", datetime(2026,10,28,0,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
-    ("Son las ocho y media de la noche.", datetime(2026,10,28,20,30,0, tzinfo=ZoneInfo("America/Mazatlan"))),
-    ("Son las siete de la mañana.", datetime(2026,10,28,7,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Es medianoche.", datetime(2026,11,11,0,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y uno de la noche.", datetime(2026,11,11,0,1,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y diez de la noche.", datetime(2026,11,11,0,10,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y media de la noche.", datetime(2026,11,11,0,30,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y cincuenta de la noche.", datetime(2026,11,11,0,50,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y cincuenta y nueve de la noche.", datetime(2026,11,11,0,59,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Es la una de la mañana.", datetime(2026,11,11,1,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Es la una y diez.", datetime(2026,11,11,1,10,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las once y cuarenta y cinco.", datetime(2026,11,11,11,45,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce del día.", datetime(2026,11,11,12,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y media del día.", datetime(2026,11,11,12,30,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Es la una y cinco de la tarde.", datetime(2026,11,11,13,5,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las once y cincuenta de la noche.", datetime(2026,11,11,23,50,0, tzinfo=ZoneInfo("America/Mazatlan"))),
 ]
 for esperado, dt in casos_hora:
     voz.datetime = _RelojFijo(dt)

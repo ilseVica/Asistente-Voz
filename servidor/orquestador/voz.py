@@ -308,8 +308,8 @@ def _hora_en_palabras(ahora) -> str:
         minuto_txt = _numero_a_palabras(minuto)
     if hora == 0:
         if minuto == 30:
-            return "Es la una y media de la madrugada."
-        return "Es la una y %s de la madrugada." % minuto_txt
+            return "Son las doce y media de la noche."
+        return "Son las doce y %s de la noche." % minuto_txt
     if hora < 12:
         if hora == 1:
             if minuto == 30:

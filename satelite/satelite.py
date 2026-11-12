@@ -347,6 +347,7 @@ class Config:
     lucia_umbral: float = 0.5
     lucia_saludo: bool = False
     lucia_modelo: str = ""
+    lucia_depurar: bool = False
 
 
 def _expandir(ruta: str) -> str:
@@ -433,6 +434,7 @@ def cargar_config(ruta: str) -> Config:
     cfg.lucia_umbral = float(lucia.get("umbral", cfg.lucia_umbral))
     cfg.lucia_saludo = bool(lucia.get("saludo", cfg.lucia_saludo))
     cfg.lucia_modelo = lucia.get("modelo", cfg.lucia_modelo)
+    cfg.lucia_depurar = bool(lucia.get("depurar", cfg.lucia_depurar))
     cfg.salida_max = int(salida.get("maximo", cfg.salida_max))
     if cfg.salida_modo == "archivo" and not cfg.salida_carpeta:
         raise ValueError("salida.modo = \"archivo\" necesita salida.carpeta")
@@ -688,6 +690,34 @@ class Reproductor:
             *self._orden(), stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
             env=self.entorno)
+
+    async def tono(self) -> None:
+        """Tono corto (no Piper) para la palabra de activacion."""
+        await self.iniciar()
+        if self.salida_nula:
+            return
+        import math, struct
+        dur = 0.18
+        freq = 880.0
+        n = int(TASA * dur)
+        pcm = struct.pack("<%dh" % n,
+                          *[int(32767 * 0.25 * math.sin(2 * math.pi * freq * i / TASA))
+                            for i in range(n)])
+        if self.cfg.salida_modo == "archivo":
+            return
+        proc = await asyncio.create_subprocess_exec(
+            "pw-play", "--rate", str(self.rate), "--channels", "1",
+            "--format", "s16", "--raw",
+            *(["--target", self.cfg.salida_nodo] if self.cfg.salida_nodo else []),
+            "-", stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        assert proc.stdin is not None
+        try:
+            proc.stdin.write(pcm)
+            await proc.stdin.drain()
+        finally:
+            proc.stdin.close()
+        await proc.wait()
 
     async def cerrar(self) -> None:
         """Cierra el proceso persistente. Sin esto quedaria huerfano al salir."""
@@ -980,17 +1010,24 @@ PRIORIDAD_NORMAL = 1
 class DetectorLucia:
     """Detector in-process de la palabra de activacion con Vosk (gramatica cerrada)."""
 
-    def __init__(self, modelo_ruta: str = "", umbral: float = 0.5):
+    def __init__(self, modelo_ruta: str = "", umbral: float = 0.5, depurar: bool = False):
         self.umbral = float(umbral)
+        self.depurar = bool(depurar)
         self.modelo = None
         self.rec = None
         self._ultimo = 0.0
         self._tramas = 0
+        self._nivel = 0
         if (_vosk_mod is not None and modelo_ruta
                 and os.path.isdir(_expandir(modelo_ruta))):
             self.modelo = _vosk_mod.Model(_expandir(modelo_ruta))
             gramatica = json.dumps(["lucía","luz","lucas","busca","lucha","alexa","gracias","hola","[unk]"], ensure_ascii=False)
             self.rec = _vosk_mod.KaldiRecognizer(self.modelo, TASA, gramatica)
+            try:
+                self.rec.SetWords(True)
+            except Exception:  # noqa: BLE001
+                pass
+            registro.info("DetectorLucia: arrancado (umbral=%.2f)", self.umbral)
 
     def disponible(self) -> bool:
         return self.rec is not None
@@ -1000,6 +1037,13 @@ class DetectorLucia:
         if self.rec is None:
             return False
         self._tramas += 1
+        # nivel de audio de esta trama (para depuracion)
+        try:
+            import struct as _st
+            vals = _st.unpack("<%dh" % (len(trama)//2), trama[: (len(trama)//2)*2])
+            self._nivel = max(self._nivel, max((abs(v) for v in vals), default=0))
+        except Exception:  # noqa: BLE001
+            self._nivel = getattr(self, "_nivel", 0)
         ahora = time.time()
         if ahora - self._ultimo < 2.0:
             # enfriamiento: no disparar dos veces seguidas
@@ -1015,14 +1059,37 @@ class DetectorLucia:
                 return False
             res = json.loads(self.rec.Result())
             texto = (res.get("text") or "").strip().lower()
-            duracion_ok = self._tramas <= 15
+            # duracion de la palabra, no del segmento
+            duracion = 0.0
+            for w in (res.get("result") or []):
+                if (w.get("word") or "").lower() in ("lucia", "lucía"):
+                    duracion = float(w.get("end", 0)) - float(w.get("start", 0))
+            if duracion <= 0:
+                duracion = self._tramas * 0.1
+            duracion_ok = duracion <= 1.5
             self._tramas = 0
-        except Exception:  # noqa: BLE001
+            if self.depurar:
+                _conf = 0.0
+                if res.get("result"):
+                    _conf = float(res["result"][0].get("conf", 0.0))
+                registro.info("DetectorLucia: texto=%r conf=%.2f dur=%.2f nivel=%d %s",
+                              texto, _conf, duracion, getattr(self, "_nivel", 0),
+                              "OK" if duracion_ok else "DESCARTADO_DURACION")
+            self._nivel = 0
+        except Exception as error:  # noqa: BLE001
             self._tramas = 0
+            self._nivel = 0
+            if self.depurar:
+                registro.info("DetectorLucia: error %s", error)
             return False
-        if (texto == "lucia" or texto == "lucía") and duracion_ok:
+        if ("lucia" in texto or "lucía" in texto) and duracion_ok:
             self._ultimo = ahora
+            registro.info("DetectorLucia: «Lucía» detectada")
+            if self.depurar:
+                registro.info("DetectorLucia: disparo")
             return True
+        if self.depurar and (texto not in ("", "[unk]")):
+            registro.info("DetectorLucia: descartado texto=%r", texto)
         return False
 
 class Nucleo:
@@ -1049,6 +1116,21 @@ class Nucleo:
         # comparar prefijos fallaria con client ids como `sala` y `sala-2`.
         self._mis_frases: collections.OrderedDict = collections.OrderedDict()
         self._contador = 0
+        self.lucia_detector = None
+        if getattr(cfg, "lucia_activa", False):
+            modelo_ruta = getattr(cfg, "lucia_modelo", "") or os.path.join(
+                os.path.expanduser("~"), ".local", "share",
+                "asistente-satelite", "voces", "vosk-model-small-es-0.42")
+            self.lucia_detector = DetectorLucia(modelo_ruta=modelo_ruta,
+                                                umbral=getattr(cfg, "lucia_umbral", 0.5),
+                                                depurar=getattr(cfg, "lucia_depurar", False))
+            if not self.lucia_detector.disponible():
+                registro.error("DetectorLucia: no se pudo arrancar (modelo %s). Solo F9.",
+                               modelo_ruta)
+            self._lucia_tramas = 0
+            self._lucia_ultimo_latido = time.time()
+            self._lucia_nivel = 0
+        self._timer_lucia = None
         self.primer_turno_ms: int | None = None
         self._primer_turno_hecho = False
         self.segundos_sin_respuesta = SEGUNDOS_SIN_RESPUESTA
@@ -1097,7 +1179,79 @@ class Nucleo:
         if not self.puede_despertar():
             return False
         self.abrir_frase(origen="lucia")
+        if self._timer_lucia is not None:
+            self._timer_lucia.cancel()
+        try:
+            self._timer_lucia = self.loop.call_later(5.0, self._cerrar_lucia_por_timeout)
+        except Exception:  # noqa: BLE001
+            self._timer_lucia = None
         return True
+
+    def _cerrar_lucia_por_timeout(self) -> None:
+        if self.frase is not None and getattr(self.frase, "origen", "") == "lucia":
+            registro.info("Lucia: sin frase en 5 s, se cierra")
+            self.cerrar_frase(motivo="timeout_lucia")
+
+    async def bucle_lucia(self) -> None:
+        if self.lucia_detector is None or not self.lucia_detector.disponible():
+            return
+        while True:
+            await asyncio.sleep(0.1)
+            if self.hablando or self.frase is not None:
+                continue
+            if self.ws is None or not self.ws.listo:
+                await asyncio.sleep(1.0)
+                continue
+            proc = None
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "pw-record", "--rate", str(TASA), "--channels", "1",
+                    "--format", "s16", "--raw", "--latency", self.cfg.latencia_captura,
+                    * (["--target", self.cfg.entrada_nodo] if self.cfg.entrada_nodo else []),
+                    "-", stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL)
+                while True:
+                    if self.hablando or self.frase is not None:
+                        break
+                    trozo = await proc.stdout.read(TRAMA_BYTES)
+                    if not trozo:
+                        break
+                    if len(trozo) % 2:
+                        trozo = trozo[:-1]
+                    if not trozo:
+                        continue
+                    self._lucia_tramas += 1
+                    try:
+                        import struct as _st
+                        vals = _st.unpack("<%dh" % (len(trozo)//2), trozo[: (len(trozo)//2)*2])
+                        self._lucia_nivel = max(self._lucia_nivel, max((abs(v) for v in vals), default=0))
+                    except Exception:  # noqa: BLE001
+                        pass
+                    if self.cfg.lucia_depurar and time.time() - self._lucia_ultimo_latido >= 30:
+                        registro.info("DetectorLucia latido: tramas=%d nivel=%d", self._lucia_tramas, self._lucia_nivel)
+                        self._lucia_ultimo_latido = time.time()
+                        self._lucia_tramas = 0
+                        self._lucia_nivel = 0
+                    if self.lucia_detector.alimentar(trozo):
+                        self.hablando = True
+                        try:
+                            await self.rep.tono()
+                        except Exception as error:  # noqa: BLE001
+                            registro.warning("no se pudo tocar el tono: %s", error)
+                        self.hablando = False
+                        self.despertar_lucia()
+                        break
+            except Exception as error:  # noqa: BLE001
+                registro.warning("bucle_lucia: %s", error)
+            finally:
+                if proc is not None and proc.returncode is None:
+                    proc.terminate()
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=2)
+                    except Exception:  # noqa: BLE001
+                        proc.kill()
+                        await proc.wait()
+            await asyncio.sleep(0.5)
 
     def soltar(self) -> None:
         if self.frase is not None:
@@ -1318,15 +1472,49 @@ class Nucleo:
 
     async def _capturar(self, frase: Frase) -> None:
         max_tramas = max(1, int(self.cfg.altura_max_s * TRAMAS_POR_SEGUNDO))
+        es_lucia = (getattr(frase, "origen", "") == "lucia")
+        # silencio para cerrar una frase de Lucía cuando ya empezo a hablar
+        silencio_cierre = 15  # tramas (1.5 s)
         enviadas = 0
+        ultimo_audio = time.time()
+        hubo_audio = False
         try:
             async for trama in self.fuente.tramas():
                 if self.frase is not frase:
                     return
                 if self.ws is None or not self.ws.listo:
                     return
+                # nivel de audio de la trama
+                nivel = 0
+                try:
+                    import struct as _st
+                    vals = _st.unpack("<%dh" % (len(trama)//2), trama[: (len(trama)//2)*2])
+                    nivel = max((abs(v) for v in vals), default=0)
+                except Exception:  # noqa: BLE001
+                    nivel = 0
+                if nivel >= 300:
+                    hubo_audio = True
+                    ultimo_audio = time.time()
                 self.ws.enviar_bytes(trama)
                 enviadas += 1
+                if frase.t_final is not None:
+                    registro.info("frase %s: fin detectado por el servidor; se cierra",
+                                  frase.frase_id)
+                    self.cerrar_frase(motivo="final_servidor")
+                    return
+                if es_lucia:
+                    # cierre por silencio inicial: 5 s sin audio
+                    if not hubo_audio and enviadas >= 50:
+                        registro.info("frase %s: sin frase en 5 s, se cierra",
+                                      frase.frase_id)
+                        self.cerrar_frase(motivo="timeout_lucia")
+                        return
+                    # cierre por silencio tras hablar
+                    if hubo_audio and (time.time() - ultimo_audio) >= 1.5:
+                        registro.info("frase %s: silencio tras hablar; se cierra",
+                                      frase.frase_id)
+                        self.cerrar_frase(motivo="silencio_lucia")
+                        return
                 if enviadas >= max_tramas:
                     registro.warning("frase %s: tope de %.1f s; se cierra sola",
                                      frase.frase_id, self.cfg.altura_max_s)
@@ -1343,6 +1531,12 @@ class Nucleo:
             self.cerrar_frase(motivo="fin_fuente")
 
     def cerrar_frase(self, motivo: str = "soltar") -> None:
+        if self._timer_lucia is not None:
+            try:
+                self._timer_lucia.cancel()
+            except Exception:  # noqa: BLE001
+                pass
+            self._timer_lucia = None
         frase = self.frase
         if frase is None:
             return
@@ -1727,6 +1921,11 @@ async def ejecutar(args) -> int:
     mqttc.iniciar()
     tarea_habla = loop.create_task(nucleo.bucle_habla())
 
+    tarea_lucia = None
+    if getattr(cfg, "lucia_activa", False) and not args.fuente_archivo:
+        tarea_lucia = loop.create_task(nucleo.bucle_lucia())
+        registro.info("Lucia: bucle de escucha continua arrancado")
+
     servidor_tecla = None
     if not args.fuente_archivo:
         servidor_tecla = await ServidorTecla(cfg.socket_ruta, nucleo).servir()
@@ -1767,6 +1966,7 @@ async def ejecutar(args) -> int:
         parando.set()
 
     if cfg.lucia_saludo:
+        registro.info("Lucia: saludo «Hola, soy Lucía.»")
         try:
             await reproductor.decir("Hola, soy Lucía.")
         except Exception as error:  # noqa: BLE001
@@ -1777,6 +1977,8 @@ async def ejecutar(args) -> int:
     finally:
         registro.info("parando...")
         tarea_habla.cancel()
+        if tarea_lucia is not None:
+            tarea_lucia.cancel()
         if servidor_tecla is not None:
             servidor_tecla.close()
             await servidor_tecla.wait_closed()

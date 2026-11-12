@@ -1093,7 +1093,7 @@ class TestHablarPanel(Base):
         puente.topico_estado = topico_estado_de(cfg)
         puente.topico_hablar = "casa/sala/satelite/%s/hablar" % cfg.client_id
         puente.topico_video = "casa/sala/satelite/%s/video" % cfg.client_id
-        puente.loop = asyncio.get_event_loop()
+        puente.loop = asyncio.get_running_loop()
         puente.listo = asyncio.Event()
 
         class Msg:
@@ -1366,6 +1366,48 @@ class TestLucia(unittest.TestCase):
         from satelite import Config
         c = Config()
         self.assertFalse(c.lucia_activa)
+
+
+class TestLuciaIntegracion(unittest.IsolatedAsyncioTestCase):
+    def hacer_nucleo(self, ws=None, lucia_activa=False):
+        cfg = satelite.Config()
+        cfg.lucia_activa = lucia_activa
+        cfg.lucia_umbral = 0.5
+        cfg.lucia_modelo = ""
+        rep = FakeRep()
+        import tempfile as _tf
+        _tmp = _tf.NamedTemporaryFile(delete=False)
+        n = satelite.Nucleo(cfg, rep, RegistroLatencias(_tmp.name), asyncio.get_running_loop())
+        if ws is not None:
+            n.ws = ws
+        return n, rep
+
+    async def test_activa_false_no_crea_detector(self):
+        n, rep = self.hacer_nucleo(lucia_activa=False)
+        self.assertIsNone(n.lucia_detector)
+
+    async def test_despertar_abre_frase_y_programa_timeout(self):
+        ws = FakeWS()
+        n, rep = self.hacer_nucleo(ws=ws, lucia_activa=True)
+        # DetectorLucia puede ser None si no hay modelo; forzar uno falso disponible
+        class D:
+            def disponible(self): return True
+            def alimentar(self, t): return False
+        n.lucia_detector = D()
+        ok = n.despertar_lucia()
+        self.assertTrue(ok)
+        self.assertIsNotNone(n.frase)
+        self.assertEqual(n.frase.origen, "lucia")
+        self.assertIsNotNone(n._timer_lucia)
+
+    async def test_despertar_no_abre_si_hablando(self):
+        ws = FakeWS()
+        n, rep = self.hacer_nucleo(ws=ws, lucia_activa=True)
+        class D:
+            def disponible(self): return True
+        n.lucia_detector = D()
+        n.hablando = True
+        self.assertFalse(n.despertar_lucia())
 
 
 if __name__ == "__main__":

@@ -69,7 +69,7 @@
 
 // HC-SR04/JSN-SR04T de nivel de agua sobre el bote. Pin TRIG de salida y ECHO de
 // solo entrada (GPIO 36), con divisor 1 kOhm / 2 kOhm a 3.3 V. Con false sale null.
-#define AGUA_HABILITADO false
+#define AGUA_HABILITADO true
 #define GPIO_PIN_AGUA_TRIG 13
 #define GPIO_PIN_AGUA_ECHO 36
 

@@ -145,10 +145,11 @@ if not (ADC_MINIMO < GAS_OFF_ADC < GAS_ON_ADC < ADC_MAXIMO):
 # Calibracion del nivel de agua, en cm. El firmware las recibe por nodo/config
 # (retenido) y las guarda en NVS. Calibrar = medir, editar .env y reiniciar
 # el orquestador.
-AGUA_VACIO_CM = int(os.environ.get("AGUA_VACIO_CM", "30"))
+# recalibrado 11 nov 2026 con las pruebas con agua; el eco en las paredes acorta la lectura
+AGUA_VACIO_CM = int(os.environ.get("AGUA_VACIO_CM", "20"))
 AGUA_LLENO_CM = int(os.environ.get("AGUA_LLENO_CM", "5"))
 if not (0 < AGUA_LLENO_CM < AGUA_VACIO_CM <= 400):
-    AGUA_VACIO_CM = 30
+    AGUA_VACIO_CM = 20
     AGUA_LLENO_CM = 5
 
 # Episodios de agua. Se abre con una sola lectura fuera del umbral; la

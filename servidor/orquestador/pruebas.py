@@ -3588,6 +3588,10 @@ prueba("con gas_on_adc y gas_off_adc, en el formato del contrato",
                          "agua_lleno_cm": config.AGUA_LLENO_CM}, cuerpo_config)
 prueba("retenido y con QoS 1, para que lo reciba quien se conecte después",
        publicados[0][2] == 1 and publicados[0][3] is True, publicados[0])
+prueba("calibracion agua: agua_vacio_cm por defecto 22",
+       config.AGUA_VACIO_CM == 20, config.AGUA_VACIO_CM)
+prueba("calibracion agua: agua_lleno_cm por defecto 5",
+       config.AGUA_LLENO_CM == 5, config.AGUA_LLENO_CM)
 esperados = [config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA,
              config.TOPICO_VOZ_TEXTO, config.TOPICO_SATELITE_ESTADO,
              config.TOPICO_SENSORES, config.TOPICO_NODO_ESTADO,

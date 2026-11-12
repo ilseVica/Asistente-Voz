@@ -81,7 +81,7 @@ Calibración del bote (nivel de agua):
 2. Medir la distancia del sensor a la superficie con el bote lleno = `AGUA_LLENO_CM`.
 3. Editar `servidor/.env`: `AGUA_VACIO_CM=...` y `AGUA_LLENO_CM=...`.
 4. Reiniciar el orquestador: `docker compose up -d orquestador` (publica `nodo/config` retenido).
-5. El ESP32 guarda los valores en NVS. Valores por defecto: vacío 30 cm, lleno 5 cm.
+5. El ESP32 guarda los valores en NVS. Valores por defecto: vacío 20 cm, lleno 5 cm.
 JSN-SR04T: cambiar `AGUA_ZONA_CIEGA_CM` (2 -> 20) y recalibrar.
 
 ## 2b. Arranque para la demostración en el lugar (hotspot del iPhone, respaldo)

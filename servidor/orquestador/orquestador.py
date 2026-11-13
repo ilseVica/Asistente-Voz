@@ -173,7 +173,7 @@ def tarea_conversacion(base, publicar, remitente, satelites, parando) -> None:
                 if (not es_aviso) and hay_sat:
                     try:
                         publicar(config.TOPICO_SATELITE_DECIR,
-                                 {"texto": "Mensaje de %s: %s. Si quiere responder, mantenga presionado el botón y hable."
+                                 {"texto": "Mensaje de %s: %s. Si quiere responder, diga Lucía o mantenga presionado el botón."
                                   % (autor, texto), "tipo": "chat",
                                   "ts": int(time.time())},
                                  qos=1)

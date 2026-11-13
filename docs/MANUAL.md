@@ -153,25 +153,31 @@ Decir frases completas; las incompletas (por ejemplo «prende») se responden co
 
 **ENCENDER_LUZ:** enciende la luz, prende la luz, enciende el foco, prende el
 foco, enciende la luz de la sala, enciende la luz por favor, prende la luz por
-favor, enciende el foco por favor, prende el foco por favor.
+favor, enciende el foco por favor, prende el foco por favor, prenda la luz,
+encienda la luz, prenda el foco.
 
 **APAGAR_LUZ:** apaga la luz, apaga el foco, apaga la luz de la sala, apaga la
-luz por favor, apaga el foco por favor.
+luz por favor, apaga el foco por favor, apague la luz, apague el foco.
 
 **AYUDA:** necesito ayuda, ayuda, ayudame, auxilio, ayudame por favor, ayuda por
-favor, necesito auxilio, ayuda ya, auxilio ya.
+favor, necesito auxilio, ayuda ya, auxilio ya, ayúdeme, ayúdeme por favor,
+auxilio por favor.
 
-**CANCELAR:** cancela, olvidalo. «Cancela» deshace una petición de ayuda hecha
+**CANCELAR:** cancela, olvidalo, olvídelo, cancele. «Cancela» deshace una petición de ayuda hecha
 por voz en los 2 minutos anteriores; Telegram dice «Falsa alarma».
 
-**HORA:** que hora es, dime la hora, que horas son. Para la hora usar «dime la
+**HORA:** que hora es, dime la hora, que horas son, que hora tiene, me dice la
+hora, sabe que hora es, que hora tenemos. Para la hora usar «dime la
 hora» o «qué horas son».
 
-**FECHA:** que dia es hoy, que fecha es hoy.
+**FECHA:** que dia es hoy, que fecha es hoy, que dia es, a cuantos estamos, que
+fecha tenemos, que dia estamos.
 
-**TEMPERATURA:** que temperatura hace, como esta el clima.
+**TEMPERATURA:** que temperatura hace, como esta el clima, cuantos grados hace,
+hace calor, hace frio, que tal el clima.
 
-**RECORDATORIOS:** tengo recordatorios, que tengo hoy.
+**RECORDATORIOS:** tengo recordatorios, que tengo hoy, que recordatorios tengo,
+tengo pendientes.
 
 **ESTOY_BIEN:** avisa a mi familia que estoy bien.
 
@@ -180,6 +186,9 @@ video» a veces no se reconoce; usar «pon un video».
 
 **CERRAR_VIDEO:** cierra el video, quita el video, para el video. Para video usar
 «pon un video».
+
+**AGUA:** cuanta agua hay, nivel del agua, como esta el agua, cuanta agua queda,
+cuanta agua tiene el tinaco.
 
 ## 6. Video por voz
 

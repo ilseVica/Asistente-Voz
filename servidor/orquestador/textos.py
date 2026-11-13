@@ -235,9 +235,11 @@ RESPUESTA_AGUA_SIN_LECTURA = "No tengo lectura del agua."
 
 
 def respuesta_agua(pct: int) -> str:
-    if pct > config.AGUA_LLENO_ABRE_PCT:
+    if pct == 100:
+        return "El agua está llena, al 100 por ciento."
+    if pct >= config.AGUA_LLENO_ABRE_PCT:
         return "El agua está casi llena, al %d por ciento." % pct
-    if pct < config.AGUA_BAJO_ABRE_PCT:
+    if pct <= config.AGUA_BAJO_ABRE_PCT:
         return "El agua está baja, al %d por ciento." % pct
     return "El agua está al %d por ciento." % pct
 

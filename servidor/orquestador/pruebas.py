@@ -2680,6 +2680,25 @@ prueba("destinos: 0 de 2",
        textos.destinos(0, 2))
 prueba("destinos: sin copias, nada", textos.destinos(0, 0) == "")
 
+prueba("agua 100 por ciento: llena",
+       textos.respuesta_agua(100) == "El agua está llena, al 100 por ciento.",
+       textos.respuesta_agua(100))
+prueba("agua 99 por ciento: casi llena",
+       textos.respuesta_agua(99) == "El agua está casi llena, al 99 por ciento.",
+       textos.respuesta_agua(99))
+prueba("agua 90 por ciento: casi llena (limite)",
+       textos.respuesta_agua(90) == "El agua está casi llena, al 90 por ciento.",
+       textos.respuesta_agua(90))
+prueba("agua 50 por ciento: normal",
+       textos.respuesta_agua(50) == "El agua está al 50 por ciento.",
+       textos.respuesta_agua(50))
+prueba("agua 20 por ciento: baja (limite)",
+       textos.respuesta_agua(20) == "El agua está baja, al 20 por ciento.",
+       textos.respuesta_agua(20))
+prueba("agua 19 por ciento: baja",
+       textos.respuesta_agua(19) == "El agua está baja, al 19 por ciento.",
+       textos.respuesta_agua(19))
+
 for codigo, esperado in (("boton", "Se pidió ayuda por medio del botón de ayuda."),
                          ("voz", "Se pidió ayuda por medio del asistente de voz."),
                          ("alexa", "Se pidió ayuda por medio de Alexa."),

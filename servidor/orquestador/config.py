@@ -520,9 +520,11 @@ ALEXA_VIDEO_HABILITADO = os.environ.get("ALEXA_VIDEO_HABILITADO", "0").strip().l
 ALEXA_SKILL_ID = os.environ.get("ALEXA_SKILL_ID", "").strip()
 
 VIDEO_HABILITADO = os.environ.get("VIDEO_HABILITADO", "1").strip().lower() not in ("0", "false", "no", "")
+MUSICA_HABILITADO = os.environ.get("MUSICA_HABILITADO", "0").strip().lower() not in ("0", "false", "no", "")
 VENTANA_VIDEO_S = int(os.environ.get("VENTANA_VIDEO_S", "15"))
 # Satelite al que se le pide el video (igual que el boton para hablar).
 SATELITE_VIDEO_CLIENT_ID = os.environ.get("SATELITE_VIDEO_CLIENT_ID", "satelite-sala").strip() or "satelite-sala"
+SATELITE_MUSICA_CLIENT_ID = os.environ.get("SATELITE_MUSICA_CLIENT_ID", "satelite-sala").strip() or "satelite-sala"
 
 # Limite de caracteres de un mensaje a la sala.
 LIMITE_CHAT_CARACTERES = 200

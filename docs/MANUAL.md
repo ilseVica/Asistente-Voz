@@ -189,6 +189,9 @@ otra vez por favor.
 
 **BUENOS_DIAS:** buenos dias, buenos dias lucia, hola buenos dias.
 
+**MUSICA:** pon musica, pon una cancion, quiero escuchar musica, pon musica ranchera, pon boleros, pon musica tranquila.
+**MUSICA_CONTROL:** sube el volumen, baja el volumen, pausa la musica, sigue la musica, continua la musica, quita la musica.
+
 **ESTOY_BIEN:** avisa a mi familia que estoy bien.
 
 **BUSCAR_VIDEO:** busca un video, pon un video, quiero ver un video. «busca un

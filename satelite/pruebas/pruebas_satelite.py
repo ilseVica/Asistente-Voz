@@ -1410,5 +1410,59 @@ class TestLuciaIntegracion(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(n.despertar_lucia())
 
 
+
+class TestMusicaTanda3(unittest.TestCase):
+    def test_musica_activa_false_no_hace_nada(self):
+        import satelite, time
+        cfg = satelite.Config()
+        cfg.musica_activa = False
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.musica_disponible = True
+        nucleo.al_musica({"accion": "buscar", "consulta": "jazz", "ts": int(time.time())})
+        self.assertIsNone(nucleo._proceso_musica)
+        loop.close()
+
+    def test_quita_la_musica_no_reanuda(self):
+        import satelite, time
+        cfg = satelite.Config()
+        cfg.musica_activa = True
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.musica_disponible = True
+        nucleo._musica_pausada_por_lucia = True
+        nucleo.al_musica({"accion": "quita", "ts": int(time.time())})
+        self.assertFalse(nucleo._musica_pausada_por_lucia)
+        loop.close()
+
+    def test_alerta_cierra_musica(self):
+        import satelite, time
+        cfg = satelite.Config()
+        cfg.musica_activa = True
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.musica_disponible = True
+        nucleo._proceso_musica = None
+        nucleo.al_musica({"accion": "cerrar", "ts": int(time.time())})
+        self.assertIsNone(nucleo._proceso_musica)
+        loop.close()
+
+    def test_pausa_por_lucia_reanuda(self):
+        import satelite, time
+        cfg = satelite.Config()
+        cfg.musica_activa = True
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.musica_disponible = True
+        nucleo._musica_pausada_por_lucia = True
+        nucleo._reanudar_musica_si_pausada()
+        self.assertFalse(nucleo._musica_pausada_por_lucia)
+        loop.close()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

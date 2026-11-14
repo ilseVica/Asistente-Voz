@@ -4992,4 +4992,18 @@ prueba("buenos dias publica respuesta",
 _bd_base.cerrar()
 voz._nodo_conectado["valor"] = None
 
+
+# --- TANDA 3: MUSICA ---
+import json as _json_t3
+_ap = []
+def _pub_t3(topico, carga, qos=1, retain=False, esperar=True):
+    _ap.append((topico, carga))
+_b, _ = base_nueva("mus-")
+voz.procesar(_json_t3.dumps({"ts": int(time.time()), "texto": "pon musica ranchera",
+                             "frase_id": "fm1"}), _pub_t3, _b)
+prueba("musica deshabilitada responde no disponible",
+       any(c.get("texto") == textos.RESPUESTA_MUSICA_NO_DISPONIBLE for _, c in _ap),
+       _ap)
+_b.cerrar()
+
 sys.exit(1 if FALLOS else 0)

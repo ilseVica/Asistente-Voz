@@ -102,6 +102,7 @@ TOPICO_ESTADO_DEF = "casa/sala/satelite/{client_id}/estado"
 TOPICO_ESTADO_VIEJO = "casa/sala/satelite/estado"
 TOPICO_DECIR_DEF = "casa/sala/satelite/decir"
 TOPICO_VIDEO_DEF = "casa/sala/satelite/{client_id}/video"
+TOPICO_MUSICA_DEF = "casa/sala/satelite/{client_id}/musica"
 
 FUENTES = ("pipewire", "archivo")
 MODOS_SALIDA = ("audio", "archivo")
@@ -322,6 +323,7 @@ class Config:
     topico_estado: str = TOPICO_ESTADO_DEF
     topico_decir: str = TOPICO_DECIR_DEF
     topico_video: str = TOPICO_VIDEO_DEF
+    topico_musica: str = TOPICO_MUSICA_DEF
     entrada_nodo: str = ""
     salida_nodo: str = ""
     latencia_captura: str = "20ms"
@@ -348,6 +350,7 @@ class Config:
     lucia_saludo: bool = False
     lucia_modelo: str = ""
     lucia_depurar: bool = False
+    musica_activa: bool = False
 
 
 def _expandir(ruta: str) -> str:
@@ -435,6 +438,8 @@ def cargar_config(ruta: str) -> Config:
     cfg.lucia_saludo = bool(lucia.get("saludo", cfg.lucia_saludo))
     cfg.lucia_modelo = lucia.get("modelo", cfg.lucia_modelo)
     cfg.lucia_depurar = bool(lucia.get("depurar", cfg.lucia_depurar))
+    musica = doc.get("musica", {})
+    cfg.musica_activa = bool(musica.get("activa", cfg.musica_activa))
     cfg.salida_max = int(salida.get("maximo", cfg.salida_max))
     if cfg.salida_modo == "archivo" and not cfg.salida_carpeta:
         raise ValueError("salida.modo = \"archivo\" necesita salida.carpeta")
@@ -922,6 +927,7 @@ class PuenteMQTT:
         self.topico_estado = topico_estado_de(cfg)
         self.topico_hablar = "casa/sala/satelite/%s/hablar" % cfg.client_id
         self.topico_video = topico_video_de(cfg)
+        self.topico_musica = getattr(cfg, "topico_musica", None) or TOPICO_MUSICA_DEF.format(client_id=cfg.client_id)
         self.cliente = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=cfg.client_id,
@@ -951,6 +957,7 @@ class PuenteMQTT:
                       self.cfg.mqtt_usuario, self.cfg.client_id, self.topico_estado)
         topico_video = getattr(self, "topico_video", None) or topico_video_de(self.cfg)
         self.topico_video = topico_video
+        self.topico_musica = "casa/sala/satelite/+/musica"
         cliente.subscribe(self.cfg.topico_decir, qos=1)
         cliente.subscribe(self.topico_hablar, qos=1)
         cliente.subscribe(topico_video, qos=1)
@@ -962,6 +969,10 @@ class PuenteMQTT:
                                     "video": video},
                                    separators=(",", ":")),
                         qos=0, retain=True)
+        try:
+            cliente.subscribe(topico_musica, qos=1)
+        except Exception:  # noqa: BLE001
+            pass
         self.loop.call_soon_threadsafe(self.listo.set)
 
     def _al_mensaje(self, cliente, userdata, mensaje):
@@ -976,6 +987,10 @@ class PuenteMQTT:
             self.loop.call_soon_threadsafe(self.nucleo.al_decir, carga)
         elif mensaje.topic == (getattr(self, "topico_video", None) or topico_video_de(self.cfg)):
             self.loop.call_soon_threadsafe(self.nucleo.al_video, carga)
+        elif (getattr(self, "topico_musica", None) and mensaje.topic == self.topico_musica) \
+                or (isinstance(mensaje.topic, str) and mensaje.topic.endswith("/musica")):
+            registro.info("satelite: orden de musica recibida en %s", mensaje.topic)
+            self.loop.call_soon_threadsafe(self.nucleo.al_musica, carga)
         else:
             registro.debug("satelite: topico ignorado %s", mensaje.topic)
 
@@ -1138,6 +1153,10 @@ class Nucleo:
         self.video_disponible = bool(shutil.which("mpv") and shutil.which("yt-dlp")
                                     and os.environ.get("WAYLAND_DISPLAY"))
         self._proceso_video = None
+        self.musica_disponible = bool(shutil.which("mpv")
+                                     and os.environ.get("WAYLAND_DISPLAY"))
+        self._proceso_musica = None
+        self._musica_pausada_por_lucia = False
         self.idioma_video_pendiente = "es"
         self.idioma_video_hasta = 0.0
         if not self.video_disponible:
@@ -1178,6 +1197,10 @@ class Nucleo:
     def despertar_lucia(self) -> bool:
         if not self.puede_despertar():
             return False
+        if getattr(self, "_proceso_musica", None) is not None and getattr(self.cfg, "musica_activa", False):
+            if self._proceso_musica.poll() is None:
+                self._ipc_musica(["set_property", "pause", True])
+                self._musica_pausada_por_lucia = True
         self.abrir_frase(origen="lucia")
         if self._timer_lucia is not None:
             self._timer_lucia.cancel()
@@ -1191,6 +1214,7 @@ class Nucleo:
         if self.frase is not None and getattr(self.frase, "origen", "") == "lucia":
             registro.info("Lucia: sin frase en 5 s, se cierra")
             self.cerrar_frase(motivo="timeout_lucia")
+            self._reanudar_musica_si_pausada()
 
     async def bucle_lucia(self) -> None:
         if self.lucia_detector is None or not self.lucia_detector.disponible():
@@ -1398,6 +1422,90 @@ class Nucleo:
     def cerrar_video(self) -> None:
         self._cerrar_video()
 
+    def _ipc_musica(self, comando: list) -> None:
+        ruta = "/tmp/mpv-musica.sock"
+        try:
+            import socket as _sock
+            cli = _sock.socket(_sock.AF_UNIX, _sock.SOCK_STREAM)
+            cli.settimeout(1.0)
+            cli.connect(ruta)
+            cli.sendall((json.dumps({"command": comando}) + "\n").encode("utf-8"))
+            cli.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def al_musica(self, carga: dict) -> None:
+        """Procesa una orden de musica (buscar/controles) del orquestador."""
+        registro.info("musica: orden recibida %r", carga)
+        if not isinstance(carga, dict):
+            return
+        ts = carga.get("ts")
+        if not isinstance(ts, (int, float)) or isinstance(ts, bool):
+            return
+        if abs(time.time() - float(ts)) > 30:
+            return
+        accion = carga.get("accion")
+        if accion == "cerrar":
+            self._cerrar_musica()
+            self._musica_pausada_por_lucia = False
+            return
+        if accion == "buscar":
+            if not self.musica_disponible or not getattr(self.cfg, "musica_activa", False):
+                self._encolar_habla("No puedo poner musica en este momento.", "aviso")
+                return
+            consulta = limpiar_consulta(carga.get("consulta", ""))
+            if len(consulta) < 2:
+                return
+            self._cerrar_musica()
+            socket_ruta = "/tmp/mpv-musica.sock"
+            try:
+                os.unlink(socket_ruta)
+            except FileNotFoundError:
+                pass
+            args = ["mpv", "--no-terminal", "--no-video",
+                    "--input-ipc-server=" + socket_ruta,
+                    "ytdl://ytsearch1:%s" % consulta]
+            try:
+                self._proceso_musica = subprocess.Popen(
+                    args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    start_new_session=True)
+                self._musica_pausada_por_lucia = False
+                registro.info("musica: mpv lanzado (consulta=%r)", consulta)
+            except Exception as error:  # noqa: BLE001
+                registro.warning("musica: no se pudo lanzar mpv: %s", error)
+                self._proceso_musica = None
+            return
+        if accion == "pausa":
+            self._ipc_musica(["set_property", "pause", True])
+            return
+        if accion == "sigue":
+            self._ipc_musica(["set_property", "pause", False])
+            return
+        if accion in ("sube", "baja"):
+            delta = 10 if accion == "sube" else -10
+            self._ipc_musica(["add", "volume", delta])
+            return
+        if accion == "quita":
+            self._cerrar_musica()
+            self._musica_pausada_por_lucia = False
+            return
+
+    def _cerrar_musica(self) -> None:
+        proc = self._proceso_musica
+        self._proceso_musica = None
+        if proc is None:
+            return
+        if proc.poll() is not None:
+            return
+        try:
+            proc.terminate()
+            proc.wait(timeout=3)
+        except Exception:  # noqa: BLE001
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
+
     def enviar_archivo(self, pcm: bytes) -> tuple:
         """Manda un PCM ya validado como una frase completa. `(frase_id, error)`.
 
@@ -1530,6 +1638,12 @@ class Nucleo:
         if self.frase is frase:
             self.cerrar_frase(motivo="fin_fuente")
 
+    def _reanudar_musica_si_pausada(self) -> None:
+        if getattr(self, "_musica_pausada_por_lucia", False):
+            self._musica_pausada_por_lucia = False
+            if getattr(self, "_proceso_musica", None) is not None and self._proceso_musica.poll() is None:
+                self._ipc_musica(["set_property", "pause", False])
+
     def cerrar_frase(self, motivo: str = "soltar") -> None:
         if self._timer_lucia is not None:
             try:
@@ -1570,6 +1684,7 @@ class Nucleo:
             registro.warning("frase %s: sin final del WebSocket en %d s",
                              frase.frase_id, self.segundos_sin_respuesta)
         self._escribir_frase(frase)
+        self._reanudar_musica_si_pausada()
 
     def descartar_frase_actual(self) -> None:
         frase = self.frase

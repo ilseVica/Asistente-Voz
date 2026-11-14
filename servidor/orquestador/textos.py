@@ -70,6 +70,7 @@ RESPUESTA_NO_ENTENDI_VIDEO = "No le entendí, intente de nuevo"
 RESPUESTA_VIDEO_REINTENTAR = "No entendí, dímelo otra vez"
 RESPUESTA_VIDEO_NO_ENCONTRADO = "No encontré ese video. Puedes volver a pedirlo."
 RESPUESTA_VIDEO_NO_DISPONIBLE = "Por ahora no puedo poner videos"
+RESPUESTA_MUSICA_NO_DISPONIBLE = "Por ahora no puedo poner música."
 RESPUESTA_VIDEO_INGLES_NO_DISPONIBLE = "Ingles no disponible, busco en espanol"
 
 # El eco de prueba (se queda hasta el Paso 3).

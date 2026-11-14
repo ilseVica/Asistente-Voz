@@ -258,6 +258,22 @@ def ventana_video_abierta() -> bool:
         return False
     return ahora < _ventana_hasta["valor"] and _ventana_modo["valor"] == "video"
 
+def ventana_musica_abierta() -> bool:
+    return time.time() < _ventana_hasta["valor"] and _ventana_modo["valor"] == "musica"
+
+def abrir_ventana_musica() -> None:
+    ahora = time.time()
+    _ventana_hasta["valor"] = ahora + config.VENTANA_VIDEO_S
+    _ventana_tope["valor"] = ahora + 2 * config.VENTANA_VIDEO_S
+    _ventana_reintentos["valor"] = 1
+    _ventana_modo["valor"] = "musica"
+
+def cerrar_ventana_musica() -> None:
+    _ventana_hasta["valor"] = 0.0
+    _ventana_tope["valor"] = 0.0
+    _ventana_reintentos["valor"] = 0
+    _ventana_modo["valor"] = None
+
 def ventana_video_idioma() -> str:
     return _ventana_idioma["valor"] if _ventana_idioma["valor"] in ("es", "en") else "es"
 
@@ -391,6 +407,14 @@ def publicar_cerrar_video_por_alerta(publicar) -> None:
     except Exception:  # noqa: BLE001
         pass
 
+def publicar_cerrar_musica_por_alerta(publicar) -> None:
+    cid = getattr(config, "SATELITE_MUSICA_CLIENT_ID", config.SATELITE_VIDEO_CLIENT_ID)
+    try:
+        publicar("casa/sala/satelite/%s/musica" % cid,
+                 {"accion": "cerrar", "ts": int(time.time())}, qos=1)
+    except Exception:  # noqa: BLE001
+        pass
+
 
 _MINUTOS_TEMPORIZADOR = {
     "pon un temporizador de un minuto": 1,
@@ -489,6 +513,7 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
             if es_ayuda:
                 cerrar_ventana_video()
                 publicar_cerrar_video_por_alerta(publicar)
+                publicar_cerrar_musica_por_alerta(publicar)
                 if base is not None and hasattr(base, "hay_ayuda_reciente") \
                         and base.hay_ayuda_reciente():
                     _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)
@@ -593,11 +618,54 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
                           "idioma=%s consulta_len=%d", idioma_ventana, len(consulta))
             return True
 
+        if ventana_musica_abierta():
+            es_ayuda = (_frase_a_intencion.get(normalizar(texto)) == "AYUDA"
+                        or _frase_a_intencion.get(normalizar(texto_libre)) == "AYUDA")
+            if es_ayuda:
+                cerrar_ventana_musica()
+                publicar_cerrar_musica_por_alerta(publicar)
+                _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA, frase_id)
+                return True
+            if (normalizar(texto) == "cancela"
+                    or normalizar(texto_libre) == "cancela"
+                    or _frase_a_intencion.get(normalizar(texto)) == "CANCELAR"
+                    or _frase_a_intencion.get(normalizar(texto_libre)) == "CANCELAR"):
+                cerrar_ventana_musica()
+                _publicar_respuesta(publicar, textos.RESPUESTA_CANCELAR, frase_id)
+                return True
+            termino_invalido = no_entendido(texto) and no_entendido(texto_libre)
+            if termino_invalido:
+                if _ventana_reintentos["valor"] > 0:
+                    _ventana_reintentos["valor"] -= 1
+                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                    _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_REINTENTAR, frase_id)
+                    return True
+                cerrar_ventana_musica()
+                _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_NO_ENCONTRADO, frase_id)
+                return True
+            consulta = texto_libre if not no_entendido(texto_libre) else texto
+            consulta = _limpiar_consulta_video(consulta)
+            if len(consulta) < 2:
+                cerrar_ventana_musica()
+                _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_NO_ENCONTRADO, frase_id)
+                return True
+            cerrar_ventana_musica()
+            cid = config.SATELITE_MUSICA_CLIENT_ID
+            try:
+                publicar("casa/sala/satelite/%s/musica" % cid,
+                         {"accion": "buscar", "consulta": consulta,
+                          "ts": int(time.time())}, qos=1)
+            except Exception as error:  # noqa: BLE001
+                registro.warning("voz: no se pudo publicar musica/buscar: %s", error)
+            _publicar_respuesta(publicar, textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta), frase_id)
+            return True
+
         es_ayuda = (_frase_a_intencion.get(normalizar(texto)) == "AYUDA"
                     or _frase_a_intencion.get(normalizar(texto_libre)) == "AYUDA")
         if es_ayuda:
             cerrar_ventana_respuesta()
             publicar_cerrar_video_por_alerta(publicar)
+            publicar_cerrar_musica_por_alerta(publicar)
             if base is not None and hasattr(base, "hay_ayuda_reciente") \
                     and base.hay_ayuda_reciente():
                 _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)
@@ -819,8 +887,68 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
 
     if intencion == "CERRAR_VIDEO":
         publicar_cerrar_video_por_alerta(publicar)
+        publicar_cerrar_musica_por_alerta(publicar)
         registro.info("voz turno: intencion=CERRAR_VIDEO accion=cerrar "
                       "texto_len=%d", len(texto))
+        return True
+
+    if intencion == "MUSICA":
+        registro.info("voz turno: intencion=MUSICA accion=procesar texto=%r", texto)
+        if not config.MUSICA_HABILITADO or not (satelites is not None
+                and satelites.hay_conectado()):
+            _publicar_respuesta(publicar, textos.RESPUESTA_MUSICA_NO_DISPONIBLE,
+                                frase_id)
+            return True
+        clave = normalizar(texto)
+        generos = {
+            "pon musica ranchera": "musica ranchera exitos",
+            "pon boleros": "boleros romanticos",
+            "pon musica tranquila": "musica relajante instrumental",
+        }
+        if clave in generos:
+            cid = config.SATELITE_MUSICA_CLIENT_ID
+            try:
+                publicar("casa/sala/satelite/%s/musica" % cid,
+                         {"accion": "buscar", "consulta": generos[clave],
+                          "ts": int(time.time())}, qos=1)
+            except Exception as error:  # noqa: BLE001
+                registro.warning("voz: no se pudo publicar musica/buscar: %s", error)
+            _publicar_respuesta(publicar, textos.RESPUESTA_BUSCANDO_VIDEO.format(
+                consulta=generos[clave]), frase_id)
+            return True
+        if clave in ("pon musica", "pon una cancion", "quiero escuchar musica"):
+            abrir_ventana_musica()
+            _publicar_respuesta(publicar, "¿Qué canción quiere escuchar?", frase_id,
+                                extra={"ventana": "musica",
+                                       "ventana_s": config.VENTANA_VIDEO_S})
+            return True
+        # If inside music window, handled by chat window? We'll treat as buscar with texto libre
+        return True
+
+    if intencion == "MUSICA_CONTROL":
+        cid = config.SATELITE_MUSICA_CLIENT_ID
+        clave = normalizar(texto)
+        accion = None
+        if clave == "sube el volumen":
+            accion = "sube"
+        elif clave == "baja el volumen":
+            accion = "baja"
+        elif clave == "pausa la musica":
+            accion = "pausa"
+        elif clave in ("sigue la musica", "continua la musica"):
+            accion = "sigue"
+        elif clave == "quita la musica":
+            accion = "quita"
+        if accion:
+            try:
+                publicar("casa/sala/satelite/%s/musica" % cid,
+                         {"accion": accion, "ts": int(time.time())}, qos=1)
+            except Exception as error:  # noqa: BLE001
+                registro.warning("voz: no se pudo publicar musica/%s: %s", accion, error)
+            if accion == "quita":
+                _publicar_respuesta(publicar, "Listo, quité la música.", frase_id)
+            else:
+                _publicar_respuesta(publicar, "Listo.", frase_id)
         return True
 
     if intencion in ("ENCENDER_LUZ", "APAGAR_LUZ"):
@@ -855,6 +983,7 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
 
     if intencion == "AYUDA":
         publicar_cerrar_video_por_alerta(publicar)
+        publicar_cerrar_musica_por_alerta(publicar)
         if base is not None and hasattr(base, "hay_ayuda_reciente") \
                 and base.hay_ayuda_reciente():
             _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)

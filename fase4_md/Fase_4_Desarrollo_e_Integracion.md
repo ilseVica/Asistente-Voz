@@ -394,8 +394,8 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 
 | ID | Qué se prueba | Resultado esperado | Estado | Evidencia | Notas |
 | --- | --- | --- | --- | --- | --- |
-| P01 | «Enciende la luz» a 1 y 1.5 m con el servidor remoto, 10 repeticiones por distancia | Mediana ≤ 2.5 s y ningún caso > 3 s; se reportan mediana y máximo | ⏳ | Pendiente: sin evidencia. | A · Pendiente |
-| P02 | El mismo comando a 3 m, con conversación grabada de fondo | Se registra la tasa de aciertos (informativa, no bloquea la entrega) | ⏳ | Sin medición. | A · Informativa, no bloquea la entrega. No medida antes del 4 nov. |
+| P01 | «Enciende la luz» a 1 y 1.5 m, 10 repeticiones por distancia (red de la demo: hotspot) | Mediana ≤ 2.5 s y ningún caso > 3 s; se reportan mediana y máximo | ⏳ | Pendiente: sin evidencia. | A · Pendiente |
+| P02 | El mismo comando a 3 m, con conversación grabada de fondo (red de la demo: hotspot) | Se registra la tasa de aciertos (informativa, no bloquea la entrega) | ⏳ | Sin medición. | A · Informativa, no bloquea la entrega. No medida antes del 4 nov. |
 | P03 | Frase fuera de la gramática | El asistente pide repetir sin ejecutar nada | ✅ | commit 4274a8f (25 oct): 25/25 frases en el arnés. | A · Aprobada |
 | P04 | El usuario dice «necesito ayuda» | Llega una alerta a Telegram con el botón «Abrir panel» y el panel muestra la ayuda activa | ✅ | commit 4274a8f (25 oct): alerta de ayuda a Telegram. | A · Aprobada |
 | P05 | «Alexa, necesito ayuda», dicho dos veces en 30 s | Llega una sola alerta a Telegram | ✅ | bitácora 1 nov + commit 4e4f730 (2 nov): una sola alerta en 30 s. | A · Aprobada (2 nov, desde el simulador de la consola de Alexa): dos peticiones de ayuda con segundos de diferencia generan una sola alerta (alexa-6ae958dd-0002); la segunda vez la skill responde que ya se avisó. Con el Echo Pop, la ayuda llega a Telegram usando la frase de un solo paso («Alexa, pídele a asistente de casa que pida ayuda»). |
@@ -452,33 +452,41 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 | P56 | Frases de la Parte A y saludo diario con la voz de Ilse | Aprobadas con la voz real | ⏳ | Pendiente: voz de Ilse. | A · pendiente |
 | P57 | Panel desde fuera con familiar invitado, iPad con datos móviles (14 nov, 10:20) | El panel abre y el WebSocket conecta | ✅ | validación manual 14 nov, 10:20. | A · aprobada 14 nov |
 | P58 | Música por voz | No aplica: apagada para la demo | — | — (MUSICA_HABILITADO=0). | — · no aplica |
+| P59 | Reinicio de la laptop: Mosquitto arranca (espera-red.conf), satelite-sala se conecta y el ESP32 publica; medir tiempo hasta quedar todo listo | Todo listo sin tocar nada, con el tiempo medido | ⏳ | Pendiente. | A · pendiente |
 
 ## Resumen del plan de pruebas
 
 - ✅ Aprobadas: 33
 - 🟡 Parciales: 6
-- ⏳ Pendientes: 16
+- ⏳ Pendientes: 17
 - — No aplica: 3
-- Total: 58
+- Total: 59
 
-### Pendientes que hay que hacer antes del martes 17 a mediodía
+### Grupo A — Hoy, con mi voz y la laptop
 
-- P01 — «Enciende la luz» a 1 y 1.5 m, 10 repeticiones (ensayo del martes).
-- P10 — MQ-2 en aire limpio 60 min (corre en paralelo).
-- P11 — Inactividad a 2 minutos.
-- P13 — Cancelar un recordatorio.
-- P14 — Pausa del micrófono mientras habla Piper.
-- P15 — Captura forzada (sin pausa).
-- P32 — Variante mínima con el servidor apagado.
-- P43 — `satelite/decir` con ts de hace 60 s.
-- P51 — Lucía: 20 activaciones seguidas.
-- P52 — Lucía: 5 minutos de charla o tele.
-- P56 — Frases de la Parte A y saludo diario con la voz de Ilse.
+- P11 — Inactividad a 2 minutos (5 min; panel, movimiento en la sala).
+- P13 — Cancelar un recordatorio (3 min; panel).
+- P14 — Pausa del micrófono mientras habla Piper (5 min; satélite, micrófono).
+- P15 — Captura forzada (sin pausa) (5 min; satélite).
+- P43 — `satelite/decir` con ts de hace 60 s (5 min; mosquitto_pub).
+- P51 — Lucía: 20 activaciones seguidas (15 min; micrófono, satélite).
+- P52 — Lucía: 5 min de charla o tele (5 min; satélite, audio de fondo).
+- P56 — Frases de la Parte A y saludo con voz de Ilse (20 min; micrófono, satélite).
+- P59 — Reinicio de la laptop sin tocar nada (medir tiempo hasta quedar todo listo; laptop, Mosquitto, satélite, ESP32).
 
-### Pendientes para la presentación formal (después del martes)
+### Grupo B — Ensayo general del domingo 15 (con hotspot de la demo)
 
-- P02, P25, P33, P34, P36, P44 (requieren hotspot, datos móviles o cortar corriente/Internet).
+- P01 — «Enciende la luz» 10 repeticiones a 1/1.5 m (30 min; ESP32, satélite, laptop, hotspot, micrófono).
+- P02 — Mismo comando a 3 m con ruido de fondo (10 min; micrófono, audio grabado).
+- P10 — MQ-2 en aire limpio 60 min (60 min en paralelo; MQ-2 caliente, monitor serie).
+- P32 — Variante mínima con servidor apagado (15 min; servidor, ESP32, Echo Pop).
+- P34 — Hotspot principal → respaldo (10 min; hotspot, segundo celular).
+- P36 — Consumo de datos en 30 min (30 min en paralelo; celular con datos móviles).
 
+### Grupo C — No se harán antes de la presentación
+
+- P25 — Corte y regreso de corriente del host: riesgo de dejar el sistema roto antes de la entrega; se documenta como limitación (host con encendido automático y snapshot previo).
+- P33 — Modo instalación sin Internet: requiere apagar el WAN del router; se documenta que la escucha LAN ya está configurada y probada.
 
 ## Riesgos y mitigación
 

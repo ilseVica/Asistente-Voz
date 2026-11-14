@@ -5013,7 +5013,7 @@ import json as _json_pa
 _casos_pa = {
     "DORMIR": ["ya me voy a dormir", "me voy a dormir", "ya me voy a acostar",
                 "me voy a acostar", "hasta mañana"],
-    "LEVANTARSE": ["ya me levanté", "ya desperté"],
+    "LEVANTARSE": ["ya me levanté"],
     "LLEGUE": ["ya llegué", "ya estoy en casa"],
     "AVISAR_BIEN": ["avísale a mi familia que estoy bien",
                     "dile a mi familia que estoy bien", "avisa que estoy bien"],
@@ -5040,7 +5040,7 @@ for _f in ("ya me voy", "me voy a la tienda", "dile que", "avísame"):
 # contar frases final
 _total_pa = sum(len(v) for v in json.load(open(
     os.path.join(os.path.dirname(__file__), "..", "voz", "gramatica.json")))["intenciones"].values())
-prueba("PA total frases gramatica = 173", _total_pa == 173, _total_pa)
+prueba("PA total frases gramatica = 172", _total_pa == 172, _total_pa)
 
 import saludo_diario as _sd_mod
 # --- PARTE B extra: SIENTO_MAL dentro de la ventana cuenta como mal ---

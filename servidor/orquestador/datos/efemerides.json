@@ -1,0 +1,241 @@
+{
+  "efemerides": {
+    "11-13": [
+      {
+        "texto": "En 1850 se hizo en la Ciudad de México la primera demostración del telégrafo, con un mensaje del Palacio Nacional al Colegio de Minería.",
+        "fuente": "https://www.mexicodesconocido.com.mx/telegrafo-en-mexico-historia-completa.html"
+      },
+      {
+        "texto": "En 1940 Disney estrenó Fantasía.",
+        "fuente": "https://es.wikipedia.org/wiki/Fantas%C3%ADa_(pel%C3%ADcula_de_1940)"
+      }
+    ],
+    "11-14": [
+      {
+        "texto": "En 1974 la Cámara de Diputados aprobó la igualdad jurídica entre hombres y mujeres en México.",
+        "fuente": "https://www.gob.mx/inafed/articulos/conmemoramos-que-hace-45-anos-se-establecio-la-igualdad-juridica-entre-hombres-y-mujeres-en-nuestra-constitucion"
+      }
+    ],
+    "11-15": [
+      {
+        "texto": "En 1776 nació José Joaquín Fernández de Lizardi, autor de El Periquillo Sarmiento.",
+        "fuente": "https://es.wikipedia.org/wiki/Jos%C3%A9_Joaqu%C3%ADn_Fern%C3%A1ndez_de_Lizardi"
+      }
+    ],
+    "11-16": [
+      {
+        "texto": "En 1945 se fundó la UNESCO.",
+        "fuente": "https://es.wikipedia.org/wiki/UNESCO"
+      }
+    ],
+    "11-17": [
+      {
+        "texto": "En 1905 nació Rodolfo Usigli, considerado el padre del teatro moderno mexicano.",
+        "fuente": "https://es.wikipedia.org/wiki/Rodolfo_Usigli"
+      }
+    ],
+    "11-18": [
+      {
+        "texto": "En 1928 se estrenó Steamboat Willie, el primer corto sonoro de Mickey Mouse.",
+        "fuente": "https://es.wikipedia.org/wiki/Steamboat_Willie"
+      }
+    ],
+    "11-19": [
+      {
+        "texto": "En 1811 nació Ponciano Arriaga, abogado, periodista y político liberal mexicano.",
+        "fuente": "https://es.wikipedia.org/wiki/Ponciano_Arriaga"
+      }
+    ],
+    "11-20": [
+      {
+        "texto": "Hoy se celebra el aniversario de la Revolución Mexicana, que empezó en 1910.",
+        "fuente": "https://es.wikipedia.org/wiki/Revoluci%C3%B3n_mexicana"
+      },
+      {
+        "texto": "Se celebra el Día Universal del Niño.",
+        "fuente": "https://es.wikipedia.org/wiki/D%C3%ADa_Universal_del_Ni%C3%B1o"
+      }
+    ],
+    "11-21": [
+      {
+        "texto": "Se celebra el Día Mundial de la Televisión.",
+        "fuente": "https://es.wikipedia.org/wiki/D%C3%ADa_Mundial_de_la_Televisi%C3%B3n"
+      }
+    ],
+    "11-22": [
+      {
+        "texto": "Hoy es el Día del Músico, en honor a Santa Cecilia.",
+        "fuente": "https://es.wikipedia.org/wiki/D%C3%ADa_del_M%C3%BAsico"
+      }
+    ],
+    "11-24": [],
+    "11-30": [
+      {
+        "texto": "En 1911 nació Jorge Negrete, cantante y actor del cine mexicano.",
+        "fuente": "https://es.wikipedia.org/wiki/Jorge_Negrete"
+      }
+    ]
+  },
+  "curiosidades": [
+    {
+      "texto": "El axolote mexicano puede regenerar partes de su cuerpo.",
+      "fuente": "https://es.wikipedia.org/wiki/Ambystoma_mexicanum"
+    },
+    {
+      "texto": "El colibrí puede volar hacia atrás.",
+      "fuente": "https://es.wikipedia.org/wiki/Trochilidae"
+    },
+    {
+      "texto": "La Estación Espacial Internacional da una vuelta a la Tierra cada hora y media, más o menos.",
+      "fuente": "https://es.wikipedia.org/wiki/Estaci%C3%B3n_Espacial_Internacional"
+    },
+    {
+      "texto": "El chocolate proviene del cacao, cultivado por mesoamericanos.",
+      "fuente": "https://es.wikipedia.org/wiki/Chocolate"
+    },
+    {
+      "texto": "El Popocatépetl es uno de los volcanes más activos de México.",
+      "fuente": "https://es.wikipedia.org/wiki/Popocat%C3%A9petl"
+    },
+    {
+      "texto": "La Torre Eiffel crece hasta unos 15 centímetros con el calor del verano.",
+      "fuente": "https://es.wikipedia.org/wiki/Torre_Eiffel"
+    },
+    {
+      "texto": "Las abejas se comunican con danzas que indican la dirección de la comida.",
+      "fuente": "https://es.wikipedia.org/wiki/Danza_de_las_abejas"
+    },
+    {
+      "texto": "El océano Pacífico es el más grande y profundo del planeta.",
+      "fuente": "https://es.wikipedia.org/wiki/Oc%C3%A9ano_Pac%C3%ADfico"
+    },
+    {
+      "texto": "La Luna se aleja de la Tierra casi 4 centímetros por año.",
+      "fuente": "https://es.wikipedia.org/wiki/Luna"
+    },
+    {
+      "texto": "El desierto de Atacama es uno de los lugares más secos de la Tierra.",
+      "fuente": "https://es.wikipedia.org/wiki/Desierto_de_Atacama"
+    },
+    {
+      "texto": "El cerebro humano pesa cerca de un kilo y medio.",
+      "fuente": "https://es.wikipedia.org/wiki/Cerebro"
+    },
+    {
+      "texto": "La velocidad de la luz es de unos 300 mil kilómetros por segundo.",
+      "fuente": "https://es.wikipedia.org/wiki/Velocidad_de_la_luz"
+    },
+    {
+      "texto": "El corazón humano late unas 100 mil veces al día.",
+      "fuente": "https://es.wikipedia.org/wiki/Coraz%C3%B3n"
+    },
+    {
+      "texto": "El ADN tiene forma de doble hélice.",
+      "fuente": "https://es.wikipedia.org/wiki/%C3%81cido_desoxirribonucleico"
+    },
+    {
+      "texto": "Las plantas producen oxígeno con la fotosíntesis.",
+      "fuente": "https://es.wikipedia.org/wiki/Fotos%C3%ADntesis"
+    },
+    {
+      "texto": "Júpiter es el planeta más grande del sistema solar.",
+      "fuente": "https://es.wikipedia.org/wiki/J%C3%BApiter"
+    },
+    {
+      "texto": "Saturno tiene anillos de hielo y roca.",
+      "fuente": "https://es.wikipedia.org/wiki/Saturno_(planeta)"
+    },
+    {
+      "texto": "Venus es el planeta más caliente del sistema solar.",
+      "fuente": "https://es.wikipedia.org/wiki/Venus_(planeta)"
+    },
+    {
+      "texto": "Neptuno es el planeta más lejano del Sol.",
+      "fuente": "https://es.wikipedia.org/wiki/Neptuno_(planeta)"
+    },
+    {
+      "texto": "Urano gira de lado.",
+      "fuente": "https://es.wikipedia.org/wiki/Urano_(planeta)"
+    },
+    {
+      "texto": "El universo tiene unos 13 mil 800 millones de años.",
+      "fuente": "https://es.wikipedia.org/wiki/Universo"
+    },
+    {
+      "texto": "El Sol consume hidrógeno para brillar.",
+      "fuente": "https://es.wikipedia.org/wiki/Sol"
+    },
+    {
+      "texto": "La fotosíntesis usa luz solar para hacer azúcar.",
+      "fuente": "https://es.wikipedia.org/wiki/Fotos%C3%ADntesis"
+    },
+    {
+      "texto": "El bambú crece muy rápido.",
+      "fuente": "https://es.wikipedia.org/wiki/Bambusoideae"
+    },
+    {
+      "texto": "El baobab almacena agua en su tronco.",
+      "fuente": "https://es.wikipedia.org/wiki/Adansonia"
+    },
+    {
+      "texto": "La secuoya es el árbol más alto del mundo.",
+      "fuente": "https://es.wikipedia.org/wiki/Sequoia_sempervirens"
+    },
+    {
+      "texto": "El ginkgo es un árbol muy antiguo.",
+      "fuente": "https://es.wikipedia.org/wiki/Ginkgo_biloba"
+    },
+    {
+      "texto": "Los manglares protegen las costas.",
+      "fuente": "https://es.wikipedia.org/wiki/Manglar"
+    },
+    {
+      "texto": "La ballena azul es el animal más grande que ha existido.",
+      "fuente": "https://es.wikipedia.org/wiki/Balaenoptera_musculus"
+    },
+    {
+      "texto": "Las mariposas monarca viajan desde Canadá hasta Michoacán para pasar el invierno.",
+      "fuente": "https://es.wikipedia.org/wiki/Danaus_plexippus"
+    },
+    {
+      "texto": "El pulpo tiene tres corazones.",
+      "fuente": "https://es.wikipedia.org/wiki/Octopoda"
+    },
+    {
+      "texto": "La miel bien guardada casi no se echa a perder.",
+      "fuente": "https://es.wikipedia.org/wiki/Miel"
+    },
+    {
+      "texto": "Los flamencos son rosados por los camarones y algas que comen.",
+      "fuente": "https://es.wikipedia.org/wiki/Phoenicopteridae"
+    },
+    {
+      "texto": "Los girasoles jóvenes siguen al Sol durante el día.",
+      "fuente": "https://es.wikipedia.org/wiki/Helianthus_annuus"
+    },
+    {
+      "texto": "El maíz se domesticó en México hace unos 9 mil años.",
+      "fuente": "https://es.wikipedia.org/wiki/Zea_mays"
+    },
+    {
+      "texto": "El jitomate es originario de América.",
+      "fuente": "https://es.wikipedia.org/wiki/Solanum_lycopersicum"
+    },
+    {
+      "texto": "Los koalas duermen casi todo el día, hasta 20 horas.",
+      "fuente": "https://es.wikipedia.org/wiki/Phascolarctos_cinereus"
+    },
+    {
+      "texto": "Un rayo es más caliente que la superficie del Sol.",
+      "fuente": "https://es.wikipedia.org/wiki/Rayo"
+    },
+    {
+      "texto": "Las nutrias marinas se toman de las patas al dormir para no separarse.",
+      "fuente": "https://es.wikipedia.org/wiki/Enhydra_lutris"
+    },
+    {
+      "texto": "La vainilla es originaria de México; los totonacas ya la cultivaban.",
+      "fuente": "https://es.wikipedia.org/wiki/Vanilla_planifolia"
+    }
+  ]
+}

@@ -530,3 +530,15 @@ CREATE TABLE IF NOT EXISTS conversacion_envios (
 
 CREATE INDEX IF NOT EXISTS idx_conv_envios_pendientes
     ON conversacion_envios (editado_en, mensaje_id);
+
+-- --- temporizadores (version 12) --------------------------------------------
+CREATE TABLE IF NOT EXISTS temporizadores (
+    id          TEXT NOT NULL PRIMARY KEY,
+    minutos     INTEGER NOT NULL,
+    fin_en      INTEGER NOT NULL,
+    activo      INTEGER NOT NULL DEFAULT 1,
+    disparado_en INTEGER,
+    creado_en   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_temporizadores_activo
+    ON temporizadores (activo, fin_en);

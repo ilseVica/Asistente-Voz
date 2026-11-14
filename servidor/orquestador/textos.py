@@ -38,6 +38,17 @@ RESPUESTA_AYUDA = "No se preocupe, ya avisé a su familia."
 RESPUESTA_AYUDA_RECIENTE = "Ya avisé a su familia hace un momento. Alguien se comunicará con usted pronto."
 RESPUESTA_CANCELAR = "De acuerdo, cancelado."
 
+RESPUESTA_TEMPORIZADOR_CAMBIADO = "Cambié el temporizador a {minutos} minutos."
+RESPUESTA_TEMPORIZADOR_TERMINADO = "Ya pasaron {minutos} minutos."
+RESPUESTA_TEMPORIZADOR_CUANTO = "Faltan {minutos} minutos."
+RESPUESTA_SIN_TEMPORIZADOR = "No hay ningún temporizador."
+RESPUESTA_TEMPORIZADOR_CANCELADO = "Cancelé el temporizador."
+RESPUESTA_TEMPORIZADOR_PUESTO = "Listo, temporizador de {minutos} minutos."
+
+RESPUESTA_NO_REPITE = "No tengo nada que repetir."
+
+RESPUESTA_CASA_DESCONECTADA = "El nodo no está conectado; no tengo datos recientes de la casa."
+
 RESPUESTA_CANCELAR_FALSA_ALARMA = ("Listo, avisé a su familia que fue una "
                                     "falsa alarma.")
 RESPUESTA_CANCELAR_NADA = "No hay ningún aviso que cancelar."

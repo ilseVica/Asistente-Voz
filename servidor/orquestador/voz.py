@@ -179,10 +179,12 @@ def actualizar_sensores(cuerpo: str) -> None:
     except (TypeError, ValueError):
         return
     if isinstance(carga, dict):
-        if "temperatura_c" in carga:
-            _ultimos_sensores["temperatura"] = carga.get("temperatura_c")
-        if "humedad_pct" in carga:
-            _ultimos_sensores["humedad"] = carga.get("humedad_pct")
+        if "temp_c" in carga or "temperatura_c" in carga:
+            _ultimos_sensores["temperatura"] = carga.get("temp_c",
+                                                          carga.get("temperatura_c"))
+        if "hum_pct" in carga or "humedad_pct" in carga:
+            _ultimos_sensores["humedad"] = carga.get("hum_pct",
+                                                      carga.get("humedad_pct"))
         if "agua_pct" in carga:
             _ultimos_sensores["agua_pct"] = carga.get("agua_pct")
         _ultimos_sensores["ts"] = int(time.time())
@@ -195,6 +197,11 @@ def _publicar_respuesta(publicar, texto, frase_id=None, extra=None):
     if isinstance(extra, dict):
         salida.update(extra)
     publicar(config.TOPICO_SATELITE_DECIR, salida, qos=1)
+    try:
+        _ultima_respuesta["texto"] = texto
+        _ultima_respuesta["ts"] = time.time()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _confirmar_luz(estado_pedido, publicar, frase_id):
@@ -381,6 +388,68 @@ def publicar_cerrar_video_por_alerta(publicar) -> None:
     try:
         publicar("casa/sala/satelite/%s/video" % cid,
                  {"accion": "cerrar", "ts": int(time.time())}, qos=1)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+_MINUTOS_TEMPORIZADOR = {
+    "pon un temporizador de un minuto": 1,
+    "pon un temporizador de dos minutos": 2,
+    "pon un temporizador de tres minutos": 3,
+    "pon un temporizador de cinco minutos": 5,
+    "pon un temporizador de diez minutos": 10,
+    "pon un temporizador de quince minutos": 15,
+    "pon un temporizador de veinte minutos": 20,
+    "pon un temporizador de treinta minutos": 30,
+    "pon un temporizador de cuarenta y cinco minutos": 45,
+    "pon un temporizador de sesenta minutos": 60,
+}
+
+_ultima_respuesta = {"texto": None, "ts": 0.0}
+
+_EFEMERIDES = None
+
+def _ruta_efemerides() -> str:
+    candidatas = []
+    env = os.environ.get("EFEMERIDES_JSON")
+    if env:
+        candidatas.append(os.path.abspath(env))
+    candidatas.append("/app/datos/efemerides.json")
+    base = os.path.dirname(os.path.abspath(__file__))
+    candidatas.append(os.path.join(base, "datos", "efemerides.json"))
+    candidatas.append(os.path.join(base, "..", "..", "servidor", "orquestador", "datos", "efemerides.json"))
+    for ruta in candidatas:
+        if ruta and os.path.isfile(ruta):
+            return os.path.abspath(ruta)
+    return ""
+
+def _cargar_efemerides() -> dict:
+    global _EFEMERIDES
+    if _EFEMERIDES is not None:
+        return _EFEMERIDES
+    ruta = _ruta_efemerides()
+    if not ruta:
+        _EFEMERIDES = {"efemerides": {}, "curiosidades": []}
+        return _EFEMERIDES
+    try:
+        with open(ruta, encoding="utf-8") as archivo:
+            datos = json.load(archivo)
+    except (OSError, ValueError):
+        datos = {"efemerides": {}, "curiosidades": []}
+    if not isinstance(datos, dict):
+        datos = {"efemerides": {}, "curiosidades": []}
+    _EFEMERIDES = datos
+    return _EFEMERIDES
+
+_DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes",
+                "sábado", "domingo"]
+_MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+          "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+def registrar_ultima_respuesta(texto: str) -> None:
+    try:
+        _ultima_respuesta["texto"] = texto
+        _ultima_respuesta["ts"] = time.time()
     except Exception:  # noqa: BLE001
         pass
 
@@ -574,6 +643,160 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
 
     latencia = int((time.time() - int(ts)) * 1000)
 
+    if intencion == "BUENOS_DIAS":
+        datos = _cargar_efemerides()
+        efem = datos.get("efemerides", {}) if isinstance(datos, dict) else {}
+        curiosidades = datos.get("curiosidades", []) if isinstance(datos, dict) else []
+        ahora = datetime.now(ZoneInfo("America/Mazatlan"))
+        hora = ahora.hour
+        if 5 <= hora <= 11:
+            saludo = "Buenos días"
+        elif 12 <= hora <= 18:
+            saludo = "Buenas tardes"
+        else:
+            saludo = "Buenas noches"
+        fecha_txt = "%s %d de %s" % (_DIAS_SEMANA[ahora.weekday()],
+                                     ahora.day, _MESES[ahora.month - 1])
+        partes = ["%s. Hoy es %s." % (saludo, fecha_txt),
+                  _hora_en_palabras(ahora)]
+        ts = _ultimos_sensores.get("ts")
+        temp = _ultimos_sensores.get("temperatura")
+        if (ts is None or (int(time.time()) - int(ts)) > 300
+                or temp is None):
+            partes.append(textos.RESPUESTA_SIN_TEMPERATURA)
+        else:
+            try:
+                temp_txt = str(int(round(float(temp))))
+            except (TypeError, ValueError):
+                temp_txt = None
+            if temp_txt is None:
+                partes.append(textos.RESPUESTA_SIN_TEMPERATURA)
+            else:
+                partes.append("En la sala hace %s grados." % temp_txt)
+        if base is not None and hasattr(base, "listar_recordatorios"):
+            hoy = ahora.date()
+            pendientes = []
+            for fila in base.listar_recordatorios():
+                if not fila["activo"]:
+                    continue
+                prox = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan")).date()
+                if prox == hoy:
+                    pendientes.append(fila["texto"])
+            if pendientes:
+                partes.append("Hoy tiene: " + "; ".join(pendientes) + ".")
+            else:
+                partes.append(textos.RESPUESTA_SIN_RECORDATORIOS)
+        else:
+            partes.append(textos.RESPUESTA_SIN_RECORDATORIOS)
+        clave = "%02d-%02d" % (ahora.month, ahora.day)
+        entrada = None
+        lista = efem.get(clave) if isinstance(efem, dict) else None
+        if isinstance(lista, list) and lista:
+            entrada = lista[0]
+        if entrada is None and curiosidades:
+            idx = 0
+            if base is not None and hasattr(base, "obtener_indice_curiosidad"):
+                idx = base.obtener_indice_curiosidad()
+            entrada = curiosidades[idx % len(curiosidades)]
+            if base is not None and hasattr(base, "guardar_indice_curiosidad"):
+                base.guardar_indice_curiosidad(idx + 1)
+        if isinstance(entrada, dict):
+            dato = entrada.get("texto", "")
+        else:
+            dato = str(entrada) if entrada is not None else ""
+        if dato:
+            partes.append("¿Sabía que…? " + dato)
+        _publicar_respuesta(publicar, " ".join(partes), frase_id)
+        return True
+
+    if intencion == "REPITE":
+        texto_ult = _ultima_respuesta.get("texto")
+        ts_ult = _ultima_respuesta.get("ts", 0.0) or 0.0
+        if (not texto_ult) or (time.time() - ts_ult > 600):
+            _publicar_respuesta(publicar, textos.RESPUESTA_NO_REPITE, frase_id)
+            return True
+        _publicar_respuesta(publicar, texto_ult, frase_id)
+        return True
+
+    if intencion == "ESTADO_CASA":
+        if _nodo_conectado.get("valor") is not True:
+            _publicar_respuesta(publicar, textos.RESPUESTA_CASA_DESCONECTADA,
+                                frase_id)
+            return True
+        partes = []
+        luz = _estado_luz.get("valor")
+        if luz == "on":
+            partes.append("la luz está encendida")
+        elif luz == "off":
+            partes.append("la luz está apagada")
+        ts = _ultimos_sensores.get("ts")
+        temp = _ultimos_sensores.get("temperatura")
+        if not (ts is not None and (int(time.time()) - int(ts)) <= 300
+                and temp is not None):
+            pass
+        else:
+            try:
+                temp_txt = str(int(round(float(temp))))
+            except (TypeError, ValueError):
+                temp_txt = None
+            if temp_txt is not None:
+                partes.append("hace %s grados" % temp_txt)
+        agua = _ultimos_sensores.get("agua_pct")
+        if agua is not None:
+            partes.append("el agua está al %d por ciento" % int(agua))
+        if not partes:
+            _publicar_respuesta(publicar, textos.RESPUESTA_CASA_DESCONECTADA,
+                                frase_id)
+            return True
+        _publicar_respuesta(publicar, "En la casa: " + ", ".join(partes) + ".",
+                            frase_id)
+        return True
+
+    if intencion == "TEMPORIZADOR":
+        clave = normalizar(texto)
+        if clave == "cuanto falta":
+            temp = base.obtener_temporizador_activo() if (base is not None
+                                                          and hasattr(base, "obtener_temporizador_activo")) else None
+            if not temp:
+                _publicar_respuesta(publicar, textos.RESPUESTA_SIN_TEMPORIZADOR,
+                                    frase_id)
+                return True
+            restante = int(temp["fin_en"]) - int(time.time())
+            minutos = max(1, int(round(restante / 60.0)))
+            _publicar_respuesta(
+                publicar, textos.RESPUESTA_TEMPORIZADOR_CUANTO.format(
+                    minutos=minutos), frase_id)
+            return True
+        if clave == "cancela el temporizador":
+            cancelado = (base.cancelar_temporizador() if (base is not None
+                         and hasattr(base, "cancelar_temporizador")) else False)
+            if cancelado:
+                _publicar_respuesta(publicar, textos.RESPUESTA_TEMPORIZADOR_CANCELADO,
+                                    frase_id)
+            else:
+                _publicar_respuesta(publicar, textos.RESPUESTA_SIN_TEMPORIZADOR,
+                                    frase_id)
+            return True
+        minutos = _MINUTOS_TEMPORIZADOR.get(clave)
+        if minutos is None:
+            _publicar_respuesta(publicar, textos.NO_ENTENDIDO, frase_id)
+            return True
+        existente = (base.obtener_temporizador_activo() if (base is not None
+                     and hasattr(base, "obtener_temporizador_activo")) else None)
+        fin_en = int(time.time()) + int(minutos) * 60
+        if base is not None and hasattr(base, "crear_temporizador"):
+            base.crear_temporizador("temp-%d" % int(time.time()), int(minutos),
+                                    fin_en)
+        if existente:
+            _publicar_respuesta(
+                publicar, textos.RESPUESTA_TEMPORIZADOR_CAMBIADO.format(
+                    minutos=minutos), frase_id)
+        else:
+            _publicar_respuesta(
+                publicar, textos.RESPUESTA_TEMPORIZADOR_PUESTO.format(
+                    minutos=minutos), frase_id)
+        return True
+
     _FRASES_VIDEO_INGLES = {
         normalizar("pon un video en ingles"),
         normalizar("quiero ver un video en ingles"),
@@ -748,15 +971,14 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
         for fila in base.listar_recordatorios():
             if not fila["activo"]:
                 continue
-            prox = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan")).date()
-            if prox == hoy:
-                hora = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan")).strftime("%H:%M")
-                pendientes.append((hora, fila["texto"]))
+            prox_dt = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan"))
+            if prox_dt.date() == hoy:
+                pendientes.append((prox_dt, fila["texto"]))
         if not pendientes:
             _publicar_respuesta(publicar, textos.RESPUESTA_SIN_RECORDATORIOS, frase_id)
             return True
-        pendientes.sort()
-        partes = ["a las %s, %s" % (h, t) for h, t in pendientes]
+        pendientes.sort(key=lambda x: x[0])
+        partes = ["%s %s" % (_hora_en_palabras(dt), t) for dt, t in pendientes]
         _publicar_respuesta(publicar, "Hoy tiene: " + "; ".join(partes) + ".", frase_id)
         return True
 

@@ -4910,4 +4910,86 @@ print("fallos: %d" % len(FALLOS))
 for nombre in FALLOS:
     print("  - " + nombre)
 
+# --- TANDA 1: TEMPORIZADOR, REPITE, ESTADO_CASA ---
+import json as _json_t1
+import time as _time_t1
+
+# temporizador: reemplazo
+_base_t, _ruta_t = base_nueva("temp-")
+_base_t.crear_temporizador("t1", 5, int(_time_t1.time()) + 300)
+_base_t.crear_temporizador("t2", 10, int(_time_t1.time()) + 600)
+_activo = _base_t.obtener_temporizador_activo()
+prueba("temporizador reemplazo: queda el nuevo",
+       _activo is not None and _activo["minutos"] == 10, _activo)
+_base_t.cancelar_temporizador()
+prueba("temporizador cancelar sin activo devuelve False",
+       _base_t.cancelar_temporizador() is False)
+_base_t.crear_temporizador("t3", 3, int(_time_t1.time()) + 180)
+prueba("temporizador cancelar con activo devuelve True",
+       _base_t.cancelar_temporizador() is True)
+prueba("temporizador cancelado ya no está activo",
+       _base_t.obtener_temporizador_activo() is None)
+
+# REPITE con más de 10 min
+voz._ultima_respuesta["texto"] = "hola"
+voz._ultima_respuesta["ts"] = _time_t1.time() - 601
+_apuntes_r = []
+def _pub_r(topico, carga, qos=1, retain=False, esperar=True):
+    _apuntes_r.append((topico, carga))
+voz.procesar(_json_t1.dumps({"ts": int(_time_t1.time()), "texto": "repite",
+                             "frase_id": "fr1"}), _pub_r, _base_t)
+prueba("repite con más de 10 min dice no tener nada",
+       any(c.get("texto") == textos.RESPUESTA_NO_REPITE
+           for _, c in _apuntes_r), _apuntes_r)
+
+# ESTADO_CASA con nodo desconectado
+voz._nodo_conectado["valor"] = False
+_apuntes_c = []
+def _pub_c(topico, carga, qos=1, retain=False, esperar=True):
+    _apuntes_c.append((topico, carga))
+voz.procesar(_json_t1.dumps({"ts": int(_time_t1.time()),
+                             "texto": "como esta la casa", "frase_id": "fc1"}),
+             _pub_c, _base_t)
+prueba("casa con nodo desconectado avisa sin alarmar",
+       any(c.get("texto") == textos.RESPUESTA_CASA_DESCONECTADA
+           for _, c in _apuntes_c), _apuntes_c)
+
+# ESTADO_CASA con sensor null
+voz._nodo_conectado["valor"] = True
+voz._estado_luz["valor"] = None
+voz._ultimos_sensores["temperatura"] = None
+voz._ultimos_sensores["agua_pct"] = None
+_apuntes_c2 = []
+def _pub_c2(topico, carga, qos=1, retain=False, esperar=True):
+    _apuntes_c2.append((topico, carga))
+voz.procesar(_json_t1.dumps({"ts": int(_time_t1.time()),
+                             "texto": "como esta la casa", "frase_id": "fc2"}),
+             _pub_c2, _base_t)
+prueba("casa con sensores null no se cuelga",
+       len(_apuntes_c2) == 1, _apuntes_c2)
+
+_base_t.cerrar()
+voz._nodo_conectado["valor"] = None
+
+
+# --- TANDA 2: BUENOS_DIAS ---
+import json as _json_t2
+_apuntes_bd = []
+def _pub_bd(topico, carga, qos=1, retain=False, esperar=True):
+    _apuntes_bd.append((topico, carga))
+voz._nodo_conectado["valor"] = True
+voz._ultimos_sensores["temperatura"] = 22
+voz.procesar(_json_t2.dumps({"ts": int(time.time()), "texto": "buenos dias",
+                             "frase_id": "fbd1"}), _pub_bd, _base_nueva("bd-")[0] if False else base_nueva("bd-")[0])
+# base_nueva returns (base, ruta); take base
+_bd_base, _ = base_nueva("bd-")
+_apuntes_bd = []
+voz.procesar(_json_t2.dumps({"ts": int(time.time()), "texto": "buenos dias",
+                             "frase_id": "fbd2"}), _pub_bd, _bd_base)
+prueba("buenos dias publica respuesta",
+       len(_apuntes_bd) == 1 and "¿Sabía que…?" in _apuntes_bd[0][1].get("texto", ""),
+       _apuntes_bd)
+_bd_base.cerrar()
+voz._nodo_conectado["valor"] = None
+
 sys.exit(1 if FALLOS else 0)

@@ -114,7 +114,7 @@ ENVIO_FALLIDO_PERMANENTE = 2147483647
 # antes, y rellenarlo con un nombre inventado seria peor que dejarlo vacio. Otra
 # columna nueva en una tabla vieja, asi que otra vez el `ALTER TABLE` idempotente
 # de la 2->3 y de la 4.
-VERSION_ESQUEMA = 11
+VERSION_ESQUEMA = 12
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -2271,3 +2271,50 @@ class BaseDatos:
             registro.info("purgados %d recordatorio(s) inactivo(s) y %d entrega(s)",
                           borrados_recordatorios, borrados_rec_entregas)
         return borrados_ids, borrados_alertas
+
+    # --- temporizadores -----------------------------------------------------
+
+    def crear_temporizador(self, id_temp: str, minutos: int, fin_en: int,
+                           creado_en: int = None) -> None:
+        if creado_en is None:
+            creado_en = int(time.time())
+        self.conexion.execute(
+            "INSERT OR REPLACE INTO temporizadores (id, minutos, fin_en, activo, "
+            "creado_en) VALUES (?, ?, ?, 1, ?)",
+            (id_temp, int(minutos), int(fin_en), int(creado_en)),
+        )
+        self.conexion.commit()
+
+    def obtener_temporizador_activo(self) -> dict:
+        fila = self.conexion.execute(
+            "SELECT * FROM temporizadores WHERE activo = 1 "
+            "ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()
+        return dict(fila) if fila else None
+
+    def cancelar_temporizador(self) -> bool:
+        cursor = self.conexion.execute(
+            "UPDATE temporizadores SET activo = 0, disparado_en = ? "
+            "WHERE activo = 1", (int(time.time()),))
+        self.conexion.commit()
+        return cursor.rowcount > 0
+
+    def marcar_temporizador_disparado(self, id_temp: str) -> None:
+        self.conexion.execute(
+            "UPDATE temporizadores SET activo = 0, disparado_en = ? WHERE id = ?",
+            (int(time.time()), id_temp))
+        self.conexion.commit()
+
+    # --- curiosidades (rotación para BUENOS_DIAS) ---------------------------
+
+    def obtener_indice_curiosidad(self) -> int:
+        crudo = self._config_leer("curiosidad_indice")
+        if crudo is None:
+            return 0
+        try:
+            return int(crudo)
+        except (TypeError, ValueError):
+            return 0
+
+    def guardar_indice_curiosidad(self, indice: int) -> None:
+        self._config_escribir("curiosidad_indice", str(int(indice)))

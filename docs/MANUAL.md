@@ -179,6 +179,16 @@ hace calor, hace frio, que tal el clima.
 **RECORDATORIOS:** tengo recordatorios, que tengo hoy, que recordatorios tengo,
 tengo pendientes.
 
+**TEMPORIZADOR:** pon un temporizador de un minuto, ..., de sesenta minutos,
+cuanto falta, cancela el temporizador.
+
+**ESTADO_CASA:** como esta la casa, todo bien en la casa.
+
+**REPITE:** repite, que dijiste, no te escuche, repite por favor, dilo otra vez,
+otra vez por favor.
+
+**BUENOS_DIAS:** buenos dias, buenos dias lucia, hola buenos dias.
+
 **ESTOY_BIEN:** avisa a mi familia que estoy bien.
 
 **BUSCAR_VIDEO:** busca un video, pon un video, quiero ver un video. «busca un

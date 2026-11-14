@@ -44,8 +44,7 @@
       "ayuda ya",
       "auxilio ya",
       "auxilio por favor",
-      "ayúdeme",
-      "ayúdeme por favor"
+      "ayúdeme"
     ],
     "CANCELAR": [
       "cancela",
@@ -81,7 +80,6 @@
       "necesito un cafe",
       "cancela la cita",
       "olvidalo todo",
-      "hola buenos dias",
       "la luz",
       "la luz esta bonita",
       "gracias por todo",
@@ -91,7 +89,10 @@
       "enciende",
       "prende por favor",
       "apaga por favor",
-      "por favor"
+      "por favor",
+      "prenda por favor",
+      "apague por favor",
+      "ayúdeme a prender"
     ],
     "HORA": [
       "que hora es",
@@ -145,6 +146,37 @@
       "como esta el agua",
       "cuanta agua queda",
       "cuanta agua tiene el tinaco"
+    ],
+    "TEMPORIZADOR": [
+      "pon un temporizador de un minuto",
+      "pon un temporizador de dos minutos",
+      "pon un temporizador de tres minutos",
+      "pon un temporizador de cinco minutos",
+      "pon un temporizador de diez minutos",
+      "pon un temporizador de quince minutos",
+      "pon un temporizador de veinte minutos",
+      "pon un temporizador de treinta minutos",
+      "pon un temporizador de cuarenta y cinco minutos",
+      "pon un temporizador de sesenta minutos",
+      "cuanto falta",
+      "cancela el temporizador"
+    ],
+    "ESTADO_CASA": [
+      "como esta la casa",
+      "todo bien en la casa"
+    ],
+    "REPITE": [
+      "repite",
+      "que dijiste",
+      "no te escuche",
+      "repite por favor",
+      "dilo otra vez",
+      "otra vez por favor"
+    ],
+    "BUENOS_DIAS": [
+      "buenos dias",
+      "buenos dias lucia",
+      "hola buenos dias"
     ]
   }
 }

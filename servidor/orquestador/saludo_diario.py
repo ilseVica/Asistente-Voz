@@ -42,9 +42,9 @@ def _normalizar(texto) -> str:
         return str(texto or "").strip().lower()
 
 
-_BIEN = {"bien", "muy bien", "bien gracias", "muy bien gracias", "estoy bien"}
+_BIEN = {"bien", "muy bien", "bien gracias", "muy bien gracias", "estoy bien", "me siento bien"}
 _REGULAR = {"mas o menos", "más o menos", "regular", "no muy bien"}
-_MAL = {"mal", "muy mal", "me siento mal", "no me siento bien", "no estoy bien"}
+_MAL = {"mal", "muy mal", "me siento mal", "no me siento bien", "no estoy bien", "me siento muy mal"}
 
 
 class Estado:

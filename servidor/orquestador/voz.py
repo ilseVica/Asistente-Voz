@@ -1215,6 +1215,12 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
         return True
 
     if intencion == "AVISAR_BIEN":
+        if _saludo_diario is not None and getattr(_saludo_diario, "ventana_abierta", lambda: False)():
+            try:
+                _saludo_diario.responder("bien")
+            except Exception:  # noqa: BLE001
+                pass
+            return True
         if base is not None and hasattr(base, "crear_respuesta_conversacion"):
             base.crear_respuesta_conversacion("Estoy bien.")
         _publicar_respuesta(publicar, textos.RESPUESTA_AVISAR_BIEN, frase_id)
@@ -1223,6 +1229,12 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
         return True
 
     if intencion == "SIENTO_MAL":
+        if _saludo_diario is not None and getattr(_saludo_diario, "ventana_abierta", lambda: False)():
+            try:
+                _saludo_diario.responder(texto)
+            except Exception:  # noqa: BLE001
+                pass
+            return True
         if base is not None and hasattr(base, "crear_respuesta_conversacion"):
             base.crear_respuesta_conversacion("La sala dice que se siente mal.")
         _publicar_respuesta(publicar, textos.RESPUESTA_SIENTO_MAL, frase_id)

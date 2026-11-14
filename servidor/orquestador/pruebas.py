@@ -5040,7 +5040,7 @@ for _f in ("ya me voy", "me voy a la tienda", "dile que", "avísame"):
 # contar frases final
 _total_pa = sum(len(v) for v in json.load(open(
     os.path.join(os.path.dirname(__file__), "..", "voz", "gramatica.json")))["intenciones"].values())
-prueba("PA total frases gramatica = 171", _total_pa == 171, _total_pa)
+prueba("PA total frases gramatica = 173", _total_pa == 173, _total_pa)
 
 # --- PARTE B: SALUDO DIARIO ---
 import saludo_diario as _sd_mod

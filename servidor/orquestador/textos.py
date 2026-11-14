@@ -63,7 +63,7 @@ RESPUESTA_SIENTO_MAL = "Ya le avisé a su familia. Si es urgente, diga ayuda."
 
 SALUDO_DIARIO_PREGUNTA = "Buenos días. ¿Cómo amaneció?"
 SALUDO_DIARIO_REINTENTO = "¿Me escucha? ¿Cómo amaneció?"
-SALUDO_DIARIO_NO_ENTENDI = "Perdón, no le entendí. ¿Amaneció bien, más o menos o mal?"
+SALUDO_DIARIO_NO_ENTENDI = "Perdón, no le entendí. ¿Se siente bien o se siente mal?"
 SALUDO_DIARIO_BIEN = "Qué gusto."
 SALUDO_DIARIO_REGULAR = "Gracias por decirme. Le aviso a su familia para que esté al pendiente."
 SALUDO_DIARIO_MAL = "Lo siento. Ya le avisé a su familia. Si es urgente, diga ayuda."

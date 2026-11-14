@@ -179,10 +179,12 @@ def actualizar_sensores(cuerpo: str) -> None:
     except (TypeError, ValueError):
         return
     if isinstance(carga, dict):
-        if "temperatura_c" in carga:
-            _ultimos_sensores["temperatura"] = carga.get("temperatura_c")
-        if "humedad_pct" in carga:
-            _ultimos_sensores["humedad"] = carga.get("humedad_pct")
+        if "temp_c" in carga or "temperatura_c" in carga:
+            _ultimos_sensores["temperatura"] = carga.get("temp_c",
+                                                          carga.get("temperatura_c"))
+        if "hum_pct" in carga or "humedad_pct" in carga:
+            _ultimos_sensores["humedad"] = carga.get("hum_pct",
+                                                      carga.get("humedad_pct"))
         if "agua_pct" in carga:
             _ultimos_sensores["agua_pct"] = carga.get("agua_pct")
         _ultimos_sensores["ts"] = int(time.time())
@@ -195,6 +197,11 @@ def _publicar_respuesta(publicar, texto, frase_id=None, extra=None):
     if isinstance(extra, dict):
         salida.update(extra)
     publicar(config.TOPICO_SATELITE_DECIR, salida, qos=1)
+    try:
+        _ultima_respuesta["texto"] = texto
+        _ultima_respuesta["ts"] = time.time()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _confirmar_luz(estado_pedido, publicar, frase_id):
@@ -250,6 +257,22 @@ def ventana_video_abierta() -> bool:
     if ahora >= _ventana_tope["valor"] and _ventana_tope["valor"] > 0:
         return False
     return ahora < _ventana_hasta["valor"] and _ventana_modo["valor"] == "video"
+
+def ventana_musica_abierta() -> bool:
+    return time.time() < _ventana_hasta["valor"] and _ventana_modo["valor"] == "musica"
+
+def abrir_ventana_musica() -> None:
+    ahora = time.time()
+    _ventana_hasta["valor"] = ahora + config.VENTANA_VIDEO_S
+    _ventana_tope["valor"] = ahora + 2 * config.VENTANA_VIDEO_S
+    _ventana_reintentos["valor"] = 1
+    _ventana_modo["valor"] = "musica"
+
+def cerrar_ventana_musica() -> None:
+    _ventana_hasta["valor"] = 0.0
+    _ventana_tope["valor"] = 0.0
+    _ventana_reintentos["valor"] = 0
+    _ventana_modo["valor"] = None
 
 def ventana_video_idioma() -> str:
     return _ventana_idioma["valor"] if _ventana_idioma["valor"] in ("es", "en") else "es"
@@ -308,8 +331,8 @@ def _hora_en_palabras(ahora) -> str:
         minuto_txt = _numero_a_palabras(minuto)
     if hora == 0:
         if minuto == 30:
-            return "Es la una y media de la madrugada."
-        return "Es la una y %s de la madrugada." % minuto_txt
+            return "Son las doce y media de la noche."
+        return "Son las doce y %s de la noche." % minuto_txt
     if hora < 12:
         if hora == 1:
             if minuto == 30:
@@ -384,6 +407,76 @@ def publicar_cerrar_video_por_alerta(publicar) -> None:
     except Exception:  # noqa: BLE001
         pass
 
+def publicar_cerrar_musica_por_alerta(publicar) -> None:
+    cid = getattr(config, "SATELITE_MUSICA_CLIENT_ID", config.SATELITE_VIDEO_CLIENT_ID)
+    try:
+        publicar("casa/sala/satelite/%s/musica" % cid,
+                 {"accion": "cerrar", "ts": int(time.time())}, qos=1)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+_MINUTOS_TEMPORIZADOR = {
+    "pon un temporizador de un minuto": 1,
+    "pon un temporizador de dos minutos": 2,
+    "pon un temporizador de tres minutos": 3,
+    "pon un temporizador de cinco minutos": 5,
+    "pon un temporizador de diez minutos": 10,
+    "pon un temporizador de quince minutos": 15,
+    "pon un temporizador de veinte minutos": 20,
+    "pon un temporizador de treinta minutos": 30,
+    "pon un temporizador de cuarenta y cinco minutos": 45,
+    "pon un temporizador de sesenta minutos": 60,
+}
+
+_ultima_respuesta = {"texto": None, "ts": 0.0}
+
+_EFEMERIDES = None
+
+def _ruta_efemerides() -> str:
+    candidatas = []
+    env = os.environ.get("EFEMERIDES_JSON")
+    if env:
+        candidatas.append(os.path.abspath(env))
+    candidatas.append("/app/datos/efemerides.json")
+    base = os.path.dirname(os.path.abspath(__file__))
+    candidatas.append(os.path.join(base, "datos", "efemerides.json"))
+    candidatas.append(os.path.join(base, "..", "..", "servidor", "orquestador", "datos", "efemerides.json"))
+    for ruta in candidatas:
+        if ruta and os.path.isfile(ruta):
+            return os.path.abspath(ruta)
+    return ""
+
+def _cargar_efemerides() -> dict:
+    global _EFEMERIDES
+    if _EFEMERIDES is not None:
+        return _EFEMERIDES
+    ruta = _ruta_efemerides()
+    if not ruta:
+        _EFEMERIDES = {"efemerides": {}, "curiosidades": []}
+        return _EFEMERIDES
+    try:
+        with open(ruta, encoding="utf-8") as archivo:
+            datos = json.load(archivo)
+    except (OSError, ValueError):
+        datos = {"efemerides": {}, "curiosidades": []}
+    if not isinstance(datos, dict):
+        datos = {"efemerides": {}, "curiosidades": []}
+    _EFEMERIDES = datos
+    return _EFEMERIDES
+
+_DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes",
+                "sábado", "domingo"]
+_MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+          "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+def registrar_ultima_respuesta(texto: str) -> None:
+    try:
+        _ultima_respuesta["texto"] = texto
+        _ultima_respuesta["ts"] = time.time()
+    except Exception:  # noqa: BLE001
+        pass
+
 
 def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
     try:
@@ -420,6 +513,7 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
             if es_ayuda:
                 cerrar_ventana_video()
                 publicar_cerrar_video_por_alerta(publicar)
+                publicar_cerrar_musica_por_alerta(publicar)
                 if base is not None and hasattr(base, "hay_ayuda_reciente") \
                         and base.hay_ayuda_reciente():
                     _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)
@@ -524,11 +618,54 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
                           "idioma=%s consulta_len=%d", idioma_ventana, len(consulta))
             return True
 
+        if ventana_musica_abierta():
+            es_ayuda = (_frase_a_intencion.get(normalizar(texto)) == "AYUDA"
+                        or _frase_a_intencion.get(normalizar(texto_libre)) == "AYUDA")
+            if es_ayuda:
+                cerrar_ventana_musica()
+                publicar_cerrar_musica_por_alerta(publicar)
+                _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA, frase_id)
+                return True
+            if (normalizar(texto) == "cancela"
+                    or normalizar(texto_libre) == "cancela"
+                    or _frase_a_intencion.get(normalizar(texto)) == "CANCELAR"
+                    or _frase_a_intencion.get(normalizar(texto_libre)) == "CANCELAR"):
+                cerrar_ventana_musica()
+                _publicar_respuesta(publicar, textos.RESPUESTA_CANCELAR, frase_id)
+                return True
+            termino_invalido = no_entendido(texto) and no_entendido(texto_libre)
+            if termino_invalido:
+                if _ventana_reintentos["valor"] > 0:
+                    _ventana_reintentos["valor"] -= 1
+                    _ventana_hasta["valor"] = time.time() + config.VENTANA_VIDEO_S
+                    _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_REINTENTAR, frase_id)
+                    return True
+                cerrar_ventana_musica()
+                _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_NO_ENCONTRADO, frase_id)
+                return True
+            consulta = texto_libre if not no_entendido(texto_libre) else texto
+            consulta = _limpiar_consulta_video(consulta)
+            if len(consulta) < 2:
+                cerrar_ventana_musica()
+                _publicar_respuesta(publicar, textos.RESPUESTA_VIDEO_NO_ENCONTRADO, frase_id)
+                return True
+            cerrar_ventana_musica()
+            cid = config.SATELITE_MUSICA_CLIENT_ID
+            try:
+                publicar("casa/sala/satelite/%s/musica" % cid,
+                         {"accion": "buscar", "consulta": consulta,
+                          "ts": int(time.time())}, qos=1)
+            except Exception as error:  # noqa: BLE001
+                registro.warning("voz: no se pudo publicar musica/buscar: %s", error)
+            _publicar_respuesta(publicar, textos.RESPUESTA_BUSCANDO_VIDEO.format(consulta=consulta), frase_id)
+            return True
+
         es_ayuda = (_frase_a_intencion.get(normalizar(texto)) == "AYUDA"
                     or _frase_a_intencion.get(normalizar(texto_libre)) == "AYUDA")
         if es_ayuda:
             cerrar_ventana_respuesta()
             publicar_cerrar_video_por_alerta(publicar)
+            publicar_cerrar_musica_por_alerta(publicar)
             if base is not None and hasattr(base, "hay_ayuda_reciente") \
                     and base.hay_ayuda_reciente():
                 _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)
@@ -574,6 +711,160 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
 
     latencia = int((time.time() - int(ts)) * 1000)
 
+    if intencion == "BUENOS_DIAS":
+        datos = _cargar_efemerides()
+        efem = datos.get("efemerides", {}) if isinstance(datos, dict) else {}
+        curiosidades = datos.get("curiosidades", []) if isinstance(datos, dict) else []
+        ahora = datetime.now(ZoneInfo("America/Mazatlan"))
+        hora = ahora.hour
+        if 5 <= hora <= 11:
+            saludo = "Buenos días"
+        elif 12 <= hora <= 18:
+            saludo = "Buenas tardes"
+        else:
+            saludo = "Buenas noches"
+        fecha_txt = "%s %d de %s" % (_DIAS_SEMANA[ahora.weekday()],
+                                     ahora.day, _MESES[ahora.month - 1])
+        partes = ["%s. Hoy es %s." % (saludo, fecha_txt),
+                  _hora_en_palabras(ahora)]
+        ts = _ultimos_sensores.get("ts")
+        temp = _ultimos_sensores.get("temperatura")
+        if (ts is None or (int(time.time()) - int(ts)) > 300
+                or temp is None):
+            partes.append(textos.RESPUESTA_SIN_TEMPERATURA)
+        else:
+            try:
+                temp_txt = str(int(round(float(temp))))
+            except (TypeError, ValueError):
+                temp_txt = None
+            if temp_txt is None:
+                partes.append(textos.RESPUESTA_SIN_TEMPERATURA)
+            else:
+                partes.append("En la sala hace %s grados." % temp_txt)
+        if base is not None and hasattr(base, "listar_recordatorios"):
+            hoy = ahora.date()
+            pendientes = []
+            for fila in base.listar_recordatorios():
+                if not fila["activo"]:
+                    continue
+                prox = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan")).date()
+                if prox == hoy:
+                    pendientes.append(fila["texto"])
+            if pendientes:
+                partes.append("Hoy tiene: " + "; ".join(pendientes) + ".")
+            else:
+                partes.append(textos.RESPUESTA_SIN_RECORDATORIOS)
+        else:
+            partes.append(textos.RESPUESTA_SIN_RECORDATORIOS)
+        clave = "%02d-%02d" % (ahora.month, ahora.day)
+        entrada = None
+        lista = efem.get(clave) if isinstance(efem, dict) else None
+        if isinstance(lista, list) and lista:
+            entrada = lista[0]
+        if entrada is None and curiosidades:
+            idx = 0
+            if base is not None and hasattr(base, "obtener_indice_curiosidad"):
+                idx = base.obtener_indice_curiosidad()
+            entrada = curiosidades[idx % len(curiosidades)]
+            if base is not None and hasattr(base, "guardar_indice_curiosidad"):
+                base.guardar_indice_curiosidad(idx + 1)
+        if isinstance(entrada, dict):
+            dato = entrada.get("texto", "")
+        else:
+            dato = str(entrada) if entrada is not None else ""
+        if dato:
+            partes.append("¿Sabía que…? " + dato)
+        _publicar_respuesta(publicar, " ".join(partes), frase_id)
+        return True
+
+    if intencion == "REPITE":
+        texto_ult = _ultima_respuesta.get("texto")
+        ts_ult = _ultima_respuesta.get("ts", 0.0) or 0.0
+        if (not texto_ult) or (time.time() - ts_ult > 600):
+            _publicar_respuesta(publicar, textos.RESPUESTA_NO_REPITE, frase_id)
+            return True
+        _publicar_respuesta(publicar, texto_ult, frase_id)
+        return True
+
+    if intencion == "ESTADO_CASA":
+        if _nodo_conectado.get("valor") is not True:
+            _publicar_respuesta(publicar, textos.RESPUESTA_CASA_DESCONECTADA,
+                                frase_id)
+            return True
+        partes = []
+        luz = _estado_luz.get("valor")
+        if luz == "on":
+            partes.append("la luz está encendida")
+        elif luz == "off":
+            partes.append("la luz está apagada")
+        ts = _ultimos_sensores.get("ts")
+        temp = _ultimos_sensores.get("temperatura")
+        if not (ts is not None and (int(time.time()) - int(ts)) <= 300
+                and temp is not None):
+            pass
+        else:
+            try:
+                temp_txt = str(int(round(float(temp))))
+            except (TypeError, ValueError):
+                temp_txt = None
+            if temp_txt is not None:
+                partes.append("hace %s grados" % temp_txt)
+        agua = _ultimos_sensores.get("agua_pct")
+        if agua is not None:
+            partes.append("el agua está al %d por ciento" % int(agua))
+        if not partes:
+            _publicar_respuesta(publicar, textos.RESPUESTA_CASA_DESCONECTADA,
+                                frase_id)
+            return True
+        _publicar_respuesta(publicar, "En la casa: " + ", ".join(partes) + ".",
+                            frase_id)
+        return True
+
+    if intencion == "TEMPORIZADOR":
+        clave = normalizar(texto)
+        if clave == "cuanto falta":
+            temp = base.obtener_temporizador_activo() if (base is not None
+                                                          and hasattr(base, "obtener_temporizador_activo")) else None
+            if not temp:
+                _publicar_respuesta(publicar, textos.RESPUESTA_SIN_TEMPORIZADOR,
+                                    frase_id)
+                return True
+            restante = int(temp["fin_en"]) - int(time.time())
+            minutos = max(1, int(round(restante / 60.0)))
+            _publicar_respuesta(
+                publicar, textos.RESPUESTA_TEMPORIZADOR_CUANTO.format(
+                    minutos=minutos), frase_id)
+            return True
+        if clave == "cancela el temporizador":
+            cancelado = (base.cancelar_temporizador() if (base is not None
+                         and hasattr(base, "cancelar_temporizador")) else False)
+            if cancelado:
+                _publicar_respuesta(publicar, textos.RESPUESTA_TEMPORIZADOR_CANCELADO,
+                                    frase_id)
+            else:
+                _publicar_respuesta(publicar, textos.RESPUESTA_SIN_TEMPORIZADOR,
+                                    frase_id)
+            return True
+        minutos = _MINUTOS_TEMPORIZADOR.get(clave)
+        if minutos is None:
+            _publicar_respuesta(publicar, textos.NO_ENTENDIDO, frase_id)
+            return True
+        existente = (base.obtener_temporizador_activo() if (base is not None
+                     and hasattr(base, "obtener_temporizador_activo")) else None)
+        fin_en = int(time.time()) + int(minutos) * 60
+        if base is not None and hasattr(base, "crear_temporizador"):
+            base.crear_temporizador("temp-%d" % int(time.time()), int(minutos),
+                                    fin_en)
+        if existente:
+            _publicar_respuesta(
+                publicar, textos.RESPUESTA_TEMPORIZADOR_CAMBIADO.format(
+                    minutos=minutos), frase_id)
+        else:
+            _publicar_respuesta(
+                publicar, textos.RESPUESTA_TEMPORIZADOR_PUESTO.format(
+                    minutos=minutos), frase_id)
+        return True
+
     _FRASES_VIDEO_INGLES = {
         normalizar("pon un video en ingles"),
         normalizar("quiero ver un video en ingles"),
@@ -596,8 +887,68 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
 
     if intencion == "CERRAR_VIDEO":
         publicar_cerrar_video_por_alerta(publicar)
+        publicar_cerrar_musica_por_alerta(publicar)
         registro.info("voz turno: intencion=CERRAR_VIDEO accion=cerrar "
                       "texto_len=%d", len(texto))
+        return True
+
+    if intencion == "MUSICA":
+        registro.info("voz turno: intencion=MUSICA accion=procesar texto=%r", texto)
+        if not config.MUSICA_HABILITADO or not (satelites is not None
+                and satelites.hay_conectado()):
+            _publicar_respuesta(publicar, textos.RESPUESTA_MUSICA_NO_DISPONIBLE,
+                                frase_id)
+            return True
+        clave = normalizar(texto)
+        generos = {
+            "pon musica ranchera": "musica ranchera exitos",
+            "pon boleros": "boleros romanticos",
+            "pon musica tranquila": "musica relajante instrumental",
+        }
+        if clave in generos:
+            cid = config.SATELITE_MUSICA_CLIENT_ID
+            try:
+                publicar("casa/sala/satelite/%s/musica" % cid,
+                         {"accion": "buscar", "consulta": generos[clave],
+                          "ts": int(time.time())}, qos=1)
+            except Exception as error:  # noqa: BLE001
+                registro.warning("voz: no se pudo publicar musica/buscar: %s", error)
+            _publicar_respuesta(publicar, textos.RESPUESTA_BUSCANDO_VIDEO.format(
+                consulta=generos[clave]), frase_id)
+            return True
+        if clave in ("pon musica", "pon una cancion", "quiero escuchar musica"):
+            abrir_ventana_musica()
+            _publicar_respuesta(publicar, "¿Qué canción quiere escuchar?", frase_id,
+                                extra={"ventana": "musica",
+                                       "ventana_s": config.VENTANA_VIDEO_S})
+            return True
+        # If inside music window, handled by chat window? We'll treat as buscar with texto libre
+        return True
+
+    if intencion == "MUSICA_CONTROL":
+        cid = config.SATELITE_MUSICA_CLIENT_ID
+        clave = normalizar(texto)
+        accion = None
+        if clave == "sube el volumen":
+            accion = "sube"
+        elif clave == "baja el volumen":
+            accion = "baja"
+        elif clave == "pausa la musica":
+            accion = "pausa"
+        elif clave in ("sigue la musica", "continua la musica"):
+            accion = "sigue"
+        elif clave == "quita la musica":
+            accion = "quita"
+        if accion:
+            try:
+                publicar("casa/sala/satelite/%s/musica" % cid,
+                         {"accion": accion, "ts": int(time.time())}, qos=1)
+            except Exception as error:  # noqa: BLE001
+                registro.warning("voz: no se pudo publicar musica/%s: %s", accion, error)
+            if accion == "quita":
+                _publicar_respuesta(publicar, "Listo, quité la música.", frase_id)
+            else:
+                _publicar_respuesta(publicar, "Listo.", frase_id)
         return True
 
     if intencion in ("ENCENDER_LUZ", "APAGAR_LUZ"):
@@ -632,6 +983,7 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
 
     if intencion == "AYUDA":
         publicar_cerrar_video_por_alerta(publicar)
+        publicar_cerrar_musica_por_alerta(publicar)
         if base is not None and hasattr(base, "hay_ayuda_reciente") \
                 and base.hay_ayuda_reciente():
             _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)
@@ -748,15 +1100,14 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
         for fila in base.listar_recordatorios():
             if not fila["activo"]:
                 continue
-            prox = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan")).date()
-            if prox == hoy:
-                hora = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan")).strftime("%H:%M")
-                pendientes.append((hora, fila["texto"]))
+            prox_dt = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan"))
+            if prox_dt.date() == hoy:
+                pendientes.append((prox_dt, fila["texto"]))
         if not pendientes:
             _publicar_respuesta(publicar, textos.RESPUESTA_SIN_RECORDATORIOS, frase_id)
             return True
-        pendientes.sort()
-        partes = ["a las %s, %s" % (h, t) for h, t in pendientes]
+        pendientes.sort(key=lambda x: x[0])
+        partes = ["%s %s" % (_hora_en_palabras(dt), t) for dt, t in pendientes]
         _publicar_respuesta(publicar, "Hoy tiene: " + "; ".join(partes) + ".", frase_id)
         return True
 

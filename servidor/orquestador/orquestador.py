@@ -158,6 +158,27 @@ def tarea_inactividad(reloj, publicar, parando) -> None:
         parando.wait(config.SEGUNDOS_CICLO_INACTIVIDAD)
 
 
+def tarea_temporizador(base, publicar, parando) -> None:
+    """Dispara los temporizadores vencidos, cada 10 s."""
+    while not parando.is_set():
+        try:
+            if base is not None and hasattr(base, "obtener_temporizador_activo"):
+                temp = base.obtener_temporizador_activo()
+                if temp and int(temp.get("fin_en", 0)) <= int(time.time()) and not temp.get("disparado_en"):
+                    minutos = int(temp.get("minutos", 0))
+                    texto = textos.RESPUESTA_TEMPORIZADOR_TERMINADO.format(minutos=minutos)
+                    publicar(config.TOPICO_SATELITE_DECIR,
+                             {"texto": texto, "tipo": "respuesta",
+                              "ts": int(time.time())}, qos=1)
+                    publicar(config.TOPICO_SATELITE_DECIR,
+                             {"texto": texto, "tipo": "respuesta",
+                              "ts": int(time.time())}, qos=1)
+                    base.marcar_temporizador_disparado(temp["id"])
+        except Exception as error:  # noqa: BLE001
+            registro_log.error("fallo en el ciclo de temporizador: %s", error)
+        parando.wait(10)
+
+
 def tarea_conversacion(base, publicar, remitente, satelites, parando) -> None:
     """Procesa los mensajes nuevos de la conversacion (Paso 6)."""
     while not parando.is_set():
@@ -173,11 +194,12 @@ def tarea_conversacion(base, publicar, remitente, satelites, parando) -> None:
                 if (not es_aviso) and hay_sat:
                     try:
                         publicar(config.TOPICO_SATELITE_DECIR,
-                                 {"texto": "Mensaje de %s: %s. Si quiere responder, mantenga presionado el botón y hable."
+                                 {"texto": "Mensaje de %s: %s. Si quiere responder, diga Lucía o mantenga presionado el botón."
                                   % (autor, texto), "tipo": "chat",
                                   "ts": int(time.time())},
                                  qos=1)
                         base.actualizar_estado_conversacion(id_conv, "se_dijo")
+                        voz.registrar_ultima_respuesta("Mensaje de %s: %s" % (autor, texto))
                         voz.abrir_ventana_respuesta()
                     except Exception as error:  # noqa: BLE001
                         registro_log.error("no se pudo decir el mensaje %s: %s",
@@ -457,6 +479,11 @@ def main() -> int:
         # mismo motivo que los recordatorios: un primer pase puede querer publicar
         # la alerta en MQTT. Se pasa `cliente.publicar` (no `publicar_eco`): este
         # hilo no es el de red de paho y puede esperar el PUBACK.
+        hilo_temporizador = threading.Thread(
+            target=tarea_temporizador, args=(base, cliente.publicar, parando),
+            name="temporizador", daemon=True)
+        hilo_temporizador.start()
+
         hilo_inactividad = threading.Thread(
             target=tarea_inactividad, args=(reloj, cliente.publicar, parando),
             name="inactividad", daemon=True)

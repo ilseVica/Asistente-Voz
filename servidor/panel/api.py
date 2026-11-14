@@ -250,6 +250,29 @@ app = FastAPI(title="Panel del asistente", docs_url=None, redoc_url=None,
 
 
 @app.middleware("http")
+async def registro_peticion(request: Request, llamar):
+    """Log mínimo por petición HTTP (sin query ni token): método, ruta, código y
+    familiar enmascarado. Sirve para tener evidencia de lo que llegó a la API,
+    incluidos los canjes fallidos. No registra el cuerpo ni la query."""
+    respuesta = await llamar(request)
+    if request.url.path.startswith("/api/"):
+        familiar = "-"
+        try:
+            token = seguridad.token_de_cabecera(
+                request.headers.get("authorization", ""))
+            if token and base is not None:
+                fila = base.sesion_panel(panel_acceso.hash_de(token))
+                if fila is not None:
+                    familiar = db.enmascarar_chat(fila["chat_id"])
+        except Exception:  # noqa: BLE001
+            familiar = "-"
+        registro.info("http %s %s -> %d familiar=%s",
+                      request.method, request.url.path, respuesta.status_code,
+                      familiar)
+    return respuesta
+
+
+@app.middleware("http")
 async def cabeceras(request: Request, llamar):
     """`no-store` en todo, y las de seguridad en todas partes (apartado 5.4).
 

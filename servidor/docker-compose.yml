@@ -159,6 +159,7 @@ services:
       # Telegram que mostraban la hora (atendida, /alertas) dejan de salir en UTC.
       TZ: America/Mazatlan
       NIVEL_LOG: ${NIVEL_LOG:-INFO}
+      MUSICA_HABILITADO: ${MUSICA_HABILITADO:-0}
 
     volumes:
       # La base de datos y el registro de la familia. Ver la nota de arriba.

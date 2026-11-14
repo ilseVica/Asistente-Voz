@@ -145,10 +145,11 @@ if not (ADC_MINIMO < GAS_OFF_ADC < GAS_ON_ADC < ADC_MAXIMO):
 # Calibracion del nivel de agua, en cm. El firmware las recibe por nodo/config
 # (retenido) y las guarda en NVS. Calibrar = medir, editar .env y reiniciar
 # el orquestador.
-AGUA_VACIO_CM = int(os.environ.get("AGUA_VACIO_CM", "30"))
+# recalibrado 11 nov 2026 con las pruebas con agua; el eco en las paredes acorta la lectura
+AGUA_VACIO_CM = int(os.environ.get("AGUA_VACIO_CM", "20"))
 AGUA_LLENO_CM = int(os.environ.get("AGUA_LLENO_CM", "5"))
 if not (0 < AGUA_LLENO_CM < AGUA_VACIO_CM <= 400):
-    AGUA_VACIO_CM = 30
+    AGUA_VACIO_CM = 20
     AGUA_LLENO_CM = 5
 
 # Episodios de agua. Se abre con una sola lectura fuera del umbral; la
@@ -519,9 +520,11 @@ ALEXA_VIDEO_HABILITADO = os.environ.get("ALEXA_VIDEO_HABILITADO", "0").strip().l
 ALEXA_SKILL_ID = os.environ.get("ALEXA_SKILL_ID", "").strip()
 
 VIDEO_HABILITADO = os.environ.get("VIDEO_HABILITADO", "1").strip().lower() not in ("0", "false", "no", "")
+MUSICA_HABILITADO = os.environ.get("MUSICA_HABILITADO", "0").strip().lower() not in ("0", "false", "no", "")
 VENTANA_VIDEO_S = int(os.environ.get("VENTANA_VIDEO_S", "15"))
 # Satelite al que se le pide el video (igual que el boton para hablar).
 SATELITE_VIDEO_CLIENT_ID = os.environ.get("SATELITE_VIDEO_CLIENT_ID", "satelite-sala").strip() or "satelite-sala"
+SATELITE_MUSICA_CLIENT_ID = os.environ.get("SATELITE_MUSICA_CLIENT_ID", "satelite-sala").strip() or "satelite-sala"
 
 # Limite de caracteres de un mensaje a la sala.
 LIMITE_CHAT_CARACTERES = 200

@@ -1,7 +1,7 @@
 class Textos {
   Textos._();
 
-  static const String asistenteDeVoz = 'Asistente de Voz';
+  static const String asistenteDeVoz = 'Lucía';
   static const String salaPrincipal = 'Sala principal';
   static const String panel = 'Panel';
   static const String historialDeAlertas = 'Historial de alertas';

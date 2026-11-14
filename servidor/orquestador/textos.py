@@ -38,6 +38,17 @@ RESPUESTA_AYUDA = "No se preocupe, ya avisé a su familia."
 RESPUESTA_AYUDA_RECIENTE = "Ya avisé a su familia hace un momento. Alguien se comunicará con usted pronto."
 RESPUESTA_CANCELAR = "De acuerdo, cancelado."
 
+RESPUESTA_TEMPORIZADOR_CAMBIADO = "Cambié el temporizador a {minutos} minutos."
+RESPUESTA_TEMPORIZADOR_TERMINADO = "Ya pasaron {minutos} minutos."
+RESPUESTA_TEMPORIZADOR_CUANTO = "Faltan {minutos} minutos."
+RESPUESTA_SIN_TEMPORIZADOR = "No hay ningún temporizador."
+RESPUESTA_TEMPORIZADOR_CANCELADO = "Cancelé el temporizador."
+RESPUESTA_TEMPORIZADOR_PUESTO = "Listo, temporizador de {minutos} minutos."
+
+RESPUESTA_NO_REPITE = "No tengo nada que repetir."
+
+RESPUESTA_CASA_DESCONECTADA = "El nodo no está conectado; no tengo datos recientes de la casa."
+
 RESPUESTA_CANCELAR_FALSA_ALARMA = ("Listo, avisé a su familia que fue una "
                                     "falsa alarma.")
 RESPUESTA_CANCELAR_NADA = "No hay ningún aviso que cancelar."
@@ -59,6 +70,7 @@ RESPUESTA_NO_ENTENDI_VIDEO = "No le entendí, intente de nuevo"
 RESPUESTA_VIDEO_REINTENTAR = "No entendí, dímelo otra vez"
 RESPUESTA_VIDEO_NO_ENCONTRADO = "No encontré ese video. Puedes volver a pedirlo."
 RESPUESTA_VIDEO_NO_DISPONIBLE = "Por ahora no puedo poner videos"
+RESPUESTA_MUSICA_NO_DISPONIBLE = "Por ahora no puedo poner música."
 RESPUESTA_VIDEO_INGLES_NO_DISPONIBLE = "Ingles no disponible, busco en espanol"
 
 # El eco de prueba (se queda hasta el Paso 3).
@@ -235,9 +247,11 @@ RESPUESTA_AGUA_SIN_LECTURA = "No tengo lectura del agua."
 
 
 def respuesta_agua(pct: int) -> str:
-    if pct > config.AGUA_LLENO_ABRE_PCT:
+    if pct == 100:
+        return "El agua está llena, al 100 por ciento."
+    if pct >= config.AGUA_LLENO_ABRE_PCT:
         return "El agua está casi llena, al %d por ciento." % pct
-    if pct < config.AGUA_BAJO_ABRE_PCT:
+    if pct <= config.AGUA_BAJO_ABRE_PCT:
         return "El agua está baja, al %d por ciento." % pct
     return "El agua está al %d por ciento." % pct
 

@@ -2680,6 +2680,25 @@ prueba("destinos: 0 de 2",
        textos.destinos(0, 2))
 prueba("destinos: sin copias, nada", textos.destinos(0, 0) == "")
 
+prueba("agua 100 por ciento: llena",
+       textos.respuesta_agua(100) == "El agua está llena, al 100 por ciento.",
+       textos.respuesta_agua(100))
+prueba("agua 99 por ciento: casi llena",
+       textos.respuesta_agua(99) == "El agua está casi llena, al 99 por ciento.",
+       textos.respuesta_agua(99))
+prueba("agua 90 por ciento: casi llena (limite)",
+       textos.respuesta_agua(90) == "El agua está casi llena, al 90 por ciento.",
+       textos.respuesta_agua(90))
+prueba("agua 50 por ciento: normal",
+       textos.respuesta_agua(50) == "El agua está al 50 por ciento.",
+       textos.respuesta_agua(50))
+prueba("agua 20 por ciento: baja (limite)",
+       textos.respuesta_agua(20) == "El agua está baja, al 20 por ciento.",
+       textos.respuesta_agua(20))
+prueba("agua 19 por ciento: baja",
+       textos.respuesta_agua(19) == "El agua está baja, al 19 por ciento.",
+       textos.respuesta_agua(19))
+
 for codigo, esperado in (("boton", "Se pidió ayuda por medio del botón de ayuda."),
                          ("voz", "Se pidió ayuda por medio del asistente de voz."),
                          ("alexa", "Se pidió ayuda por medio de Alexa."),
@@ -3588,6 +3607,10 @@ prueba("con gas_on_adc y gas_off_adc, en el formato del contrato",
                          "agua_lleno_cm": config.AGUA_LLENO_CM}, cuerpo_config)
 prueba("retenido y con QoS 1, para que lo reciba quien se conecte después",
        publicados[0][2] == 1 and publicados[0][3] is True, publicados[0])
+prueba("calibracion agua: agua_vacio_cm por defecto 22",
+       config.AGUA_VACIO_CM == 20, config.AGUA_VACIO_CM)
+prueba("calibracion agua: agua_lleno_cm por defecto 5",
+       config.AGUA_LLENO_CM == 5, config.AGUA_LLENO_CM)
 esperados = [config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA,
              config.TOPICO_VOZ_TEXTO, config.TOPICO_SATELITE_ESTADO,
              config.TOPICO_SENSORES, config.TOPICO_NODO_ESTADO,
@@ -4204,11 +4227,19 @@ class _RelojFijo:
 
 # HORA casos
 casos_hora = [
-    ("Es la una y cinco de la tarde.", datetime(2026,10,28,13,5,0, tzinfo=ZoneInfo("America/Mazatlan"))),
-    ("Son las doce del día.", datetime(2026,10,28,12,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
-    ("Es medianoche.", datetime(2026,10,28,0,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
-    ("Son las ocho y media de la noche.", datetime(2026,10,28,20,30,0, tzinfo=ZoneInfo("America/Mazatlan"))),
-    ("Son las siete de la mañana.", datetime(2026,10,28,7,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Es medianoche.", datetime(2026,11,11,0,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y uno de la noche.", datetime(2026,11,11,0,1,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y diez de la noche.", datetime(2026,11,11,0,10,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y media de la noche.", datetime(2026,11,11,0,30,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y cincuenta de la noche.", datetime(2026,11,11,0,50,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y cincuenta y nueve de la noche.", datetime(2026,11,11,0,59,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Es la una de la mañana.", datetime(2026,11,11,1,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Es la una y diez.", datetime(2026,11,11,1,10,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las once y cuarenta y cinco.", datetime(2026,11,11,11,45,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce del día.", datetime(2026,11,11,12,0,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las doce y media del día.", datetime(2026,11,11,12,30,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Es la una y cinco de la tarde.", datetime(2026,11,11,13,5,0, tzinfo=ZoneInfo("America/Mazatlan"))),
+    ("Son las once y cincuenta de la noche.", datetime(2026,11,11,23,50,0, tzinfo=ZoneInfo("America/Mazatlan"))),
 ]
 for esperado, dt in casos_hora:
     voz.datetime = _RelojFijo(dt)
@@ -4878,5 +4909,101 @@ print("comprobaciones: %d" % COMPROBACIONES[0])
 print("fallos: %d" % len(FALLOS))
 for nombre in FALLOS:
     print("  - " + nombre)
+
+# --- TANDA 1: TEMPORIZADOR, REPITE, ESTADO_CASA ---
+import json as _json_t1
+import time as _time_t1
+
+# temporizador: reemplazo
+_base_t, _ruta_t = base_nueva("temp-")
+_base_t.crear_temporizador("t1", 5, int(_time_t1.time()) + 300)
+_base_t.crear_temporizador("t2", 10, int(_time_t1.time()) + 600)
+_activo = _base_t.obtener_temporizador_activo()
+prueba("temporizador reemplazo: queda el nuevo",
+       _activo is not None and _activo["minutos"] == 10, _activo)
+_base_t.cancelar_temporizador()
+prueba("temporizador cancelar sin activo devuelve False",
+       _base_t.cancelar_temporizador() is False)
+_base_t.crear_temporizador("t3", 3, int(_time_t1.time()) + 180)
+prueba("temporizador cancelar con activo devuelve True",
+       _base_t.cancelar_temporizador() is True)
+prueba("temporizador cancelado ya no está activo",
+       _base_t.obtener_temporizador_activo() is None)
+
+# REPITE con más de 10 min
+voz._ultima_respuesta["texto"] = "hola"
+voz._ultima_respuesta["ts"] = _time_t1.time() - 601
+_apuntes_r = []
+def _pub_r(topico, carga, qos=1, retain=False, esperar=True):
+    _apuntes_r.append((topico, carga))
+voz.procesar(_json_t1.dumps({"ts": int(_time_t1.time()), "texto": "repite",
+                             "frase_id": "fr1"}), _pub_r, _base_t)
+prueba("repite con más de 10 min dice no tener nada",
+       any(c.get("texto") == textos.RESPUESTA_NO_REPITE
+           for _, c in _apuntes_r), _apuntes_r)
+
+# ESTADO_CASA con nodo desconectado
+voz._nodo_conectado["valor"] = False
+_apuntes_c = []
+def _pub_c(topico, carga, qos=1, retain=False, esperar=True):
+    _apuntes_c.append((topico, carga))
+voz.procesar(_json_t1.dumps({"ts": int(_time_t1.time()),
+                             "texto": "como esta la casa", "frase_id": "fc1"}),
+             _pub_c, _base_t)
+prueba("casa con nodo desconectado avisa sin alarmar",
+       any(c.get("texto") == textos.RESPUESTA_CASA_DESCONECTADA
+           for _, c in _apuntes_c), _apuntes_c)
+
+# ESTADO_CASA con sensor null
+voz._nodo_conectado["valor"] = True
+voz._estado_luz["valor"] = None
+voz._ultimos_sensores["temperatura"] = None
+voz._ultimos_sensores["agua_pct"] = None
+_apuntes_c2 = []
+def _pub_c2(topico, carga, qos=1, retain=False, esperar=True):
+    _apuntes_c2.append((topico, carga))
+voz.procesar(_json_t1.dumps({"ts": int(_time_t1.time()),
+                             "texto": "como esta la casa", "frase_id": "fc2"}),
+             _pub_c2, _base_t)
+prueba("casa con sensores null no se cuelga",
+       len(_apuntes_c2) == 1, _apuntes_c2)
+
+_base_t.cerrar()
+voz._nodo_conectado["valor"] = None
+
+
+# --- TANDA 2: BUENOS_DIAS ---
+import json as _json_t2
+_apuntes_bd = []
+def _pub_bd(topico, carga, qos=1, retain=False, esperar=True):
+    _apuntes_bd.append((topico, carga))
+voz._nodo_conectado["valor"] = True
+voz._ultimos_sensores["temperatura"] = 22
+voz.procesar(_json_t2.dumps({"ts": int(time.time()), "texto": "buenos dias",
+                             "frase_id": "fbd1"}), _pub_bd, _base_nueva("bd-")[0] if False else base_nueva("bd-")[0])
+# base_nueva returns (base, ruta); take base
+_bd_base, _ = base_nueva("bd-")
+_apuntes_bd = []
+voz.procesar(_json_t2.dumps({"ts": int(time.time()), "texto": "buenos dias",
+                             "frase_id": "fbd2"}), _pub_bd, _bd_base)
+prueba("buenos dias publica respuesta",
+       len(_apuntes_bd) == 1 and "¿Sabía que…?" in _apuntes_bd[0][1].get("texto", ""),
+       _apuntes_bd)
+_bd_base.cerrar()
+voz._nodo_conectado["valor"] = None
+
+
+# --- TANDA 3: MUSICA ---
+import json as _json_t3
+_ap = []
+def _pub_t3(topico, carga, qos=1, retain=False, esperar=True):
+    _ap.append((topico, carga))
+_b, _ = base_nueva("mus-")
+voz.procesar(_json_t3.dumps({"ts": int(time.time()), "texto": "pon musica ranchera",
+                             "frase_id": "fm1"}), _pub_t3, _b)
+prueba("musica deshabilitada responde no disponible",
+       any(c.get("texto") == textos.RESPUESTA_MUSICA_NO_DISPONIBLE for _, c in _ap),
+       _ap)
+_b.cerrar()
 
 sys.exit(1 if FALLOS else 0)

@@ -1780,6 +1780,29 @@ for pct, esperado in ((None, "No tengo lectura del agua."),
                texto == esperado, (texto, esperado))
 api_modulo.alexa.verificar = _verificar_original
 
+# Log mínimo por petición (middleware): método, ruta sin query, código y familiar.
+class _CapturaLog(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.mensajes = []
+
+    def emit(self, record):
+        self.mensajes.append(self.format(record))
+
+_logger_peticion = logging.getLogger("panel-api")
+_logger_peticion.setLevel(logging.INFO)
+_captura = _CapturaLog()
+_logger_peticion.addHandler(_captura)
+try:
+    _r = cliente.get("/api/salud")
+    prueba("log de peticion: registra GET /api/salud con su codigo",
+           any("http GET /api/salud" in m and "-> %d" % _r.status_code in m
+               for m in _captura.mensajes), _captura.mensajes)
+    prueba("log de peticion: no contiene token=",
+           all("token=" not in m for m in _captura.mensajes), _captura.mensajes)
+finally:
+    _logger_peticion.removeHandler(_captura)
+
 cliente.__exit__(None, None, None)
 
 print("\n" + "=" * 66)

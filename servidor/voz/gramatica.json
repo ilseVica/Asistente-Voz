@@ -19,14 +19,19 @@
       "enciende la luz por favor",
       "prende la luz por favor",
       "enciende el foco por favor",
-      "prende el foco por favor"
+      "prende el foco por favor",
+      "prenda la luz",
+      "encienda la luz",
+      "prenda el foco"
     ],
     "APAGAR_LUZ": [
       "apaga la luz",
       "apaga el foco",
       "apaga la luz de la sala",
       "apaga la luz por favor",
-      "apaga el foco por favor"
+      "apaga el foco por favor",
+      "apague la luz",
+      "apague el foco"
     ],
     "AYUDA": [
       "necesito ayuda",
@@ -37,11 +42,15 @@
       "ayuda por favor",
       "necesito auxilio",
       "ayuda ya",
-      "auxilio ya"
+      "auxilio ya",
+      "auxilio por favor",
+      "ayúdeme"
     ],
     "CANCELAR": [
       "cancela",
-      "olvidalo"
+      "olvidalo",
+      "olvídelo",
+      "cancele"
     ],
     "SENUELO": [
       "ayer",
@@ -71,36 +80,50 @@
       "necesito un cafe",
       "cancela la cita",
       "olvidalo todo",
-      "hola buenos dias",
       "la luz",
       "la luz esta bonita",
       "gracias por todo",
       "cuanto cuesta eso",
-      "auxilio por favor",
-      "ayuda por favor",
       "prende",
       "apaga",
       "enciende",
       "prende por favor",
       "apaga por favor",
-      "por favor"
+      "por favor",
+      "prenda por favor",
+      "apague por favor",
+      "ayúdeme a prender"
     ],
     "HORA": [
       "que hora es",
       "dime la hora",
-      "que horas son"
+      "que horas son",
+      "que hora tiene",
+      "me dice la hora",
+      "sabe que hora es",
+      "que hora tenemos"
     ],
     "FECHA": [
       "que dia es hoy",
-      "que fecha es hoy"
+      "que fecha es hoy",
+      "que dia es",
+      "a cuantos estamos",
+      "que fecha tenemos",
+      "que dia estamos"
     ],
     "TEMPERATURA": [
       "que temperatura hace",
-      "como esta el clima"
+      "como esta el clima",
+      "cuantos grados hace",
+      "hace calor",
+      "hace frio",
+      "que tal el clima"
     ],
     "RECORDATORIOS": [
       "tengo recordatorios",
-      "que tengo hoy"
+      "que tengo hoy",
+      "que recordatorios tengo",
+      "tengo pendientes"
     ],
     "ESTOY_BIEN": [
       "avisa a mi familia que estoy bien"
@@ -121,7 +144,55 @@
       "cuanta agua hay",
       "nivel del agua",
       "como esta el agua",
-      "cuanta agua queda"
+      "cuanta agua queda",
+      "cuanta agua tiene el tinaco"
+    ],
+    "TEMPORIZADOR": [
+      "pon un temporizador de un minuto",
+      "pon un temporizador de dos minutos",
+      "pon un temporizador de tres minutos",
+      "pon un temporizador de cinco minutos",
+      "pon un temporizador de diez minutos",
+      "pon un temporizador de quince minutos",
+      "pon un temporizador de veinte minutos",
+      "pon un temporizador de treinta minutos",
+      "pon un temporizador de cuarenta y cinco minutos",
+      "pon un temporizador de sesenta minutos",
+      "cuanto falta",
+      "cancela el temporizador"
+    ],
+    "ESTADO_CASA": [
+      "como esta la casa",
+      "todo bien en la casa"
+    ],
+    "REPITE": [
+      "repite",
+      "que dijiste",
+      "no te escuche",
+      "repite por favor",
+      "dilo otra vez",
+      "otra vez por favor"
+    ],
+    "BUENOS_DIAS": [
+      "buenos dias",
+      "buenos dias lucia",
+      "hola buenos dias"
+    ],
+    "MUSICA": [
+      "pon musica",
+      "pon una cancion",
+      "quiero escuchar musica",
+      "pon musica ranchera",
+      "pon boleros",
+      "pon musica tranquila"
+    ],
+    "MUSICA_CONTROL": [
+      "sube el volumen",
+      "baja el volumen",
+      "pausa la musica",
+      "sigue la musica",
+      "continua la musica",
+      "quita la musica"
     ]
   }
 }

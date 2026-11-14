@@ -81,7 +81,7 @@ Calibración del bote (nivel de agua):
 2. Medir la distancia del sensor a la superficie con el bote lleno = `AGUA_LLENO_CM`.
 3. Editar `servidor/.env`: `AGUA_VACIO_CM=...` y `AGUA_LLENO_CM=...`.
 4. Reiniciar el orquestador: `docker compose up -d orquestador` (publica `nodo/config` retenido).
-5. El ESP32 guarda los valores en NVS. Valores por defecto: vacío 30 cm, lleno 5 cm.
+5. El ESP32 guarda los valores en NVS. Valores por defecto: vacío 20 cm, lleno 5 cm.
 JSN-SR04T: cambiar `AGUA_ZONA_CIEGA_CM` (2 -> 20) y recalibrar.
 
 ## 2b. Arranque para la demostración en el lugar (hotspot del iPhone, respaldo)
@@ -153,25 +153,44 @@ Decir frases completas; las incompletas (por ejemplo «prende») se responden co
 
 **ENCENDER_LUZ:** enciende la luz, prende la luz, enciende el foco, prende el
 foco, enciende la luz de la sala, enciende la luz por favor, prende la luz por
-favor, enciende el foco por favor, prende el foco por favor.
+favor, enciende el foco por favor, prende el foco por favor, prenda la luz,
+encienda la luz, prenda el foco.
 
 **APAGAR_LUZ:** apaga la luz, apaga el foco, apaga la luz de la sala, apaga la
-luz por favor, apaga el foco por favor.
+luz por favor, apaga el foco por favor, apague la luz, apague el foco.
 
 **AYUDA:** necesito ayuda, ayuda, ayudame, auxilio, ayudame por favor, ayuda por
-favor, necesito auxilio, ayuda ya, auxilio ya.
+favor, necesito auxilio, ayuda ya, auxilio ya, ayúdeme, ayúdeme por favor,
+auxilio por favor.
 
-**CANCELAR:** cancela, olvidalo. «Cancela» deshace una petición de ayuda hecha
+**CANCELAR:** cancela, olvidalo, olvídelo, cancele. «Cancela» deshace una petición de ayuda hecha
 por voz en los 2 minutos anteriores; Telegram dice «Falsa alarma».
 
-**HORA:** que hora es, dime la hora, que horas son. Para la hora usar «dime la
+**HORA:** que hora es, dime la hora, que horas son, que hora tiene, me dice la
+hora, sabe que hora es, que hora tenemos. Para la hora usar «dime la
 hora» o «qué horas son».
 
-**FECHA:** que dia es hoy, que fecha es hoy.
+**FECHA:** que dia es hoy, que fecha es hoy, que dia es, a cuantos estamos, que
+fecha tenemos, que dia estamos.
 
-**TEMPERATURA:** que temperatura hace, como esta el clima.
+**TEMPERATURA:** que temperatura hace, como esta el clima, cuantos grados hace,
+hace calor, hace frio, que tal el clima.
 
-**RECORDATORIOS:** tengo recordatorios, que tengo hoy.
+**RECORDATORIOS:** tengo recordatorios, que tengo hoy, que recordatorios tengo,
+tengo pendientes.
+
+**TEMPORIZADOR:** pon un temporizador de un minuto, ..., de sesenta minutos,
+cuanto falta, cancela el temporizador.
+
+**ESTADO_CASA:** como esta la casa, todo bien en la casa.
+
+**REPITE:** repite, que dijiste, no te escuche, repite por favor, dilo otra vez,
+otra vez por favor.
+
+**BUENOS_DIAS:** buenos dias, buenos dias lucia, hola buenos dias.
+
+**MUSICA:** pon musica, pon una cancion, quiero escuchar musica, pon musica ranchera, pon boleros, pon musica tranquila.
+**MUSICA_CONTROL:** sube el volumen, baja el volumen, pausa la musica, sigue la musica, continua la musica, quita la musica.
 
 **ESTOY_BIEN:** avisa a mi familia que estoy bien.
 
@@ -180,6 +199,9 @@ video» a veces no se reconoce; usar «pon un video».
 
 **CERRAR_VIDEO:** cierra el video, quita el video, para el video. Para video usar
 «pon un video».
+
+**AGUA:** cuanta agua hay, nivel del agua, como esta el agua, cuanta agua queda,
+cuanta agua tiene el tinaco.
 
 ## 6. Video por voz
 
@@ -375,3 +397,11 @@ Agregar canciones:
    - Reconstruir y recrear voz y orquestador: `docker compose build voz orquestador`
      y `docker compose up -d --no-deps voz orquestador`.
 
+
+## Palabra de activación «Lucía»
+
+El satélite puede escuchar continuamente la palabra «Lucía» (opción `lucia.activa = true`
+en el config). Al detectarla, suena un tono corto y empieza a escuchar la frase, igual
+que con F9. Si en 5 s no se dice nada, se cierra sin responder. F9 y el botón
+«Mantener para hablar» del panel siguen funcionando como respaldo. Por defecto está
+desactivada (`lucia.activa = false`).

@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import satelite  # noqa: E402
 from satelite import (  # noqa: E402
+    DetectorLucia,
     Config, Frase, Nucleo, PuenteMQTT, RegistroLatencias, ServidorTecla,
     aceptar_por_antiguedad, reloj_ms, topico_estado_de, MENSAJE_REPETIR,
     MENSAJE_SIN_CONEXION, TRAMA_BYTES,
@@ -1092,7 +1093,7 @@ class TestHablarPanel(Base):
         puente.topico_estado = topico_estado_de(cfg)
         puente.topico_hablar = "casa/sala/satelite/%s/hablar" % cfg.client_id
         puente.topico_video = "casa/sala/satelite/%s/video" % cfg.client_id
-        puente.loop = asyncio.get_event_loop()
+        puente.loop = asyncio.get_running_loop()
         puente.listo = asyncio.Event()
 
         class Msg:
@@ -1334,6 +1335,134 @@ class TestIdioma(Base):
         n.ws = ws
         n.abrir_frase(origen="tecla")
         self.assertEqual(ws.json[-1].get("idioma"), "es")
+
+class TestLucia(unittest.TestCase):
+    def test_detector_no_disponible_sin_modelo(self):
+        d = DetectorLucia(modelo_ruta="", umbral=0.5)
+        self.assertFalse(d.disponible())
+
+    def test_puede_despertar_respeta_guardas(self):
+        n = Nucleo.__new__(Nucleo)
+        # configuracion minima
+        n.cfg = Config() if False else None
+        # usar Config real
+        from satelite import Config
+        n.cfg = Config()
+        n.cfg.lucia_activa = True
+        n.hablando = False
+        n.frase = None
+        n.ws = None
+        self.assertFalse(n.puede_despertar())  # sin ws
+        ws = FakeWS()
+        n.ws = ws
+        self.assertTrue(n.puede_despertar())
+        n.hablando = True
+        self.assertFalse(n.puede_despertar())
+        n.hablando = False
+        n.frase = object()
+        self.assertFalse(n.puede_despertar())
+
+    def test_lucia_desactivada_por_defecto(self):
+        from satelite import Config
+        c = Config()
+        self.assertFalse(c.lucia_activa)
+
+
+class TestLuciaIntegracion(unittest.IsolatedAsyncioTestCase):
+    def hacer_nucleo(self, ws=None, lucia_activa=False):
+        cfg = satelite.Config()
+        cfg.lucia_activa = lucia_activa
+        cfg.lucia_umbral = 0.5
+        cfg.lucia_modelo = ""
+        rep = FakeRep()
+        import tempfile as _tf
+        _tmp = _tf.NamedTemporaryFile(delete=False)
+        n = satelite.Nucleo(cfg, rep, RegistroLatencias(_tmp.name), asyncio.get_running_loop())
+        if ws is not None:
+            n.ws = ws
+        return n, rep
+
+    async def test_activa_false_no_crea_detector(self):
+        n, rep = self.hacer_nucleo(lucia_activa=False)
+        self.assertIsNone(n.lucia_detector)
+
+    async def test_despertar_abre_frase_y_programa_timeout(self):
+        ws = FakeWS()
+        n, rep = self.hacer_nucleo(ws=ws, lucia_activa=True)
+        # DetectorLucia puede ser None si no hay modelo; forzar uno falso disponible
+        class D:
+            def disponible(self): return True
+            def alimentar(self, t): return False
+        n.lucia_detector = D()
+        ok = n.despertar_lucia()
+        self.assertTrue(ok)
+        self.assertIsNotNone(n.frase)
+        self.assertEqual(n.frase.origen, "lucia")
+        self.assertIsNotNone(n._timer_lucia)
+
+    async def test_despertar_no_abre_si_hablando(self):
+        ws = FakeWS()
+        n, rep = self.hacer_nucleo(ws=ws, lucia_activa=True)
+        class D:
+            def disponible(self): return True
+        n.lucia_detector = D()
+        n.hablando = True
+        self.assertFalse(n.despertar_lucia())
+
+
+
+class TestMusicaTanda3(unittest.TestCase):
+    def test_musica_activa_false_no_hace_nada(self):
+        import satelite, time
+        cfg = satelite.Config()
+        cfg.musica_activa = False
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.musica_disponible = True
+        nucleo.al_musica({"accion": "buscar", "consulta": "jazz", "ts": int(time.time())})
+        self.assertIsNone(nucleo._proceso_musica)
+        loop.close()
+
+    def test_quita_la_musica_no_reanuda(self):
+        import satelite, time
+        cfg = satelite.Config()
+        cfg.musica_activa = True
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.musica_disponible = True
+        nucleo._musica_pausada_por_lucia = True
+        nucleo.al_musica({"accion": "quita", "ts": int(time.time())})
+        self.assertFalse(nucleo._musica_pausada_por_lucia)
+        loop.close()
+
+    def test_alerta_cierra_musica(self):
+        import satelite, time
+        cfg = satelite.Config()
+        cfg.musica_activa = True
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.musica_disponible = True
+        nucleo._proceso_musica = None
+        nucleo.al_musica({"accion": "cerrar", "ts": int(time.time())})
+        self.assertIsNone(nucleo._proceso_musica)
+        loop.close()
+
+    def test_pausa_por_lucia_reanuda(self):
+        import satelite, time
+        cfg = satelite.Config()
+        cfg.musica_activa = True
+        rep = FakeRep()
+        loop = asyncio.new_event_loop()
+        nucleo = satelite.Nucleo(cfg, rep, None, loop)
+        nucleo.musica_disponible = True
+        nucleo._musica_pausada_por_lucia = True
+        nucleo._reanudar_musica_si_pausada()
+        self.assertFalse(nucleo._musica_pausada_por_lucia)
+        loop.close()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

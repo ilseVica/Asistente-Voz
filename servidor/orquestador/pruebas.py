@@ -5042,6 +5042,32 @@ _total_pa = sum(len(v) for v in json.load(open(
     os.path.join(os.path.dirname(__file__), "..", "voz", "gramatica.json")))["intenciones"].values())
 prueba("PA total frases gramatica = 173", _total_pa == 173, _total_pa)
 
+import saludo_diario as _sd_mod
+# --- PARTE B extra: SIENTO_MAL dentro de la ventana cuenta como mal ---
+_base_sm, _ = base_nueva("saludomal-")
+class _SatSM:
+    def conectados(self): return ["satelite-sala"]
+    def conectado(self, cid): return cid == "satelite-sala"
+_pubs_sm = []
+def _pub_sm(topico, carga, qos=1, retain=False, esperar=True):
+    _pubs_sm.append((topico, carga))
+_sd_sm = _sd_mod.Estado(_base_sm, _SatSM(), _pub_sm, None, ahora=time.time())
+_sd_sm.disparar(ahora=time.time(), manual=True)
+voz._saludo_diario = _sd_sm
+_antes_sm = _base_sm.conexion.execute("SELECT COUNT(*) FROM alertas").fetchone()[0]
+voz.procesar('{"frase_id":"sm1","texto":"me siento mal","modo":"comandos","ts":%d}' % int(time.time()),
+             _pub_sm, base=_base_sm)
+_despues_sm = _base_sm.conexion.execute("SELECT COUNT(*) FROM alertas").fetchone()[0]
+_tipos_sm = [r[0] for r in _base_sm.conexion.execute("SELECT tipo FROM alertas").fetchall()]
+prueba("PB SIENTO_MAL en ventana: una alerta bienestar",
+       _despues_sm == _antes_sm + 1 and "bienestar" in _tipos_sm,
+       (_antes_sm, _despues_sm, _tipos_sm))
+prueba("PB SIENTO_MAL en ventana: responde Lo siento",
+       any(c.get("texto") == textos.SALUDO_DIARIO_MAL for _, c in _pubs_sm),
+       _pubs_sm)
+voz._saludo_diario = None
+_base_sm.cerrar()
+
 # --- PARTE B: SALUDO DIARIO ---
 import saludo_diario as _sd_mod
 import config as _cfg_pb

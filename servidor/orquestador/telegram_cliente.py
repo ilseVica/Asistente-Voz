@@ -252,7 +252,8 @@ class Remitente:
             asyncio.run_coroutine_threadsafe(corrutina, self._bucle)
         )
 
-    def enviar(self, texto: str, teclado=None, chat_id: str = None) -> object:
+    def enviar(self, texto: str, teclado=None, chat_id: str = None,
+                disable_notification: bool = False) -> object:
         """Manda un mensaje a UN familiar. Lanza excepción si no se pudo.
 
         `chat_id` es obligatorio en la práctica: no hay un chat por defecto, porque
@@ -283,12 +284,14 @@ class Remitente:
                 "consumir intentos"
             )
 
-        mensaje = self._ejecutar(self._enviar_async(texto, teclado, str(chat_id)))
+        mensaje = self._ejecutar(self._enviar_async(texto, teclado, str(chat_id),
+                                                       disable_notification))
         if not mensaje:
             raise TelegramError("Telegram acepto el envio pero no lo confirmo")
         return mensaje
 
-    async def _enviar_async(self, texto: str, teclado=None, chat_id: str = None):
+    async def _enviar_async(self, texto: str, teclado=None, chat_id: str = None,
+                            disable_notification: bool = False):
         # No hay `except` aquí a proposito: cualquier error de Telegram sube
         # hasta `enviar`, que lo deja pasar, y de ahí al trabajador, que decide si
         # reintenta. Envuelto en un `try/except TelegramError: raise` sería lo
@@ -299,6 +302,7 @@ class Remitente:
             parse_mode=None,  # texto plano: ver alertas.texto_para_telegram
             disable_web_page_preview=True,
             reply_markup=teclado,
+            disable_notification=disable_notification,
         )
 
     def editar(self, mensaje, texto: str, teclado=None,

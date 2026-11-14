@@ -58,6 +58,23 @@ RESPUESTA_CANCELAR_TARDE = ("Su familia ya recibió el aviso; ellos lo marcarán
 
 RESPUESTA_SIN_TEMPERATURA = "Por ahora no tengo la temperatura de la sala."
 RESPUESTA_ESTOY_BIEN = "Listo, ya le avisé a su familia."
+RESPUESTA_AVISAR_BIEN = "Listo, le avisé a su familia que está bien."
+RESPUESTA_SIENTO_MAL = "Ya le avisé a su familia. Si es urgente, diga ayuda."
+
+SALUDO_DIARIO_PREGUNTA = "Buenos días. ¿Cómo amaneció?"
+SALUDO_DIARIO_REINTENTO = "¿Me escucha? ¿Cómo amaneció?"
+SALUDO_DIARIO_NO_ENTENDI = "Perdón, no le entendí. ¿Amaneció bien, más o menos o mal?"
+SALUDO_DIARIO_BIEN = "Qué gusto."
+SALUDO_DIARIO_REGULAR = "Gracias por decirme. Le aviso a su familia para que esté al pendiente."
+SALUDO_DIARIO_MAL = "Lo siento. Ya le avisé a su familia. Si es urgente, diga ayuda."
+SALUDO_DIARIO_SIN_MICROFONO = "Lucía no pudo saludar: el micrófono de la sala está desconectado."
+SALUDO_DIARIO_AVISO_BIEN = "Buenos días: amaneció bien."
+SALUDO_DIARIO_AVISO_REGULAR = "Buenos días: dijo que amaneció más o menos."
+
+ALERTA_BIENESTAR = "Aviso de bienestar: {texto}\n\nReferencia de la alerta: {id}"
+RESPUESTA_DORMIR_BIEN = "Que descanse. Ya apagué la luz y la casa está bien."
+RESPUESTA_DORMIR_AVISO = "Ya apagué la luz. Antes de dormir, revise: {aviso}."
+RESPUESTA_LLEGUE = "Qué gusto que ya llegó. Ya encendí la luz."
 RESPUESTA_SIN_RECORDATORIOS = "Hoy no tiene recordatorios pendientes."
 
 RESPUESTA_CHAT_ENVIADA = "Listo, le envié su respuesta."
@@ -298,6 +315,7 @@ ATENDIDA_FRASE = {
     "ayuda": "La petición de ayuda se marcó como atendida",
     "inactividad": "El aviso de inactividad se marcó como atendido",
     "agua": "El aviso de nivel de agua se marcó como atendido",
+    "bienestar": "La alerta de bienestar se marcó como atendida",
 }
 ATENDIDA_FRASE_OTRO = "El aviso se marcó como atendido"
 
@@ -480,3 +498,4 @@ CHAT_DEMASIADO_LARGO = "El mensaje no puede pasar de 200 caracteres."
 ERROR_BOTON = "Ocurrió un error. Por favor, inténtelo de nuevo."
 ERROR_COMANDO = "Ocurrió un error al procesar el comando. Por favor, inténtelo de nuevo."
 
+RESPUESTA_LEVANTARSE_LUZ = "Ya encendí la luz."

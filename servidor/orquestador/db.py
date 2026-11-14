@@ -114,7 +114,7 @@ ENVIO_FALLIDO_PERMANENTE = 2147483647
 # antes, y rellenarlo con un nombre inventado seria peor que dejarlo vacio. Otra
 # columna nueva en una tabla vieja, asi que otra vez el `ALTER TABLE` idempotente
 # de la 2->3 y de la 4.
-VERSION_ESQUEMA = 12
+VERSION_ESQUEMA = 13
 
 # La marca que deja la migración en `alertas.estado` para decir «esta fila ya se
 # repartio», antes de borrar la columna entera. Un valor y no un `NULL`, porque en
@@ -461,6 +461,17 @@ class BaseDatos:
             self.conexion.execute(
                 "ALTER TABLE familiares ADD COLUMN tiene_telegram "
                 "INTEGER NOT NULL DEFAULT 1")
+
+        # De la 12 a la 13 (saludo diario): tabla `saludo_diario`. Las tablas las
+        # crea esquema.sql con IF NOT EXISTS; aqui se asegura en bases antiguas.
+        if version < 13:
+            self.conexion.execute("""
+                CREATE TABLE IF NOT EXISTS saludo_diario (
+                    fecha      TEXT NOT NULL PRIMARY KEY,
+                    respuesta  TEXT NOT NULL,
+                    creado_en  INTEGER NOT NULL
+                )
+            """)
 
         self.conexion.execute("PRAGMA user_version = %d" % VERSION_ESQUEMA)
         registro.info("base de datos migrada a la versión %d del esquema",
@@ -1583,6 +1594,37 @@ class BaseDatos:
             return self.conexion.execute(
                 "SELECT * FROM alertas WHERE id = ?", (id_alerta,)
             ).fetchone()
+
+    def hay_alerta_abierta(self) -> bool:
+        """Si hay alguna alerta sin atender ni descartar."""
+        with _candado:
+            fila = self.conexion.execute(
+                "SELECT 1 FROM alertas WHERE resuelto_en IS NULL "
+                "AND descartada_en IS NULL LIMIT 1").fetchone()
+        return fila is not None
+
+    def registrar_saludo_diario(self, fecha: str, respuesta: str,
+                                ahora: int = None) -> None:
+        if ahora is None:
+            ahora = int(time.time())
+        with _candado:
+            self.conexion.execute(
+                "INSERT OR REPLACE INTO saludo_diario (fecha, respuesta, creado_en) "
+                "VALUES (?, ?, ?)", (str(fecha), str(respuesta), int(ahora)))
+            self.conexion.commit()
+
+    def obtener_saludo_diario(self, fecha: str):
+        with _candado:
+            return self.conexion.execute(
+                "SELECT * FROM saludo_diario WHERE fecha = ?", (str(fecha),)
+            ).fetchone()
+
+    def saludo_diario_hecho(self, fecha: str) -> bool:
+        with _candado:
+            fila = self.conexion.execute(
+                "SELECT 1 FROM saludo_diario WHERE fecha = ?", (str(fecha),)
+            ).fetchone()
+        return fila is not None
 
     def gas_sin_atender_desde(self, desde: int) -> list:
         """Alertas de gas sin atender ni descartar creadas desde `desde`.

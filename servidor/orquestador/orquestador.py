@@ -30,6 +30,7 @@ import db
 import cola
 import inactividad
 import agua as agua_modulo
+import saludo_diario
 import mqtt_cliente
 import recordatorios
 import registro
@@ -275,7 +276,7 @@ def tarea_conversacion(base, publicar, remitente, satelites, parando) -> None:
 
 
 def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
-            reloj=None, agua=None) -> None:
+            reloj=None, agua=None, saludo=None) -> None:
     """Reparte un mensaje de MQTT a quien lo procesa.
 
     Es una funcion y no un `if` suelto para que se pueda probar sola, y para que el
@@ -319,6 +320,9 @@ def enrutar(topico, cuerpo, base, publicar, retenido=False, satelites=None,
         voz.actualizar_estado_luz(cuerpo)
     elif reloj is not None and inactividad.es_enlace_sitio(topico):
         reloj.registrar_enlace(cuerpo)
+    elif topico == getattr(config, "TOPICO_SALUDO_DISPARAR", "casa/sala/saludo/disparar"):
+        if saludo is not None:
+            saludo.disparar(ahora=time.time(), manual=True)
     else:
         alertas.procesar(topico, cuerpo, base, publicar)
 
@@ -422,16 +426,22 @@ def main() -> int:
     reloj = inactividad.Estado(base)
     agua = agua_modulo.EstadoAgua(base)
 
+    saludo_holder = {"v": None}
     cliente = mqtt_cliente.ClienteMQTT(
         lambda topico, cuerpo, retenido=False: enrutar(topico, cuerpo, base,
                                                        publicar_eco, retenido,
-                                                       satelites, reloj, agua),
+                                                       satelites, reloj, agua,
+                                                       saludo_holder["v"]),
         # El gancho de reconexión reinicia el reloj tras un corte de MQTT (no en la
         # primera conexión): durante el corte no llegaron los `presencia`, así que
         # avisar justo al reconectar sería una alarma ciega.
         al_reconectar=reloj.registrar_reconexion,
     )
 
+    saludo = saludo_diario.Estado(base, satelites, cliente.publicar, remitente)
+    saludo_holder["v"] = saludo
+    # Exponer al modulo de voz para el adelanto con buenos dias / ya me levante.
+    voz._saludo_diario = saludo
     trabajador = cola.TrabajadorTelegram(base, remitente)
 
     # El bot se construye despues del cliente MQTT y se ARRANCA despues de
@@ -494,6 +504,19 @@ def main() -> int:
                                              satelites, parando),
             name="conversacion", daemon=True)
         hilo_conversacion.start()
+
+        def tarea_saludo_diario(saludo, parando):
+            while not parando.is_set():
+                try:
+                    saludo.verificar()
+                except Exception as error:  # noqa: BLE001
+                    registro_log.error("saludo diario: %s", error)
+                parando.wait(30.0)
+
+        hilo_saludo = threading.Thread(
+            target=tarea_saludo_diario, args=(saludo, parando),
+            name="saludo_diario", daemon=True)
+        hilo_saludo.start()
 
         conteo = base.contar_por_estado()
         registro_log.info("alertas ya en la base: %s",

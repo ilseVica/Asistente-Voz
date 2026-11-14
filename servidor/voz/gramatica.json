@@ -125,9 +125,6 @@
       "que recordatorios tengo",
       "tengo pendientes"
     ],
-    "ESTOY_BIEN": [
-      "avisa a mi familia que estoy bien"
-    ],
     "BUSCAR_VIDEO": [
       "busca un video",
       "pon un video",
@@ -193,6 +190,44 @@
       "sigue la musica",
       "continua la musica",
       "quita la musica"
+    ],
+    "DORMIR": [
+      "ya me voy a dormir",
+      "me voy a dormir",
+      "ya me voy a acostar",
+      "me voy a acostar",
+      "hasta mañana"
+    ],
+    "LEVANTARSE": [
+      "ya me levanté",
+      "ya desperté"
+    ],
+    "LLEGUE": [
+      "ya llegué",
+      "ya estoy en casa"
+    ],
+    "AVISAR_BIEN": [
+      "avísale a mi familia que estoy bien",
+      "dile a mi familia que estoy bien",
+      "avisa que estoy bien"
+    ],
+    "SIENTO_MAL": [
+      "me siento mal",
+      "no me siento bien",
+      "no estoy bien",
+      "estoy mal"
+    ],
+    "SALUDO_RESPUESTA": [
+      "bien",
+      "muy bien",
+      "bien gracias",
+      "muy bien gracias",
+      "estoy bien",
+      "más o menos",
+      "regular",
+      "no muy bien",
+      "mal",
+      "muy mal"
     ]
   }
 }

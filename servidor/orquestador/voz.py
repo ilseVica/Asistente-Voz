@@ -36,6 +36,7 @@ _ventana_reintentos = {"valor": 0}
 _ventana_tope = {"valor": 0.0}
 _ventana_modo = {"valor": None}  # "chat" | "video" | None
 _ventana_idioma = {"valor": "es"}  # "es" | "en"
+_saludo_diario = None
 _catalogo_ingles = {}  # titulo normalizado -> artista
 
 _frase_a_intencion = {}
@@ -478,6 +479,91 @@ def registrar_ultima_respuesta(texto: str) -> None:
         pass
 
 
+def _buenos_dias(publicar, frase_id, base=None) -> None:
+    datos = _cargar_efemerides()
+    efem = datos.get("efemerides", {}) if isinstance(datos, dict) else {}
+    curiosidades = datos.get("curiosidades", []) if isinstance(datos, dict) else []
+    ahora = datetime.now(ZoneInfo("America/Mazatlan"))
+    hora = ahora.hour
+    if 5 <= hora <= 11:
+        saludo = "Buenos días"
+    elif 12 <= hora <= 18:
+        saludo = "Buenas tardes"
+    else:
+        saludo = "Buenas noches"
+    fecha_txt = "%s %d de %s" % (_DIAS_SEMANA[ahora.weekday()],
+                                 ahora.day, _MESES[ahora.month - 1])
+    partes = ["%s. Hoy es %s." % (saludo, fecha_txt),
+              _hora_en_palabras(ahora)]
+    ts = _ultimos_sensores.get("ts")
+    temp = _ultimos_sensores.get("temperatura")
+    if (ts is None or (int(time.time()) - int(ts)) > 300
+            or temp is None):
+        partes.append(textos.RESPUESTA_SIN_TEMPERATURA)
+    else:
+        try:
+            temp_txt = str(int(round(float(temp))))
+        except (TypeError, ValueError):
+            temp_txt = None
+        if temp_txt is None:
+            partes.append(textos.RESPUESTA_SIN_TEMPERATURA)
+        else:
+            partes.append("En la sala hace %s grados." % temp_txt)
+    if base is not None and hasattr(base, "listar_recordatorios"):
+        hoy = ahora.date()
+        pendientes = []
+        for fila in base.listar_recordatorios():
+            if not fila["activo"]:
+                continue
+            prox = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan")).date()
+            if prox == hoy:
+                pendientes.append(fila["texto"])
+        if pendientes:
+            partes.append("Hoy tiene: " + "; ".join(pendientes) + ".")
+        else:
+            partes.append(textos.RESPUESTA_SIN_RECORDATORIOS)
+    else:
+        partes.append(textos.RESPUESTA_SIN_RECORDATORIOS)
+    clave = "%02d-%02d" % (ahora.month, ahora.day)
+    entrada = None
+    lista = efem.get(clave) if isinstance(efem, dict) else None
+    if isinstance(lista, list) and lista:
+        entrada = lista[0]
+    if entrada is None and curiosidades:
+        idx = 0
+        if base is not None and hasattr(base, "obtener_indice_curiosidad"):
+            idx = base.obtener_indice_curiosidad()
+        entrada = curiosidades[idx % len(curiosidades)]
+        if base is not None and hasattr(base, "guardar_indice_curiosidad"):
+            base.guardar_indice_curiosidad(idx + 1)
+    if isinstance(entrada, dict):
+        dato = entrada.get("texto", "")
+    else:
+        dato = str(entrada) if entrada is not None else ""
+    if dato:
+        partes.append("¿Sabía que…? " + dato)
+    _publicar_respuesta(publicar, " ".join(partes), frase_id)
+
+
+def _aviso_casa(base) -> str:
+    """Texto del aviso para DORMIR: alertas abiertas y agua baja, o None."""
+    partes = []
+    if base is not None and hasattr(base, "hay_alerta_abierta"):
+        try:
+            if base.hay_alerta_abierta():
+                partes.append("una alerta abierta")
+        except Exception:  # noqa: BLE001
+            pass
+    agua = _ultimos_sensores.get("agua_pct")
+    if agua is not None:
+        try:
+            if int(agua) < config.AGUA_BAJO_ABRE_PCT:
+                partes.append("el agua está baja")
+        except (TypeError, ValueError):
+            pass
+    return ", ".join(partes) if partes else None
+
+
 def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
     try:
         carga = json.loads(cuerpo)
@@ -712,69 +798,12 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
     latencia = int((time.time() - int(ts)) * 1000)
 
     if intencion == "BUENOS_DIAS":
-        datos = _cargar_efemerides()
-        efem = datos.get("efemerides", {}) if isinstance(datos, dict) else {}
-        curiosidades = datos.get("curiosidades", []) if isinstance(datos, dict) else []
-        ahora = datetime.now(ZoneInfo("America/Mazatlan"))
-        hora = ahora.hour
-        if 5 <= hora <= 11:
-            saludo = "Buenos días"
-        elif 12 <= hora <= 18:
-            saludo = "Buenas tardes"
-        else:
-            saludo = "Buenas noches"
-        fecha_txt = "%s %d de %s" % (_DIAS_SEMANA[ahora.weekday()],
-                                     ahora.day, _MESES[ahora.month - 1])
-        partes = ["%s. Hoy es %s." % (saludo, fecha_txt),
-                  _hora_en_palabras(ahora)]
-        ts = _ultimos_sensores.get("ts")
-        temp = _ultimos_sensores.get("temperatura")
-        if (ts is None or (int(time.time()) - int(ts)) > 300
-                or temp is None):
-            partes.append(textos.RESPUESTA_SIN_TEMPERATURA)
-        else:
+        _buenos_dias(publicar, frase_id, base)
+        if _saludo_diario is not None:
             try:
-                temp_txt = str(int(round(float(temp))))
-            except (TypeError, ValueError):
-                temp_txt = None
-            if temp_txt is None:
-                partes.append(textos.RESPUESTA_SIN_TEMPERATURA)
-            else:
-                partes.append("En la sala hace %s grados." % temp_txt)
-        if base is not None and hasattr(base, "listar_recordatorios"):
-            hoy = ahora.date()
-            pendientes = []
-            for fila in base.listar_recordatorios():
-                if not fila["activo"]:
-                    continue
-                prox = datetime.fromtimestamp(fila["proximo_en"], ZoneInfo("America/Mazatlan")).date()
-                if prox == hoy:
-                    pendientes.append(fila["texto"])
-            if pendientes:
-                partes.append("Hoy tiene: " + "; ".join(pendientes) + ".")
-            else:
-                partes.append(textos.RESPUESTA_SIN_RECORDATORIOS)
-        else:
-            partes.append(textos.RESPUESTA_SIN_RECORDATORIOS)
-        clave = "%02d-%02d" % (ahora.month, ahora.day)
-        entrada = None
-        lista = efem.get(clave) if isinstance(efem, dict) else None
-        if isinstance(lista, list) and lista:
-            entrada = lista[0]
-        if entrada is None and curiosidades:
-            idx = 0
-            if base is not None and hasattr(base, "obtener_indice_curiosidad"):
-                idx = base.obtener_indice_curiosidad()
-            entrada = curiosidades[idx % len(curiosidades)]
-            if base is not None and hasattr(base, "guardar_indice_curiosidad"):
-                base.guardar_indice_curiosidad(idx + 1)
-        if isinstance(entrada, dict):
-            dato = entrada.get("texto", "")
-        else:
-            dato = str(entrada) if entrada is not None else ""
-        if dato:
-            partes.append("¿Sabía que…? " + dato)
-        _publicar_respuesta(publicar, " ".join(partes), frase_id)
+                _saludo_diario.adelantar()
+            except Exception:  # noqa: BLE001
+                pass
         return True
 
     if intencion == "REPITE":
@@ -984,6 +1013,11 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
     if intencion == "AYUDA":
         publicar_cerrar_video_por_alerta(publicar)
         publicar_cerrar_musica_por_alerta(publicar)
+        if _saludo_diario is not None and getattr(_saludo_diario, "ventana_abierta", lambda: False)():
+            try:
+                _saludo_diario._cerrar_ventana()
+            except Exception:  # noqa: BLE001
+                pass
         if base is not None and hasattr(base, "hay_ayuda_reciente") \
                 and base.hay_ayuda_reciente():
             _publicar_respuesta(publicar, textos.RESPUESTA_AYUDA_RECIENTE, frase_id)
@@ -1111,11 +1145,89 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
         _publicar_respuesta(publicar, "Hoy tiene: " + "; ".join(partes) + ".", frase_id)
         return True
 
-    if intencion == "ESTOY_BIEN":
-        if base is not None and hasattr(base, "crear_aviso_conversacion"):
-            base.crear_aviso_conversacion("La sala", "0", "panel",
-                                          "La sala avisa que está bien")
-        _publicar_respuesta(publicar, textos.RESPUESTA_ESTOY_BIEN, frase_id)
+    if intencion == "SALUDO_RESPUESTA":
+        if _saludo_diario is not None and getattr(_saludo_diario, "ventana_abierta", lambda: False)():
+            try:
+                _saludo_diario.responder(texto)
+            except Exception:  # noqa: BLE001
+                pass
+        registro.info("voz turno: intencion=SALUDO_RESPUESTA texto_len=%d", len(texto))
+        return True
+
+    if intencion == "DORMIR":
+        estado_pedido = "off"
+        if _nodo_conectado["valor"] is not False:
+            if _estado_luz["valor"] != "off":
+                publicar(config.TOPICO_LUZ_SET,
+                         {"estado": "off", "origen": "voz",
+                          "ts": int(time.time())},
+                         qos=1)
+                threading.Thread(target=_confirmar_luz,
+                                 args=("off", publicar, frase_id),
+                                 daemon=True).start()
+        aviso = _aviso_casa(base)
+        if aviso:
+            _publicar_respuesta(publicar,
+                                textos.RESPUESTA_DORMIR_AVISO.format(aviso=aviso),
+                                frase_id)
+        else:
+            _publicar_respuesta(publicar, textos.RESPUESTA_DORMIR_BIEN, frase_id)
+        registro.info("voz turno: intencion=DORMIR accion=dormir texto_len=%d",
+                      len(texto))
+        return True
+
+    if intencion == "LEVANTARSE":
+        estado_pedido = "on"
+        if _nodo_conectado["valor"] is not False:
+            if _estado_luz["valor"] != "on":
+                publicar(config.TOPICO_LUZ_SET,
+                         {"estado": "on", "origen": "voz",
+                          "ts": int(time.time())},
+                         qos=1)
+                threading.Thread(target=_confirmar_luz,
+                                 args=("on", publicar, frase_id),
+                                 daemon=True).start()
+        _publicar_respuesta(publicar, textos.RESPUESTA_LEVANTARSE_LUZ, frase_id)
+        _buenos_dias(publicar, frase_id, base)
+        if _saludo_diario is not None:
+            try:
+                _saludo_diario.adelantar()
+            except Exception:  # noqa: BLE001
+                pass
+        registro.info("voz turno: intencion=LEVANTARSE accion=levantarse texto_len=%d",
+                      len(texto))
+        return True
+
+    if intencion == "LLEGUE":
+        estado_pedido = "on"
+        if _nodo_conectado["valor"] is not False:
+            if _estado_luz["valor"] != "on":
+                publicar(config.TOPICO_LUZ_SET,
+                         {"estado": "on", "origen": "voz",
+                          "ts": int(time.time())},
+                         qos=1)
+                threading.Thread(target=_confirmar_luz,
+                                 args=("on", publicar, frase_id),
+                                 daemon=True).start()
+        _publicar_respuesta(publicar, textos.RESPUESTA_LLEGUE, frase_id)
+        registro.info("voz turno: intencion=LLEGUE accion=llegue texto_len=%d",
+                      len(texto))
+        return True
+
+    if intencion == "AVISAR_BIEN":
+        if base is not None and hasattr(base, "crear_respuesta_conversacion"):
+            base.crear_respuesta_conversacion("Estoy bien.")
+        _publicar_respuesta(publicar, textos.RESPUESTA_AVISAR_BIEN, frase_id)
+        registro.info("voz turno: intencion=AVISAR_BIEN accion=avisar_bien texto_len=%d",
+                      len(texto))
+        return True
+
+    if intencion == "SIENTO_MAL":
+        if base is not None and hasattr(base, "crear_respuesta_conversacion"):
+            base.crear_respuesta_conversacion("La sala dice que se siente mal.")
+        _publicar_respuesta(publicar, textos.RESPUESTA_SIENTO_MAL, frase_id)
+        registro.info("voz turno: intencion=SIENTO_MAL accion=siento_mal texto_len=%d",
+                      len(texto))
         return True
 
     # Intencion desconocida (no deberia ocurrir).

@@ -520,6 +520,14 @@ ALEXA_VIDEO_HABILITADO = os.environ.get("ALEXA_VIDEO_HABILITADO", "0").strip().l
 ALEXA_SKILL_ID = os.environ.get("ALEXA_SKILL_ID", "").strip()
 
 VIDEO_HABILITADO = os.environ.get("VIDEO_HABILITADO", "1").strip().lower() not in ("0", "false", "no", "")
+
+SALUDO_DIARIO_ACTIVO = os.environ.get("SALUDO_DIARIO_ACTIVO", "0").strip().lower() not in ("0", "false", "no", "")
+SALUDO_DIARIO_HORA = os.environ.get("SALUDO_DIARIO_HORA", "09:00").strip()
+SALUDO_DIARIO_ZONA = os.environ.get("SALUDO_DIARIO_ZONA", "America/Mazatlan").strip()
+SALUDO_DIARIO_REINTENTO_MIN = int(os.environ.get("SALUDO_DIARIO_REINTENTO_MIN", "10"))
+SALUDO_DIARIO_AVISAR_SI_BIEN = os.environ.get("SALUDO_DIARIO_AVISAR_SI_BIEN", "1").strip().lower() not in ("0", "false", "no", "")
+TOPICO_ALERTA_BIENESTAR = "casa/sala/alerta/bienestar"
+TOPICO_SALUDO_DISPARAR = "casa/sala/saludo/disparar"
 MUSICA_HABILITADO = os.environ.get("MUSICA_HABILITADO", "0").strip().lower() not in ("0", "false", "no", "")
 VENTANA_VIDEO_S = int(os.environ.get("VENTANA_VIDEO_S", "15"))
 # Satelite al que se le pide el video (igual que el boton para hablar).

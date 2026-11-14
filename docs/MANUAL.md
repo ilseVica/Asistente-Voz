@@ -405,3 +405,8 @@ en el config). Al detectarla, suena un tono corto y empieza a escuchar la frase,
 que con F9. Si en 5 s no se dice nada, se cierra sin responder. F9 y el botón
 «Mantener para hablar» del panel siguen funcionando como respaldo. Por defecto está
 desactivada (`lucia.activa = false`).
+
+
+## Saludo diario
+
+Lucía pregunta una vez al día «¿Cómo amaneció?» y abre el micrófono sola. Se puede disparar manualmente con `herramientas/saludo.sh` o publicando en `casa/sala/saludo/disparar`.

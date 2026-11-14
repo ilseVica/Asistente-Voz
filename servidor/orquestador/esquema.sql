@@ -542,3 +542,10 @@ CREATE TABLE IF NOT EXISTS temporizadores (
 );
 CREATE INDEX IF NOT EXISTS idx_temporizadores_activo
     ON temporizadores (activo, fin_en);
+
+-- --- saludo diario (version 13) --------------------------------------------
+CREATE TABLE IF NOT EXISTS saludo_diario (
+    fecha      TEXT NOT NULL PRIMARY KEY,
+    respuesta  TEXT NOT NULL,
+    creado_en  INTEGER NOT NULL
+);

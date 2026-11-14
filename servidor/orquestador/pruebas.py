@@ -4190,19 +4190,19 @@ prueba("RECORDATORIOS sin pendientes dice sin recordatorios",
 base_nr.cerrar()
 publicador_nuevo.clear()
 
-# ESTOY_BIEN no genera alerta y va a Telegram (conversacion aviso)
+# AVISAR_BIEN no genera alerta y notifica a la conversacion
 base_eb, _ = base_nueva("estoybien-")
 antes_alertas = base_eb.conexion.execute("SELECT COUNT(*) FROM alertas").fetchone()[0]
-voz.procesar('{"frase_id":"e1","texto":"avisa a mi familia que estoy bien","modo":"comandos","ts":%d}' % AHORA2, _pub, base=base_eb)
+voz.procesar('{"frase_id":"e1","texto":"avísale a mi familia que estoy bien","modo":"comandos","ts":%d}' % AHORA2, _pub, base=base_eb)
 resp_eb = [c for t,c in publicador_nuevo if t == config.TOPICO_SATELITE_DECIR]
-prueba("ESTOY_BIEN responde listo",
-       len(resp_eb) >= 1 and resp_eb[-1]["texto"] == textos.RESPUESTA_ESTOY_BIEN,
+prueba("AVISAR_BIEN responde listo",
+       len(resp_eb) >= 1 and resp_eb[-1]["texto"] == textos.RESPUESTA_AVISAR_BIEN,
        resp_eb)
 despues_alertas = base_eb.conexion.execute("SELECT COUNT(*) FROM alertas").fetchone()[0]
-prueba("ESTOY_BIEN no genera alerta",
+prueba("AVISAR_BIEN no genera alerta",
        antes_alertas == despues_alertas, (antes_alertas, despues_alertas))
-avisos_eb = [r for r in base_eb.conexion.execute("SELECT * FROM conversacion WHERE tipo='aviso'").fetchall()]
-prueba("ESTOY_BIEN crea aviso en la conversacion",
+avisos_eb = [r for r in base_eb.conexion.execute("SELECT * FROM conversacion WHERE tipo='respuesta'").fetchall()]
+prueba("AVISAR_BIEN crea respuesta en la conversacion",
        len(avisos_eb) >= 1, [r["texto"] for r in avisos_eb])
 base_eb.cerrar()
 publicador_nuevo.clear()
@@ -5005,5 +5005,126 @@ prueba("musica deshabilitada responde no disponible",
        any(c.get("texto") == textos.RESPUESTA_MUSICA_NO_DISPONIBLE for _, c in _ap),
        _ap)
 _b.cerrar()
+
+
+# --- PARTE A: LUCIA CUIDA ---
+import json as _json_pa
+# mapeo de intenciones nuevas
+_casos_pa = {
+    "DORMIR": ["ya me voy a dormir", "me voy a dormir", "ya me voy a acostar",
+                "me voy a acostar", "hasta mañana"],
+    "LEVANTARSE": ["ya me levanté", "ya desperté"],
+    "LLEGUE": ["ya llegué", "ya estoy en casa"],
+    "AVISAR_BIEN": ["avísale a mi familia que estoy bien",
+                    "dile a mi familia que estoy bien", "avisa que estoy bien"],
+    "SIENTO_MAL": ["me siento mal", "no me siento bien", "no estoy bien", "estoy mal"],
+}
+for _int, _frases in _casos_pa.items():
+    for _f in _frases:
+        prueba("PA %s <- %s" % (_int, _f),
+               voz._frase_a_intencion.get(voz.normalizar(_f)) == _int,
+               voz._frase_a_intencion.get(voz.normalizar(_f)))
+# critico: no me siento bien / no estoy bien nunca a AVISAR_BIEN
+for _f in ("no me siento bien", "no estoy bien"):
+    prueba("PA critico %s -> SIENTO_MAL" % _f,
+           voz._frase_a_intencion.get(voz.normalizar(_f)) == "SIENTO_MAL",
+           voz._frase_a_intencion.get(voz.normalizar(_f)))
+    prueba("PA critico %s != AVISAR_BIEN" % _f,
+           voz._frase_a_intencion.get(voz.normalizar(_f)) != "AVISAR_BIEN",
+           voz._frase_a_intencion.get(voz.normalizar(_f)))
+# senue los nuevos: 0 disparos (no mapean a intencion)
+for _f in ("ya me voy", "me voy a la tienda", "dile que", "avísame"):
+    prueba("PA senhuelo %s no dispara" % _f,
+           voz._frase_a_intencion.get(voz.normalizar(_f)) is None,
+           voz._frase_a_intencion.get(voz.normalizar(_f)))
+# contar frases final
+_total_pa = sum(len(v) for v in json.load(open(
+    os.path.join(os.path.dirname(__file__), "..", "voz", "gramatica.json")))["intenciones"].values())
+prueba("PA total frases gramatica = 171", _total_pa == 171, _total_pa)
+
+# --- PARTE B: SALUDO DIARIO ---
+import saludo_diario as _sd_mod
+import config as _cfg_pb
+_cfg_pb.SALUDO_DIARIO_ACTIVO = True
+_cfg_pb.SALUDO_DIARIO_REINTENTO_MIN = 1
+_cfg_pb.SALUDO_DIARIO_AVISAR_SI_BIEN = True
+_base_pb, _ = base_nueva("saludo-")
+class _SatPB:
+    def conectados(self): return ["satelite-sala"]
+    def conectado(self, cid): return cid == "satelite-sala"
+_pubs_pb = []
+def _pub_pb(topico, carga, qos=1, retain=False, esperar=True):
+    _pubs_pb.append((topico, carga))
+_sd = _sd_mod.Estado(_base_pb, _SatPB(), _pub_pb, None, ahora=1000.0)
+_sd.disparar(ahora=1000.0, manual=True)
+prueba("PB disparo publica pregunta",
+       any(c.get("texto") == textos.SALUDO_DIARIO_PREGUNTA for _, c in _pubs_pb),
+       _pubs_pb)
+prueba("PB abre microfono",
+       any(t.endswith("/hablar") for t, _ in _pubs_pb), _pubs_pb)
+# bien
+_pubs_pb.clear()
+_ok = _sd.responder("bien", ahora=1001.0)
+prueba("PB respuesta bien devuelve True", _ok is True, _ok)
+prueba("PB bien publica Que gusto",
+       any(c.get("texto") == textos.SALUDO_DIARIO_BIEN for _, c in _pubs_pb),
+       _pubs_pb)
+# regular
+_base_pb2, _ = base_nueva("saludo2-")
+_sd2 = _sd_mod.Estado(_base_pb2, _SatPB(), _pub_pb, None, ahora=2000.0)
+_sd2.disparar(ahora=2000.0, manual=True)
+_pubs_pb.clear()
+_sd2.responder("regular", ahora=2001.0)
+prueba("PB regular publica respuesta",
+       any(c.get("texto") == textos.SALUDO_DIARIO_REGULAR for _, c in _pubs_pb),
+       _pubs_pb)
+# mal abre alerta bienestar
+_base_pb3, _ = base_nueva("saludo3-")
+_sd3 = _sd_mod.Estado(_base_pb3, _SatPB(), _pub_pb, None, ahora=3000.0)
+_sd3.disparar(ahora=3000.0, manual=True)
+_pubs_pb.clear()
+_sd3.responder("mal", ahora=3001.0)
+prueba("PB mal abre alerta bienestar",
+       _base_pb3.conexion.execute("SELECT COUNT(*) FROM alertas WHERE tipo='bienestar'").fetchone()[0] == 1)
+# no entendido una vez
+_base_pb4, _ = base_nueva("saludo4-")
+_sd4 = _sd_mod.Estado(_base_pb4, _SatPB(), _pub_pb, None, ahora=4000.0)
+_sd4.disparar(ahora=4000.0, manual=True)
+_pubs_pb.clear()
+_sd4.responder("xyz", ahora=4001.0)
+prueba("PB no entendido pregunta una vez",
+       any(c.get("texto") == textos.SALUDO_DIARIO_NO_ENTENDI for _, c in _pubs_pb),
+       _pubs_pb)
+# fuera de ventana no hace nada
+_sd4._cerrar_ventana()
+_pubs_pb.clear()
+_ok2 = _sd4.responder("bien", ahora=4002.0)
+prueba("PB fuera de ventana bien no hace nada", _ok2 is False, _ok2)
+# satelite vm solo no cuenta como sala
+_base_pb5, _ = base_nueva("saludo5-")
+class _SatVM:
+    def conectados(self): return ["satelite-vm"]
+    def conectado(self, cid): return cid == "satelite-vm"
+_sd5 = _sd_mod.Estado(_base_pb5, _SatVM(), _pub_pb, None, ahora=5000.0)
+prueba("PB satelite-vm no dispara saludo",
+       _sd5.disparar(ahora=5000.0, manual=True) is False)
+# satelite desconectado envia aviso conversacion
+_base_pb6, _ = base_nueva("saludo6-")
+_sd6 = _sd_mod.Estado(_base_pb6, _SatVM(), _pub_pb, None, ahora=6000.0)
+# force sala disconnected but vm connected already false; make no satellite
+class _SatNone:
+    def conectados(self): return []
+    def conectado(self, cid): return False
+_sd6b = _sd_mod.Estado(_base_pb6, _SatNone(), _pub_pb, None, ahora=6000.0)
+_sd6b.disparar(ahora=6000.0, manual=True)
+prueba("PB sin sala no alerta", _base_pb6.conexion.execute("SELECT COUNT(*) FROM alertas").fetchone()[0] == 0)
+# una vez al dia
+_base_pb.cerrar(); _base_pb2.cerrar(); _base_pb3.cerrar(); _base_pb4.cerrar(); _base_pb5.cerrar(); _base_pb6.cerrar()
+
+print("\n" + "=" * 66)
+print("comprobaciones: %d" % COMPROBACIONES[0])
+print("fallos: %d" % len(FALLOS))
+for nombre in FALLOS:
+    print("  - " + nombre)
 
 sys.exit(1 if FALLOS else 0)

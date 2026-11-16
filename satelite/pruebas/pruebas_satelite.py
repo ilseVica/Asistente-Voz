@@ -106,6 +106,20 @@ class FuenteInfinita:
         while True:
             yield b"\x00" * TRAMA_BYTES
 
+class FuenteNivel:
+    """Fuente que entrega tramas con nivel alto (1) o bajo (0) segun la lista."""
+    def __init__(self, niveles):
+        self.niveles = list(niveles)
+
+    async def tramas(self):
+        for n in self.niveles:
+            if n:
+                yield b"\xff\x7f" * (TRAMA_BYTES // 2)
+            else:
+                yield b"\x00" * TRAMA_BYTES
+            await asyncio.sleep(0.05)
+        await asyncio.sleep(3600)
+
 
 class Base(unittest.IsolatedAsyncioTestCase):
     def hacer_nucleo(self, ws=None, fuente=None, repes=None):
@@ -1509,6 +1523,43 @@ class TestEscucharAlTerminar(Base):
             self.assertIs(frase0, nucleo.frase)
         finally:
             tarea.cancel()
+
+
+class TestSaludoCaptura(Base):
+    async def test_saludo_nivel_alto_en_ventana_no_marca_hubo_audio(self):
+        nucleo = self.hacer_nucleo(fuente=FuenteNivel([1, 1, 1] + [0] * 60))
+        nucleo._tramas_ignorar_saludo = 5
+        nucleo.abrir_frase(origen="saludo")
+        await self.esperar(lambda: nucleo.frase is None, timeout=5.0)
+        self.assertIsNone(nucleo.frase)
+        self.assertEqual(len(nucleo.ws.frames), 50)
+        self.assertTrue(any(o.get("fin") is True for o in nucleo.ws.json))
+
+    async def test_saludo_voz_justo_despues_de_ventana_cierra_por_silencio(self):
+        nucleo = self.hacer_nucleo(fuente=FuenteNivel([0] * 6 + [1, 1, 1] + [0] * 40))
+        nucleo._tramas_ignorar_saludo = 5
+        nucleo.abrir_frase(origen="saludo")
+        await self.esperar(lambda: nucleo.frase is None, timeout=5.0)
+        self.assertIsNone(nucleo.frase)
+        self.assertLess(len(nucleo.ws.frames), 50)
+
+    async def test_saludo_sin_voz_timeout_final_vacio(self):
+        nucleo = self.hacer_nucleo(fuente=FuenteInfinita())
+        nucleo._tramas_ignorar_saludo = 5
+        nucleo.abrir_frase(origen="saludo")
+        await self.esperar(lambda: nucleo.frase is None, timeout=5.0)
+        self.assertIsNone(nucleo.frase)
+        # FuenteInfinita no duerme; el timeout se alcanza por tramas
+        self.assertTrue(any(o.get("fin") is True for o in nucleo.ws.json))
+
+    async def test_lucia_igual_que_antes(self):
+        nucleo = self.hacer_nucleo(fuente=FuenteNivel([1, 1, 1] + [0] * 40))
+        nucleo.abrir_frase(origen="lucia")
+        await self.esperar(lambda: nucleo.frase is None, timeout=5.0)
+        self.assertIsNone(nucleo.frase)
+        self.assertLess(len(nucleo.ws.frames), 50)
+
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

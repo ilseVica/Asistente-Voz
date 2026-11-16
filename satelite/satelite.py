@@ -1151,6 +1151,7 @@ class Nucleo:
         self._primer_turno_hecho = False
         self.segundos_sin_respuesta = SEGUNDOS_SIN_RESPUESTA
         self._timer_hablar = None
+        self._tramas_ignorar_saludo = 0
         self.video_disponible = bool(shutil.which("mpv") and shutil.which("yt-dlp")
                                     and os.environ.get("WAYLAND_DISPLAY"))
         self._proceso_video = None
@@ -1582,6 +1583,7 @@ class Nucleo:
     async def _capturar(self, frase: Frase) -> None:
         max_tramas = max(1, int(self.cfg.altura_max_s * TRAMAS_POR_SEGUNDO))
         es_lucia = (getattr(frase, "origen", "") in ("lucia", "saludo"))
+        es_saludo = (getattr(frase, "origen", "") == "saludo")
         # silencio para cerrar una frase de Lucía cuando ya empezo a hablar
         silencio_cierre = 15  # tramas (1.5 s)
         enviadas = 0
@@ -1602,8 +1604,13 @@ class Nucleo:
                 except Exception:  # noqa: BLE001
                     nivel = 0
                 if nivel >= 300:
-                    hubo_audio = True
-                    ultimo_audio = time.time()
+                    # En el saludo se ignoran las primeras tramas para no
+                    # captar la cola del tono/pregunta; el audio se sigue
+                    # mandando al reconocedor (enviar_bytes, mas abajo).
+                    if (not es_saludo
+                            or enviadas >= self._tramas_ignorar_saludo):
+                        hubo_audio = True
+                        ultimo_audio = time.time()
                 self.ws.enviar_bytes(trama)
                 enviadas += 1
                 if frase.t_final is not None:
@@ -1896,6 +1903,7 @@ class Nucleo:
                     if self.frase is not None:
                         registro.info("escuchar_al_terminar: ya hay una frase abierta; no se abre otra")
                     else:
+                        t0 = time.monotonic()
                         try:
                             self.hablando = True
                             await self.rep.tono()
@@ -1903,6 +1911,11 @@ class Nucleo:
                             registro.warning("tono (escuchar_al_terminar): %s", error)
                         finally:
                             self.hablando = False
+                        tono_dur = time.monotonic() - t0
+                        self._tramas_ignorar_saludo = max(
+                            1, int(round((tono_dur + 0.3) * TRAMAS_POR_SEGUNDO)))
+                        registro.info("escuchar_al_terminar: tono=%.3fs tramas_ignoradas=%d",
+                                      tono_dur, self._tramas_ignorar_saludo)
                         if self.frase is None:
                             self.abrir_frase(origen="saludo")
 

@@ -780,6 +780,18 @@ def procesar(cuerpo: str, publicar, base=None, satelites=None) -> bool:
         cerrar_ventana_respuesta()
         return True
 
+    _intencion_actual = _frase_a_intencion.get(normalizar(texto))
+    if (_saludo_diario is not None
+            and getattr(_saludo_diario, "ventana_abierta", lambda: False)()
+            and (not str(texto).strip() or _intencion_actual is None)):
+        try:
+            _saludo_diario.responder(texto)
+        except Exception:  # noqa: BLE001
+            pass
+        registro.info("voz turno: intencion=%s accion=saludo_otra_cosa texto_len=%d",
+                      _intencion_actual, len(texto))
+        return True
+
     if no_entendido(texto):
         _publicar_respuesta(publicar, textos.NO_ENTENDIDO, frase_id)
         registro.info("voz turno: intencion=NO_ENTENDI accion=no_entendido "

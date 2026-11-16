@@ -361,7 +361,7 @@ class Estado:
                             "escuchar_al_terminar": True}, qos=1)
             self._no_entendido_usado = True
             return True
-        self._cerrar_ventana()
+        # Segundo vacio/None: no repreguntar ni cerrar; el reintento sigue su curso.
         return False
 
     def ventana_abierta(self) -> bool:

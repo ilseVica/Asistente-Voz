@@ -199,6 +199,7 @@ class CabeceraEscritorio extends StatelessWidget {
                 children: <Widget>[
                   MarcaLucia(tamano: tamanoMarca),
                   const SizedBox(width: 14),
+                  const Spacer(),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: <Widget>[

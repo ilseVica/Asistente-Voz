@@ -10,20 +10,20 @@ class Tema {
   static const Color primarioOscuro = Color(0xFF46284F);
   static const Color ciruela = primario;
 
-  static const Color fondo = Color(0xFFF6F2F9);
-  static const Color lavandaClara = fondo;
+  static const Color fondo = Color(0xFFF7F7F5);
+  static const Color lavandaClara = Color(0xFFE3DCEC);
 
-  static const Color texto = Color(0xFF5A3563);
-  static const Color secundario = Color(0xFF6E5276);
+  static const Color texto = Color(0xFF1F1F23);
+  static const Color secundario = Color(0xFF66666D);
   static const Color textoSecundario = secundario;
 
-  static const Color borde = Color(0xFFD8CFE5);
+  static const Color borde = Color(0xFFE7E5E1);
   static const Color tarjeta = Color(0xFFFFFFFF);
   static const Color blanco = tarjeta;
 
-  static const Color suave = Color(0xFFE3DCEC);
-  static const Color lavanda = suave;
-  static const Color cuadroLogo = suave;
+  static const Color suave = Color(0xFFF3F2F0);
+  static const Color lavanda = Color(0xFFE3DCEC);
+  static const Color cuadroLogo = Color(0xFFE3DCEC);
 
   static const Color peligro = Color(0xFF9F1D1D);
 
@@ -32,7 +32,7 @@ class Tema {
   static const Color ambarBorde = Color(0xFFE8C98F);
   static const Color ambarPildora = Color(0xFF7A4205);
 
-  static const Color caja = Color(0xFFECE6F5);
+  static const Color caja = Color(0xFFF3F2F0);
 
   static const Color gris = Color(0xFFB7BCB8);
 

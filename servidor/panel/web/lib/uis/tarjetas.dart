@@ -108,8 +108,9 @@ class TarjetaLuz extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: sateliteConectado
-                        ? Tema.primario
+                        ? Tema.tarjeta
                         : Tema.borde,
+                    border: Border.all(color: Tema.primario),
                     borderRadius: BorderRadius.circular(movil ? 14 : 12),
                   ),
                   child: Text(
@@ -119,9 +120,10 @@ class TarjetaLuz extends StatelessWidget {
                             ? Textos.escuchando
                             : Textos.mantenerParaHablar,
                     style: TextStyle(
-                      color: sateliteConectado ? Tema.tarjeta : Tema.secundario,
-                      fontWeight: FontWeight.w700,
-                    ),
+                        color: sateliteConectado
+                            ? Tema.primario
+                            : Tema.secundario,
+                        fontWeight: FontWeight.w700),
                   ),
                 ),
               );
@@ -890,7 +892,9 @@ class TarjetaAgua extends StatelessWidget {
             aguaEstado: null,
             recibidoEn: null);
     final bool nodoConectado = estado.estado?.nodo.estado == conectado;
+    final int ahora = estado.ahoraServidor();
     final String? aguaEstado = s.aguaEstado;
+
     String valor;
     if (!nodoConectado) {
       valor = Textos.sinDatos;
@@ -909,30 +913,85 @@ class TarjetaAgua extends StatelessWidget {
       }
     }
     final bool hayDato = nodoConectado && s.aguaPct != null;
+    final bool bajo = aguaEstado == 'bajo';
+    final Color colorEstado = hayDato
+        ? (bajo ? Tema.peligro : Tema.primario)
+        : Tema.secundario;
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Row(
               children: <Widget>[
-                const Icon(Icons.water_drop, color: Tema.secundario, size: 20),
+                const Icon(Icons.water_drop,
+                    color: Tema.secundario, size: 20),
                 const SizedBox(width: 8),
                 Flexible(child: Text(Textos.agua,
                     style: const TextStyle(
                         fontSize: 16, color: Tema.secundario,
                         fontWeight: FontWeight.w700, fontFamily: Tema.familia))),
-                const SizedBox(width: 12),
-                Text(hayDato ? '${_num(s.aguaPct)} %' : valor,
-                    style: TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.w700,
-                        color: hayDato ? Tema.primario : Tema.secundario,
-                        fontFamily: Tema.familia)),
               ],
             ),
+            const SizedBox(height: 12),
+            Text(valor,
+                style: TextStyle(
+                    fontSize: 30, fontWeight: FontWeight.w700,
+                    color: colorEstado,
+                    fontFamily: Tema.familia)),
+            if (hayDato) ...<Widget>[
+              const SizedBox(height: 12),
+              BarraAgua(nivel: s.aguaPct!, bajo: bajo),
+              const SizedBox(height: 12),
+              Text(
+                  '${Textos.lectura}${_num(s.aguaPct)} %'
+                  '${s.recibidoEn == null ? '' : ' · ${hace(s.recibidoEn, ahora: ahora)}'}',
+                  style: const TextStyle(
+                      fontSize: 15, color: Tema.secundario,
+                      fontFamily: Tema.familia)),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class BarraAgua extends StatelessWidget {
+  const BarraAgua({super.key, required this.nivel, this.bajo = false});
+
+  final num nivel;
+  final bool bajo;
+
+  @override
+  Widget build(BuildContext contexto) {
+    final double frac = (nivel.toDouble() / 100.0).clamp(0.0, 1.0);
+    return SizedBox(
+      height: 10,
+      child: LayoutBuilder(
+        builder: (BuildContext contexto, BoxConstraints c) {
+          final double lleno = c.maxWidth * frac;
+          return Stack(
+            children: <Widget>[
+              Container(
+                decoration: BoxDecoration(
+                    color: Tema.caja,
+                    borderRadius: BorderRadius.circular(5)),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: lleno < 10 ? 10 : lleno,
+                  decoration: BoxDecoration(
+                      color: bajo ? Tema.peligro : Tema.primario,
+                      borderRadius: BorderRadius.circular(5)),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

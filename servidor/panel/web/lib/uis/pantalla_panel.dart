@@ -44,13 +44,20 @@ class PantallaPanel extends StatelessWidget {
                 const Expanded(child: TarjetaAmbiente()),
                 const SizedBox(width: 20),
                 const Expanded(child: TarjetaGas()),
-                const SizedBox(width: 20),
-                const Expanded(child: TarjetaMovimiento()),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          const TarjetaAgua(),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                const Expanded(child: TarjetaMovimiento()),
+                const SizedBox(width: 20),
+                const Expanded(child: TarjetaAgua()),
+              ],
+            ),
+          ),
           const SizedBox(height: 20),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -622,7 +629,9 @@ class _RecordatoriosProximos extends StatelessWidget {
                 OutlinedButton(
                   onPressed: () => abrirNuevoRecordatorio(contexto, estado),
                   style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(48, 44), padding: const EdgeInsets.symmetric(horizontal: 14)),
+                      minimumSize: const Size(48, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      backgroundColor: Tema.tarjeta),
                   child: const Text(Textos.nuevo),
                 ),
               ],

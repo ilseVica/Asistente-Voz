@@ -30,7 +30,8 @@ class Tema {
   static const Color ambarFondo = Color(0xFFFBEFD9);
   static const Color ambarTexto = Color(0xFF5C3204);
   static const Color ambarBorde = Color(0xFFE8C98F);
-  static const Color ambarPildora = Color(0xFF7A4205);
+  static const Color ambarPildora = Color(0xFF633806);
+  static const Color ambarOscuro = ambarPildora;
 
   static const Color caja = Color(0xFFF3F2F0);
 

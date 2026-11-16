@@ -66,9 +66,19 @@ PresentacionAlerta presentacionAlerta(
         titulo: bajo ? Textos.aguaBajaEnLaSala : Textos.aguaLlenaEnLaSala,
         cuerpo: bajo ? Textos.aguaBaja : Textos.aguaLlena,
         icono: Icons.water_drop,
-        colorTexto: Tema.tarjeta,
+        colorTexto: bajo ? Tema.tarjeta : Tema.ambarPildora,
         colorFondo: bajo ? Tema.peligro : Tema.ambarFondo,
         peligro: bajo,
+      );
+    case 'bienestar':
+      return const PresentacionAlerta(
+        pildora: Textos.aviso,
+        titulo: Textos.avisoEnLaSala,
+        cuerpo: Textos.seRecibioUnAviso,
+        icono: Icons.favorite,
+        colorTexto: Tema.tarjeta,
+        colorFondo: Tema.peligro,
+        peligro: true,
       );
     case 'inactividad':
       final int min = (c['minutos'] as num?)?.toInt() ?? 0;

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:asistente_panel/tema.dart';
+import 'package:asistente_panel/presentacion_alerta.dart';
+import 'package:asistente_panel/modelos.dart';
 
 double _luminancia(Color c) {
   double canal(int v) {
@@ -47,5 +49,28 @@ void main() {
       expect(c, greaterThanOrEqualTo(minimo),
           reason: 'par tiene ${c.toStringAsFixed(2)}:1');
     }
+  });
+
+  test('contraste del banner de alerta y la pastilla de cabecera', () {
+    final List<String> tipos = <String>['agua', 'gas', 'ayuda', 'bienestar'];
+    for (final String tipo in tipos) {
+      // agua 'lleno' es el caso ámbar; 'bajo' es rojo.
+      final Map<String, dynamic> carga = tipo == 'agua'
+          ? <String, dynamic>{'tipo': 'lleno', 'agua_pct': 90}
+          : <String, dynamic>{};
+      final PresentacionAlerta pres = presentacionAlerta(
+        tipo,
+        carga: carga,
+      );
+      final double c = _contraste(pres.colorTexto, pres.colorFondo);
+      expect(c, greaterThanOrEqualTo(4.5),
+          reason: '$tipo: ${c.toStringAsFixed(2)}:1');
+    }
+    // nodo desconectado (ámbar)
+    final double cNodo = _contraste(Tema.ambarPildora, Tema.ambarFondo);
+    expect(cNodo, greaterThanOrEqualTo(4.5));
+    // gas rojo
+    final PresentacionAlerta gas = presentacionAlerta('gas');
+    expect(_contraste(gas.colorTexto, gas.colorFondo), greaterThanOrEqualTo(4.5));
   });
 }

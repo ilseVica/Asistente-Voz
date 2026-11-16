@@ -93,6 +93,7 @@ class BannerAlertaActiva extends StatelessWidget {
               _BotonAlerta(
                 texto: Textos.ver,
                 relleno: false,
+                colorContorno: pres.colorTexto,
                 alPulsar: () => estado.abrirAlerta(alerta.id),
               ),
               const SizedBox(height: 8),
@@ -109,6 +110,7 @@ class BannerAlertaActiva extends StatelessWidget {
                     child: _BotonAlerta(
                       texto: Textos.ver,
                       relleno: false,
+                      colorContorno: pres.colorTexto,
                       alPulsar: () => estado.abrirAlerta(alerta.id),
                     ),
                   ),
@@ -136,15 +138,17 @@ class _BotonAlerta extends StatelessWidget {
     required this.texto,
     required this.relleno,
     required this.alPulsar,
+    this.colorContorno = Tema.tarjeta,
   });
 
   final String texto;
   final bool relleno;
   final VoidCallback alPulsar;
+  final Color colorContorno;
 
   @override
   Widget build(BuildContext contexto) {
-    final Color textoColor = relleno ? Tema.peligro : Tema.tarjeta;
+    final Color textoColor = relleno ? Tema.peligro : colorContorno;
     return SizedBox(
       height: 48,
       child: ElevatedButton(
@@ -156,7 +160,7 @@ class _BotonAlerta extends StatelessWidget {
           shadowColor: Colors.transparent,
           side: relleno
               ? null
-              : const BorderSide(color: Tema.tarjeta, width: 1.5),
+              : BorderSide(color: colorContorno, width: 1.5),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(Tema.radioBoton)),
           padding: const EdgeInsets.symmetric(horizontal: 20),

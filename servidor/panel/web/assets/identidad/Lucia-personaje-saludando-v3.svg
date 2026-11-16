@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="447.0" height="519.6" viewBox="206.80 87.80 447.00 519.60">
+
+<svg x="171.7" y="78.9" width="524.6" height="560" viewBox="190 120 740 790">
+<g stroke-linecap="round" stroke-linejoin="round">
+
+
+
+
+
+
+
+
+<!-- zapatos (originales) -->
+<g><clipPath id="zap3"><path d="M 500 798 C 507 812, 507 836, 497 848 C 483 861, 440 861, 424 851 C 409 841, 413 816, 434 807 C 452 799, 476 795, 500 798 Z"/></clipPath><path d="M 500 798 C 507 812, 507 836, 497 848 C 483 861, 440 861, 424 851 C 409 841, 413 816, 434 807 C 452 799, 476 795, 500 798 Z" fill="#F79BA8"/><g clip-path="url(#zap3)" fill="none"><path d="M 412 842 C 420 862, 480 864, 500 846" stroke="#5A3563" stroke-width="40"/><path d="M 412 842 C 420 862, 480 864, 500 846" stroke="#A58AD0" stroke-width="26"/></g><path d="M 432 826 L 454 820" stroke="#5A3563" stroke-width="18" fill="none"/><path d="M 432 826 L 454 820" stroke="#C9B3E3" stroke-width="8" fill="none"/><path d="M 500 798 C 507 812, 507 836, 497 848 C 483 861, 440 861, 424 851 C 409 841, 413 816, 434 807 C 452 799, 476 795, 500 798 Z" fill="none" stroke="#5A3563" stroke-width="9"/></g>
+<g transform="translate(1024,0) scale(-1,1)"><clipPath id="zap4"><path d="M 500 798 C 507 812, 507 836, 497 848 C 483 861, 440 861, 424 851 C 409 841, 413 816, 434 807 C 452 799, 476 795, 500 798 Z"/></clipPath><path d="M 500 798 C 507 812, 507 836, 497 848 C 483 861, 440 861, 424 851 C 409 841, 413 816, 434 807 C 452 799, 476 795, 500 798 Z" fill="#F79BA8"/><g clip-path="url(#zap4)" fill="none"><path d="M 412 842 C 420 862, 480 864, 500 846" stroke="#5A3563" stroke-width="40"/><path d="M 412 842 C 420 862, 480 864, 500 846" stroke="#A58AD0" stroke-width="26"/></g><path d="M 432 826 L 454 820" stroke="#5A3563" stroke-width="18" fill="none"/><path d="M 432 826 L 454 820" stroke="#C9B3E3" stroke-width="8" fill="none"/><path d="M 500 798 C 507 812, 507 836, 497 848 C 483 861, 440 861, 424 851 C 409 841, 413 816, 434 807 C 452 799, 476 795, 500 798 Z" fill="none" stroke="#5A3563" stroke-width="9"/></g>
+
+<!-- piernas -->
+<g fill="none"><path d="M473 716 L 471 776 M551 716 L 553 776" stroke="#5A3563" stroke-width="74"/><path d="M473 716 L 471 776 M551 716 L 553 776" stroke="#FFDB8C" stroke-width="56"/></g>
+
+<!-- brazos y manos (contornos primero, luego relleno) -->
+<g fill="none" stroke="#5A3563" stroke-linecap="round"><path d="M410 600 Q 368 650 330 690" stroke-width="66"/><path d="M612 590 Q 742 548 790 450" stroke-width="66"/></g><g transform="translate(330 690) rotate(223.5) translate(0 -26) scale(-0.95 0.95)"><path d="M-40 -10 C-40 -30 -24 -36 0 -36 L32 -36 C40 -36 45.5 -32 45 -24 C44 0 38 24 11 36 L-12 36 C-30 34 -40 16 -40 -10 Z" fill="#5A3563" stroke="#5A3563" stroke-linejoin="round" stroke-width="18.9"/><path d="M-30 -8 L-33.6 -40.0 M0 -8 L0.0 -46.0 M30 -8 L33.6 -40.0 M-26 6 L-52 -6 " stroke="#5A3563" stroke-width="42.9" stroke-linecap="round" fill="none"/></g><g transform="translate(790 450) rotate(26) translate(0 -26) scale(0.95)"><path d="M-40 -10 C-40 -30 -24 -36 0 -36 L32 -36 C40 -36 45.5 -32 45 -24 C44 0 38 24 11 36 L-12 36 C-30 34 -40 16 -40 -10 Z" fill="#5A3563" stroke="#5A3563" stroke-linejoin="round" stroke-width="18.9"/><path d="M-30 -8 L-33.6 -40.0 M0 -8 L0.0 -46.0 M30 -8 L33.6 -40.0 M-26 6 L-52 -6 " stroke="#5A3563" stroke-width="42.9" stroke-linecap="round" fill="none"/></g><g fill="none" stroke="#FFDB8C" stroke-linecap="round"><path d="M410 600 Q 368 650 330 690" stroke-width="48"/><path d="M612 590 Q 742 548 790 450" stroke-width="48"/></g><g transform="translate(330 690) rotate(223.5) translate(0 -26) scale(-0.95 0.95)"><path d="M-40 -10 C-40 -30 -24 -36 0 -36 L32 -36 C40 -36 45.5 -32 45 -24 C44 0 38 24 11 36 L-12 36 C-30 34 -40 16 -40 -10 Z" fill="#FFDB8C"/><path d="M-30 -8 L-33.6 -40.0 M0 -8 L0.0 -46.0 M30 -8 L33.6 -40.0 M-26 6 L-52 -6 " stroke="#FFDB8C" stroke-width="24" stroke-linecap="round" fill="none"/></g><g transform="translate(790 450) rotate(26) translate(0 -26) scale(0.95)"><path d="M-40 -10 C-40 -30 -24 -36 0 -36 L32 -36 C40 -36 45.5 -32 45 -24 C44 0 38 24 11 36 L-12 36 C-30 34 -40 16 -40 -10 Z" fill="#FFDB8C"/><path d="M-30 -8 L-33.6 -40.0 M0 -8 L0.0 -46.0 M30 -8 L33.6 -40.0 M-26 6 L-52 -6 " stroke="#FFDB8C" stroke-width="24" stroke-linecap="round" fill="none"/></g>
+<!-- cuerpo -->
+<clipPath id="cuerpo"><path d="M398 540 C 360 600, 352 690, 420 722 C 470 744, 554 744, 604 722 C 672 690, 664 600, 626 540 Z"/></clipPath>
+<path d="M398 540 C 360 600, 352 690, 420 722 C 470 744, 554 744, 604 722 C 672 690, 664 600, 626 540 Z" fill="#FFDB8C"/>
+<g clip-path="url(#cuerpo)">
+<path d="M600 600 C 640 640, 640 690, 600 712 C 570 726, 520 732, 480 730 C 560 712, 600 680, 600 600 Z" fill="#FAD07F"/>
+<ellipse cx="512" cy="590" rx="150" ry="34" fill="#F4BE6A"/>
+</g>
+<path d="M398 540 C 360 600, 352 690, 420 722 C 470 744, 554 744, 604 722 C 672 690, 664 600, 626 540" fill="none" stroke="#5A3563" stroke-width="9"/>
+
+<!-- flamita -->
+<path d="M512 140 C 540 162, 552 190, 540 214 C 532 228, 492 228, 484 214 C 472 190, 484 162, 512 140 Z" fill="#F89BA6" stroke="#5A3563" stroke-width="9"/>
+
+<!-- cabeza: círculo con centro en x = 512 -->
+<circle cx="512" cy="404" r="186" fill="#FCDC87" stroke="#5A3563" stroke-width="9"/>
+<path d="M390 300 C 418 268, 466 252, 508 254" fill="none" stroke="#FDEAB3" stroke-width="22"/>
+<path d="M630 528 C 664 494, 682 452, 684 410" fill="none" stroke="#F6D078" stroke-width="18"/>
+
+<!-- cara, centrada en x = 512 -->
+<g fill="none" stroke="#4A2F4F" stroke-width="15">
+<path d="M411 398 C 424 370, 464 370, 477 398"/>
+<path d="M547 398 C 560 370, 600 370, 613 398"/>
+<path d="M457 452 C 482 492, 542 492, 567 452"/>
+</g>
+<circle cx="401" cy="447" r="31" fill="#F8A6A8"/>
+<circle cx="623" cy="447" r="31" fill="#F8A6A8"/>
+
+<!-- pañuelo -->
+<path d="M508 584 C 480 574, 444 588, 440 614 C 438 634, 452 644, 466 642 C 496 636, 516 612, 508 584 Z" fill="#E98AA3" stroke="#5A3563" stroke-width="9"/>
+<path d="M516 584 C 544 574, 580 588, 584 614 C 586 634, 572 644, 558 642 C 528 636, 508 612, 516 584 Z" fill="#B9CB98" stroke="#5A3563" stroke-width="9"/>
+<path d="M504 592 C 490 600, 476 612, 470 622" fill="none" stroke="#5A3563" stroke-width="6"/>
+<path d="M520 592 C 534 600, 548 612, 554 622" fill="none" stroke="#5A3563" stroke-width="6"/>
+</g>
+</svg>
+
+
+</svg>

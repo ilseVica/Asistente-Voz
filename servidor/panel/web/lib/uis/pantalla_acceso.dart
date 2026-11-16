@@ -189,13 +189,13 @@ class _Aviso extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7E1E1),
+        color: Tema.peligro.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         texto,
         style: const TextStyle(
-            color: Color(0xFF7A1616), fontSize: 16, height: 1.45,
+            color: Tema.peligro, fontSize: 16, height: 1.45,
             fontFamily: Tema.familia),
       ),
     );

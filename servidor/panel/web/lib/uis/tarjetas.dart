@@ -759,11 +759,11 @@ class _EstadoPunto extends StatelessWidget {
     if (estado == conectado) {
       color = Tema.primario;
     } else if (estado == noInstalado) {
-      color = const Color(0xFFB7BCB8);
+      color = Tema.gris;
     } else if (estado == desconectado) {
       color = Tema.ambarPildora;
     } else {
-      color = const Color(0xFF8A6D1D);
+      color = Tema.ambarPildora;
     }
     return Container(
       width: 10,

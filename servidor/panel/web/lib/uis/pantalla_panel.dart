@@ -910,7 +910,7 @@ class PastillaEstado extends StatelessWidget {
     final String texto;
 
     if (estado == 'resuelta' || estado == 'atendida') {
-      color = Tema.primario;
+      color = Tema.verdeOscuro;
       texto = Textos.atendida;
     } else if (estado == 'pendiente' || estado == 'enviada') {
       color = Tema.peligro;
@@ -926,7 +926,9 @@ class PastillaEstado extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
+          color: (estado == 'resuelta' || estado == 'atendida')
+              ? Tema.verdeHoja
+              : color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(999)),
       child: Text(texto,
           style: TextStyle(

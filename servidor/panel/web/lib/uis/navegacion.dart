@@ -135,7 +135,7 @@ class PastillaConexion extends StatelessWidget {
       final bool viva = e != null && e.sitio.estado != desconectado;
       if (viva) {
         texto = compacta ? Textos.conectada : Textos.salaConectada;
-        color = Tema.primario;
+        color = Tema.rosa;
         fondo = Tema.suave;
       } else {
         texto = compacta ? Textos.sinConexion : Textos.sinConexionSala;
@@ -195,25 +195,32 @@ class CabeceraEscritorio extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: <Widget>[
                   Container(
-                    width: 48,
-                    height: 48,
+                    width: 56,
+                    height: 56,
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                        color: Tema.primario,
+                        color: Tema.cuadroLogo,
                         borderRadius: BorderRadius.circular(14)),
-                    child: const Icon(Icons.graphic_eq,
-                        color: Tema.tarjeta, size: 26),
+                    child: Image.asset(
+                      'assets/identidad/Lucia-personaje-saludando-v3.png',
+                      fit: BoxFit.contain,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(Textos.asistenteDeVoz, style: tipografia.bodyMedium),
-                        Text(Textos.salaPrincipal,
+                        Text(Textos.asistenteDeVoz,
                             style: const TextStyle(
                                 fontSize: 30, fontWeight: FontWeight.w700,
                                 color: Tema.texto, height: 1.15,
-                                fontFamily: Tema.familia)),
+                                fontFamily: Tema.familiaLogotipo,
+                                fontVariations: <FontVariation>[
+                                  FontVariation('wght', 700)
+                                ])),
+                        Text(Textos.salaPrincipal,
+                            style: tipografia.bodyMedium),
                       ],
                     ),
                   ),
@@ -304,8 +311,11 @@ class _Pestana extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: sel ? Tema.texto : Colors.transparent,
+          color: sel ? Tema.primario : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
+          border: sel
+              ? Border(bottom: BorderSide(color: Tema.rosa, width: 3))
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -352,19 +362,35 @@ class CabeceraMovil extends StatelessWidget {
           : const EdgeInsets.fromLTRB(20, 14, 12, 12),
       child: Row(
         children: <Widget>[
+          Container(
+            width: tableta ? 48 : 40,
+            height: tableta ? 48 : 40,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+                color: Tema.cuadroLogo,
+                borderRadius: BorderRadius.circular(12)),
+            child: Image.asset(
+              'assets/identidad/Lucia-personaje-saludando-v3.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(Textos.asistenteDeVoz,
-                    style: tableta ? tipografia.bodyMedium : tipografia.bodySmall),
-                Text(Textos.salaPrincipal,
                     style: tableta
                         ? const TextStyle(
-                            fontSize: 30, fontWeight: FontWeight.w700,
+                            fontSize: 24, fontWeight: FontWeight.w700,
                             color: Tema.texto, height: 1.15,
-                            fontFamily: Tema.familia)
+                            fontFamily: Tema.familiaLogotipo,
+                            fontVariations: <FontVariation>[
+                              FontVariation('wght', 700)
+                            ])
                         : tipografia.headlineMedium),
+                Text(Textos.salaPrincipal,
+                    style: tableta ? tipografia.bodyMedium : tipografia.bodySmall),
               ],
             ),
           ),

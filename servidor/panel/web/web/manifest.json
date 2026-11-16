@@ -1,12 +1,12 @@
 {
-  "name": "Panel de la sala",
-  "short_name": "Panel",
+  "name": "Lucía",
+  "short_name": "Lucía",
   "description": "El estado de la casa: luz, ambiente, gas y alertas.",
   "start_url": ".",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#F4F5F2",
-  "theme_color": "#0E5E5A",
+  "background_color": "#F6F2F9",
+  "theme_color": "#5A3563",
   "lang": "es",
   "icons": [
     {

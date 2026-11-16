@@ -84,6 +84,8 @@
 - El reacomodo físico de cables puede dejar el mismo firmware funcionando o no; revisar el cableado antes de culpar al código («Sin sensor» del agua).
 - Un tópico atendido en el despacho (`orquestador.enrutar`) pero ausente de la lista de suscripciones de `mqtt_cliente.suscribirse` es código muerto sin ruido: el broker nunca entrega el mensaje y ninguna prueba lo ve, porque el cliente falso de `pruebas.py` entrega directo sin pasar por la suscripción. A partir de ahora, toda prueba de despacho debe comprobar que el tópico esté en las suscripciones.
 
+- `acl.conf` es un bind mount de un solo archivo (`./mosquitto/config/acl.conf:/mosquitto/config/acl.conf:ro` en `servidor/docker-compose.yml`). Cualquier herramienta que lo reemplace (editor que escribe un archivo nuevo, `git checkout`, un commit que lo regenera) deja al contenedor con el inodo viejo; el `SIGHUP` no lo arregla y Mosquitto sigue con la ACL anterior. Hay que editar en sitio (`sed -i`, `>>`) o recrear el contenedor. Conviene, a futuro, montar la carpeta (`./mosquitto/config:/mosquitto/config:ro`) en lugar del archivo, para que un archivo nuevo se vea; no se cambia ahora.
+
 ## 16 de noviembre de 2026
 
 - Despliegue del arreglo del saludo manual: el orquestador no estaba suscrito a `casa/sala/saludo/disparar` (el despacho lo atendía, pero el mensaje nunca llegaba) y la ACL no permitía al usuario `voz` publicarlo ni al `orquestador` leerlo. Corregido en `065ed50`/`d0bcffe` y ACL `d5f2ec9`/`af08395`; recargada con `docker kill -s HUP`.

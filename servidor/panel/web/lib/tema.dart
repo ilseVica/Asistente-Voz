@@ -92,15 +92,22 @@ class Tema {
   static ThemeData construir() {
     final TextTheme base = textoTema.apply(
         fontFamily: familia, bodyColor: texto, displayColor: texto);
+    final ColorScheme esquema = ColorScheme.fromSeed(
+      seedColor: primario,
+      primary: primario,
+      surface: tarjeta,
+      error: peligro,
+    ).copyWith(
+      surfaceTint: Colors.transparent,
+      surfaceContainer: fondo,
+      surfaceContainerLow: fondo,
+      surfaceContainerHigh: tarjeta,
+      surfaceContainerHighest: tarjeta,
+    );
     return ThemeData(
       useMaterial3: true,
       scaffoldBackgroundColor: fondo,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primario,
-        primary: primario,
-        surface: tarjeta,
-        error: peligro,
-      ),
+      colorScheme: esquema,
       fontFamily: familia,
       textTheme: base,
       dividerTheme: const DividerThemeData(color: borde, space: 1, thickness: 1),
@@ -151,6 +158,26 @@ class Tema {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radioBoton),
           borderSide: const BorderSide(color: primario, width: 2),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: tarjeta,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radio),
+          side: const BorderSide(color: borde),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: suave,
+        selectedColor: lavanda,
+        checkmarkColor: primario,
+        labelStyle: const TextStyle(
+            fontSize: 15, fontFamily: familia, color: texto),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radioBoton),
+          side: const BorderSide(color: borde),
         ),
       ),
       snackBarTheme: const SnackBarThemeData(

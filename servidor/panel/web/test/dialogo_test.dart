@@ -57,5 +57,8 @@ void main() {
     final ThemeData tema = Theme.of(tester.element(find.byType(AlertDialog)));
     expect(tema.dialogTheme.backgroundColor, Tema.tarjeta);
     expect(tema.dialogTheme.surfaceTintColor, Colors.transparent);
+    final Size tamanoContenido = tester.getSize(
+        find.descendant(of: find.byType(AlertDialog), matching: find.byType(ConstrainedBox)).first);
+    expect(tamanoContenido.height, lessThan(600));
   });
 }

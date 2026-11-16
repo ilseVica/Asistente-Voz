@@ -181,6 +181,9 @@ class CabeceraEscritorio extends StatelessWidget {
     final int ahora = estado.ahoraLocal();
     final String actualizado =
         estado.ultimoMensajeVivo == null ? '' : haceCorto(estado.ultimoMensajeVivo, ahora: ahora);
+    final double ancho = MediaQuery.sizeOf(contexto).width;
+    final bool compacto = ancho < 1000;
+    final double tamanoMarca = ancho >= 1200 ? 34 : 30;
 
     return Container(
       color: Tema.fondo,
@@ -194,40 +197,12 @@ class CabeceraEscritorio extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: <Widget>[
-                  Container(
-                    width: 56,
-                    height: 56,
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                        color: Tema.cuadroLogo,
-                        borderRadius: BorderRadius.circular(14)),
-                    child: Image.asset(
-                      'assets/identidad/Lucia-personaje-saludando-v3.png',
-                      fit: BoxFit.contain,
-                    ),
-                  ),
+                  MarcaLucia(tamano: tamanoMarca),
                   const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(Textos.asistenteDeVoz,
-                            style: const TextStyle(
-                                fontSize: 30, fontWeight: FontWeight.w700,
-                                color: Tema.texto, height: 1.15,
-                                fontFamily: Tema.familiaLogotipo,
-                                fontVariations: <FontVariation>[
-                                  FontVariation('wght', 700)
-                                ])),
-                        Text(Textos.salaPrincipal,
-                            style: tipografia.bodyMedium),
-                      ],
-                    ),
-                  ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: <Widget>[
-                  const PastillaConexion(),
+                  PastillaConexion(compacta: compacto),
                     if (actualizado.isNotEmpty) ...<Widget>[
                       const SizedBox(height: 4),
                       Text('Actualizado $actualizado',
@@ -308,10 +283,14 @@ class _Pestana extends StatelessWidget {
     return InkWell(
       onTap: () => estado.irA(destino),
       borderRadius: BorderRadius.circular(10),
+      hoverColor: const Color(0xFFF0EFEC),
+      focusColor: const Color(0xFFF0EFEC),
+      highlightColor: Colors.transparent,
+      splashColor: Colors.transparent,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: sel ? Tema.primario : Colors.transparent,
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           border: sel
               ? Border(bottom: BorderSide(color: Tema.rosa, width: 3))
@@ -324,7 +303,7 @@ class _Pestana extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: sel ? Tema.tarjeta : Tema.texto)),
+                    color: sel ? Tema.primario : Tema.secundario)),
             if (cuenta > 0) ...<Widget>[
               const SizedBox(width: 6),
               Container(
@@ -360,42 +339,19 @@ class CabeceraMovil extends StatelessWidget {
       padding: tableta
           ? const EdgeInsets.fromLTRB(32, 24, 24, 16)
           : const EdgeInsets.fromLTRB(20, 14, 12, 12),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: tableta ? 48 : 40,
-            height: tableta ? 48 : 40,
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-                color: Tema.cuadroLogo,
-                borderRadius: BorderRadius.circular(12)),
-            child: Image.asset(
-              'assets/identidad/Lucia-personaje-saludando-v3.png',
-              fit: BoxFit.contain,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(Textos.asistenteDeVoz,
-                    style: tableta
-                        ? const TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.w700,
-                            color: Tema.texto, height: 1.15,
-                            fontFamily: Tema.familiaLogotipo,
-                            fontVariations: <FontVariation>[
-                              FontVariation('wght', 700)
-                            ])
-                        : tipografia.headlineMedium),
-                Text(Textos.salaPrincipal,
-                    style: tableta ? tipografia.bodyMedium : tipografia.bodySmall),
-              ],
-            ),
-          ),
-          PastillaConexion(compacta: !tableta),
-        ],
+      child: LayoutBuilder(
+        builder: (BuildContext contexto, BoxConstraints c) {
+          final bool movil = !tableta;
+          final Widget marca = MarcaLucia(tamano: movil ? 20 : 28);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              marca,
+              const SizedBox(height: 8),
+              PastillaConexion(compacta: movil),
+            ],
+          );
+        },
       ),
     );
   }
@@ -567,4 +523,117 @@ class AvisoPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Marca de texto «Lucía» con la flamita rosa sobre la ı sin punto.
+class MarcaLucia extends StatelessWidget {
+  const MarcaLucia({super.key, this.tamano = 34});
+
+  final double tamano;
+
+  @override
+  Widget build(BuildContext contexto) {
+    final TextStyle estilo = TextStyle(
+      fontFamily: Tema.familiaLogotipo,
+      fontSize: tamano,
+      fontWeight: FontWeight.w700,
+      color: Tema.primario,
+      height: 1.0,
+    );
+
+    final TextPainter tpLuc = TextPainter(
+      text: TextSpan(text: 'Luc', style: estilo),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final TextPainter tpI = TextPainter(
+      text: TextSpan(text: '\u0131', style: estilo),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final double anchoFlama = tamano * 0.42;
+    final double altoFlama = tamano * 0.36;
+    final double izquierdaFlama =
+        tpLuc.width + (tpI.width - anchoFlama) / 2;
+
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: 'Lucía',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Text('Luc\u0131a', style: estilo),
+              Positioned(
+                left: izquierdaFlama,
+                top: -altoFlama * 0.9,
+                child: CustomPaint(
+                  size: Size(anchoFlama, altoFlama),
+                  painter: _PintorFlama(),
+                ),
+              ),
+            ],
+          ),
+          Container(
+            width: 1,
+            height: tamano * 0.75,
+            margin: EdgeInsets.symmetric(horizontal: tamano * 0.35),
+            color: const Color(0xFFE7E5E1),
+          ),
+          Text(
+            Textos.salaPrincipal,
+            style: TextStyle(
+              fontSize: tamano * 0.55,
+              color: const Color(0xFF66666D),
+              fontFamily: Tema.familia,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PintorFlama extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double escalaX = size.width / 80.0;
+    final double escalaY = size.height / 88.0;
+    final double escala = escalaX < escalaY ? escalaX : escalaY;
+    final double dx = (size.width - 80.0 * escala) / 2;
+    final double dy = 0;
+
+    final Path path = Path();
+    // Forma del logotipo: M512 140 C 540 162, 552 190, 540 214 ...
+    // Normalizada restando 472,140.
+    path.moveTo(40 * escala + dx, 0 * escala + dy);
+    path.cubicTo(
+      68 * escala + dx, 22 * escala + dy,
+      80 * escala + dx, 50 * escala + dy,
+      68 * escala + dx, 74 * escala + dy,
+    );
+    path.cubicTo(
+      60 * escala + dx, 88 * escala + dy,
+      20 * escala + dx, 88 * escala + dy,
+      12 * escala + dx, 74 * escala + dy,
+    );
+    path.cubicTo(
+      0 * escala + dx, 50 * escala + dy,
+      12 * escala + dx, 22 * escala + dy,
+      40 * escala + dx, 0 * escala + dy,
+    );
+    path.close();
+
+    final Paint paint = Paint()
+      ..color = const Color(0xFFF89BA6)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -6,7 +6,7 @@ import 'package:asistente_panel/tema.dart';
 
 void main() {
   for (final Size tamano in <Size>[const Size(1200, 900), const Size(390, 844)]) {
-    testWidgets('cabecera muestra logo y Lucía a ${tamano.width} px', (tester) async {
+    testWidgets('cabecera muestra marca Lucía a ${tamano.width} px', (tester) async {
       tester.view.physicalSize = tamano;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -25,8 +25,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
-      expect(find.text('Lucía'), findsWidgets);
-      expect(find.byType(Image), findsWidgets);
+      final SemanticsHandle handle = tester.ensureSemantics();
+      expect(find.bySemanticsLabel('Lucía'), findsWidgets);
+      handle.dispose();
     });
   }
 }

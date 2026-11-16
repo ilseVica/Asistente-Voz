@@ -265,7 +265,7 @@ class CabeceraEscritorio extends StatelessWidget {
 /// Una pestaña de la cabecera. La activa es el negro con texto blanco del
 /// prototipo; las demás son texto llano. El contador de alertas sin resolver va
 /// en un punto rojo junto a «Alertas», que es lo único que merece ruido.
-class _Pestana extends StatelessWidget {
+class _Pestana extends StatefulWidget {
   const _Pestana({
     required this.destino,
     required this.rotulo,
@@ -277,42 +277,51 @@ class _Pestana extends StatelessWidget {
   final int cuenta;
 
   @override
+  State<_Pestana> createState() => _PestanaState();
+}
+
+class _PestanaState extends State<_Pestana> {
+  bool _hover = false;
+  bool _focus = false;
+
+  @override
   Widget build(BuildContext contexto) {
     final EstadoPanel estado = PanelScope.de(contexto);
-    final bool sel = estado.destino == destino;
+    final bool sel = estado.destino == widget.destino;
+    final bool resaltado = sel || _hover || _focus;
 
     return InkWell(
-      onTap: () => estado.irA(destino),
-      borderRadius: BorderRadius.circular(10),
-      hoverColor: const Color(0xFFF0EFEC),
-      focusColor: const Color(0xFFF0EFEC),
+      onTap: () => estado.irA(widget.destino),
+      onFocusChange: (bool v) => setState(() => _focus = v),
+      onHover: (bool v) => setState(() => _hover = v),
+      hoverColor: Colors.transparent,
+      focusColor: Colors.transparent,
       highlightColor: Colors.transparent,
       splashColor: Colors.transparent,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
           border: sel
-              ? Border(bottom: BorderSide(color: Tema.rosa, width: 3))
+              ? const Border(bottom: BorderSide(color: Tema.rosa, width: 3))
               : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text(rotulo,
+            Text(widget.rotulo,
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: sel ? Tema.primario : Tema.secundario)),
-            if (cuenta > 0) ...<Widget>[
+                    color: resaltado ? Tema.primario : Tema.secundario)),
+            if (widget.cuenta > 0) ...<Widget>[
               const SizedBox(width: 6),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: const BoxDecoration(
                     color: Tema.peligro, shape: BoxShape.circle),
-                child: Text('$cuenta',
+                child: Text('${widget.cuenta}',
                     style: const TextStyle(
                         color: Tema.tarjeta,
                         fontSize: 11,

@@ -20,3 +20,65 @@
 
 - Diagnóstico de zona horaria en la intención HORA: el error estaba en `_hora_en_palabras` (`servidor/orquestador/voz.py`), rama `hora == 0` con minuto ≠ 0, que decía «la una» en vez de «las doce». Corregido a «Son las doce y {minutos} de la noche.». 00:00 sigue siendo «medianoche». Pruebas: 688 comprobaciones, 0 fallos.
 - ESP32 (pendiente, NO grabado hoy): `ZONA_HORARIA "America/Mazatlan"` (`firmware/include/config.h`) no lo entiende newlib del ESP32; `setenv("TZ", ...)` no surte efecto y los timestamps del monitor serie salen en UTC. Lo correcto es la cadena POSIX `"MST7"` (UTC−7 sin horario de verano). Solo afecta la hora de los logs del monitor serie; no afecta el ts epoch de las órdenes ni la validación. Se corrige en la próxima grabación, junto con respaldo de NVS y sin erase.
+
+## 6 de noviembre de 2026
+
+- Identidad visual «Lucía»: nombre, personaje y paleta (según Ilse; sin commit ni reporte en el repositorio).
+- Diseño de la torre del nodo y de la lámpara de cascarón (según Ilse).
+
+## 8 de noviembre de 2026
+
+- Sensor de agua HC-SR04 habilitado y calibrado en la NVS (22/5 cm); soporte sobre la cubeta (según Ilse; firmware grabado el 8 nov, commit cf406b2 del 11 nov).
+
+## 9 y 10 de noviembre de 2026
+
+- El foco no prendía por mal contacto en los tornillos 2 y 3 del relé; reacomodo de cables (los pines del ESP32 no cambiaron; commit 99034ab del 15 nov).
+- «Sin sensor» del agua corregido revisando el cableado (según Ilse).
+- Sensor de agua HC-SR04 cableado en `docs/CONEXIONES.md` (commit cf406b2, 11 nov).
+
+## 11 de noviembre de 2026
+
+- Hora 00:xx corregida: se decía «la una»; ahora «las doce … de la noche» (commit ad4bec2).
+- El default de `config.py` pisaba la NVS del agua → recalibrado a 20/5 cm (commit a7e7483).
+- Palabra de activación «Lucía» en la laptop: luz 10 de 10 y responder mensajes con «Lucía» (commit 24847c4).
+- Integración de Lucía en el satélite: escucha continua, tono, cierre por silencio o a los 5 s, saludo y modo depurar (commit e3e5b7c).
+- Agua habilitada en el firmware (commit cf406b2).
+- Panel: log por petición con familiar enmascarado (commit 92f0c4b).
+
+## 12 y 13 de noviembre de 2026
+
+- Gramática ampliada: 110 → 146 frases; «ayúdeme por favor» queda fuera de AYUDA y «auxilio por favor» pasa a AYUDA (commits c1ce8b6, c623323).
+- Repite, «cómo está la casa», temporizador y «buenos días» con efeméride (saludo por hora, hora en palabras, temperatura, efemérides 13–30 nov y 40 curiosidades); textos «llena» al 100 % y «diga Lucía» (commit c623323).
+- Mosquitto de la laptop con `espera-red.conf` (commit 888c56f).
+- La presentación se movió al miércoles 18 (commit 9389d9e, 14 nov).
+- Música (tanda 3) sin funcionar; queda detrás de `MUSICA_HABILITADO` (por defecto 0) (commit 888c56f).
+
+## 13 de noviembre de 2026 (noche)
+
+- Merge de `agua-habilitado` a `master` (commit 9dcc3af).
+- Música apagada para la demo (`MUSICA_HABILITADO=0`) (commit 888c56f).
+
+## 14 de noviembre de 2026
+
+- «Lucía cuida» desplegada: frases de la vida diaria (Parte A) y saludo diario apagado por defecto (commits e8cc4f8, a5a527f, e5f3189, a5aa16f); se quitó «ya desperté» por confundirse con «repite».
+- Arnés sintético: 87 % de acierto (commit a5a527f; reporte en `resultados/`).
+- Panel desde fuera aprobado (P57, validación manual 14 nov).
+- Manual, guion de 10 minutos y tabla de pruebas para la demo del 18 nov (commit 3f6f709).
+- Respaldo de la base e imágenes `:antes-lucia` (según Ilse).
+
+## 15 de noviembre de 2026
+
+- Servidor apagado → Mosquitto no arrancó al encender (Exited 0) y se levantó a mano; P25 y P59 aprobadas.
+- Panel rediseñado: base neutra, marca «Lucía» con flamita, agua junto a movimiento, pestaña con línea rosa (commits 8f166e7, d9a2389, 507fe47, 8a0505e, 595f691, 4f5b19c).
+- Los scripts cargan solos la contraseña de MQTT (commit 01ce1cb).
+- Tabla de pruebas cerrada (P56 y P13 pendientes) (commits 42a8eac, 7780a5b, f71dfd7).
+- `GUION.md` eliminado del repositorio (commit 71174a6).
+- `CONEXIONES.md` con el reacomodo (commit 99034ab).
+
+## Lecciones
+
+- Tras encender el servidor, revisar `docker compose ps`: el 15 nov Mosquitto quedó en `Exited (0)` y todo el sistema quedó caído hasta levantarlo a mano.
+- Los valores por defecto del código (p. ej. `config.py` con 30 cm para el agua) pueden pisar la NVS calibrada; hay que quitarlos o documentarlos.
+- En una gramática cerrada, frases cortas se confunden entre sí («ya desperté» con «repite»); conviene probar con voz real y quitar las ambiguas.
+- Un hotspot de respaldo con distinto nombre o un Wi-Fi abierto no presente en el firmware no sirve para la demo; hay que probar la red real de punta a punta.
+- El reacomodo físico de cables puede dejar el mismo firmware funcionando o no; revisar el cableado antes de culpar al código («Sin sensor» del agua).

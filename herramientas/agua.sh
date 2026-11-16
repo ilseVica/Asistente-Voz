@@ -8,6 +8,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$(cd -- "$SCRIPT_DIR/../servidor" && pwd)"
 
+# shellcheck source=env.sh
+source "$SCRIPT_DIR/env.sh"
+
 if [[ $# -ne 1 ]] || ! [[ "$1" =~ ^[0-9]+$ ]] || (( $1 < 0 || $1 > 100 )); then
     echo "Uso: $0 <agua_pct>   (entero entre 0 y 100)" >&2
     echo "La simulacion se apaga sola a los 60 s." >&2
@@ -15,8 +18,10 @@ if [[ $# -ne 1 ]] || ! [[ "$1" =~ ^[0-9]+$ ]] || (( $1 < 0 || $1 > 100 )); then
 fi
 
 VALOR="$1"
-PASS="$(grep '^MQTT_PUENTE_PASSWORD=' "$SERVER_DIR/.env" | cut -d= -f2-)"
-PASS="${PASS%\"}"; PASS="${PASS#\"}"
+PASS="$(cargar_var_env "$SERVER_DIR/.env" MQTT_PUENTE_PASSWORD)" || {
+    echo "No se pudo cargar MQTT_PUENTE_PASSWORD desde $SERVER_DIR/.env" >&2
+    exit 1
+}
 
 (
     cd "$SERVER_DIR"

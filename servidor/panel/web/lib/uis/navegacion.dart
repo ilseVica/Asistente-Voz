@@ -118,6 +118,7 @@ class PastillaConexion extends StatelessWidget {
     final String texto;
     final Color color;
     final Color fondo;
+    late final Color punto;
 
     if (alertaActiva != null) {
       final PresentacionAlerta pres = presentacionAlerta(
@@ -127,20 +128,24 @@ class PastillaConexion extends StatelessWidget {
       texto = pres.pildora;
       color = pres.colorTexto;
       fondo = pres.colorFondo;
+      punto = pres.colorTexto;
     } else if (!estado.conectadoAlServidor) {
       texto = compacta ? Textos.sinConexion : Textos.sinConexionSala;
       color = Tema.ambarPildora;
       fondo = Tema.ambarFondo;
+      punto = Tema.ambarPildora;
     } else {
       final bool viva = e != null && e.sitio.estado != desconectado;
       if (viva) {
         texto = compacta ? Textos.conectada : Textos.salaConectada;
-        color = Tema.rosa;
-        fondo = Tema.suave;
+        color = Tema.verdeOscuro;
+        fondo = Tema.verdePastillaFondo;
+        punto = Tema.verdePastilla;
       } else {
         texto = compacta ? Textos.sinConexion : Textos.sinConexionSala;
         color = Tema.ambarPildora;
         fondo = Tema.ambarFondo;
+        punto = Tema.ambarPildora;
       }
     }
 
@@ -156,7 +161,7 @@ class PastillaConexion extends StatelessWidget {
           Container(
             width: compacta ? 8 : 10,
             height: compacta ? 8 : 10,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: punto, shape: BoxShape.circle),
           ),
           SizedBox(width: compacta ? 6 : 8),
           Text(texto,

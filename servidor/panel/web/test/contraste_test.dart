@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:asistente_panel/tema.dart';
 import 'package:asistente_panel/presentacion_alerta.dart';
-import 'package:asistente_panel/modelos.dart';
+import 'package:asistente_panel/textos.dart';
 
 double _luminancia(Color c) {
   double canal(int v) {
@@ -38,6 +38,7 @@ void main() {
       (Tema.tarjeta, Tema.primario, false),
       (Tema.primario, Tema.amarillo, false),
       (Tema.verdeOscuro, Tema.verdeHoja, false),
+      (Tema.verdeOscuro, Tema.verdePastillaFondo, false),
       (Tema.ambarTexto, Tema.ambarFondo, false),
       (Tema.ambarPildora, Tema.ambarFondo, false),
       (Tema.peligro, Tema.fondo, false),
@@ -72,5 +73,24 @@ void main() {
     // gas rojo
     final PresentacionAlerta gas = presentacionAlerta('gas');
     expect(_contraste(gas.colorTexto, gas.colorFondo), greaterThanOrEqualTo(4.5));
+  });
+
+  test('bienestar se titula Aviso de bienestar y no muestra su nombre interno', () {
+    expect(tituloAlerta('bienestar'), 'Aviso de bienestar');
+    final PresentacionAlerta mal = presentacionAlerta(
+      'bienestar',
+      carga: <String, dynamic>{'texto': 'La sala dice que se siente mal.'},
+    );
+    expect(mal.titulo, 'Aviso de bienestar');
+    expect(mal.cuerpo, 'Dijo que se siente mal');
+    final PresentacionAlerta silencio = presentacionAlerta(
+      'bienestar',
+      carga: <String, dynamic>{'texto': 'Lucía saludó a las 09:00 y a las 09:10.'},
+    );
+    expect(silencio.cuerpo, 'No contestó el saludo');
+    for (final String t in <String>['gas', 'ayuda', 'inactividad', 'agua', 'bienestar', 'miedo']) {
+      expect(tituloAlerta(t), isNot(equals(t)),
+          reason: '$t muestra su nombre interno');
+    }
   });
 }

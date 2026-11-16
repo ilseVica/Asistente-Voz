@@ -527,6 +527,8 @@ String tituloAlerta(String tipo) {
       return Textos.alertaDeAgua;
     case 'miedo':
       return Textos.haDichoTenerMiedo;
+    case 'bienestar':
+      return 'Aviso de bienestar';
     default:
       return tipo;
   }

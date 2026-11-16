@@ -40,6 +40,9 @@ class Tema {
   static const Color amarillo = Color(0xFFFFDB8C);
   static const Color rosa = Color(0xFFF89BA6);
 
+  static const Color verdePastilla = Color(0xFF4F7A28);
+  static const Color verdePastillaFondo = Color(0xFFE5F0D8);
+
   static const Color verdeHoja = Color(0xFFB9CB98);
   static const Color verdeOscuro = Color(0xFF2E4A1F);
 
@@ -158,6 +161,9 @@ class Tema {
         backgroundColor: tarjeta,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
+        titleTextStyle: const TextStyle(
+            fontSize: 18, fontWeight: FontWeight.w700,
+            color: texto, fontFamily: familia),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radio),
           side: const BorderSide(color: borde),

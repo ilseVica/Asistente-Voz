@@ -71,10 +71,14 @@ PresentacionAlerta presentacionAlerta(
         peligro: bajo,
       );
     case 'bienestar':
-      return const PresentacionAlerta(
+      final String textoBienestar = (c['texto']?.toString() ?? '');
+      final String cuerpoBienestar = textoBienestar.contains('se siente mal')
+          ? 'Dijo que se siente mal'
+          : 'No contestó el saludo';
+      return PresentacionAlerta(
         pildora: Textos.aviso,
-        titulo: Textos.avisoEnLaSala,
-        cuerpo: Textos.seRecibioUnAviso,
+        titulo: 'Aviso de bienestar',
+        cuerpo: cuerpoBienestar,
         icono: Icons.favorite,
         colorTexto: Tema.tarjeta,
         colorFondo: Tema.peligro,

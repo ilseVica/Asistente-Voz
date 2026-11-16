@@ -99,7 +99,7 @@ Ejemplo:
 ## Guion de demostración
 
 Para enseñar el sistema entero funcionando en 5 minutos hay un guion con los
-comandos sueltos en `herramientas/GUION.md`, y un script que los hace por ti:
+un script que los hace por ti:
 
 ```bash
 bash herramientas/guion.sh

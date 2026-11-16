@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Apoyo para operar la demostracion de 10 minutos (herramientas/GUION.md).
+# Apoyo para operar la demostracion de 10 minutos.
 #
 # Uso:
 #   herramientas/guion.sh            # interactivo: Enter ejecuta cada paso

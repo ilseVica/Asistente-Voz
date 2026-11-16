@@ -3614,10 +3614,23 @@ prueba("calibracion agua: agua_lleno_cm por defecto 5",
 esperados = [config.TOPICO_ALERTA_GAS, config.TOPICO_ALERTA_AYUDA,
              config.TOPICO_VOZ_TEXTO, config.TOPICO_SATELITE_ESTADO,
              config.TOPICO_SENSORES, config.TOPICO_NODO_ESTADO,
-             config.TOPICO_ENLACE_SITIO, config.TOPICO_LUZ_ESTADO]
+             config.TOPICO_ENLACE_SITIO, config.TOPICO_LUZ_ESTADO,
+             config.TOPICO_SALUDO_DISPARAR]
 prueba("y la suscripción sigue siendo la de siempre, sin nodo/config",
        [t for t, _ in al_conectar.cliente.suscritos] == esperados,
        al_conectar.cliente.suscritos)
+# Todo topico que atiende el despacho (orquestador.enrutar) tiene que estar en la
+# lista de suscripciones de mqtt_cliente.suscribirse; si no, el mensaje nunca
+# llega y el despacho es codigo muerto.
+despachados = [config.TOPICO_VOZ_TEXTO, config.TOPICO_ALERTA_GAS,
+               config.TOPICO_ALERTA_AYUDA, config.TOPICO_SATELITE_ESTADO,
+               config.TOPICO_SENSORES, config.TOPICO_NODO_ESTADO,
+               config.TOPICO_LUZ_ESTADO, config.TOPICO_ENLACE_SITIO,
+               config.TOPICO_SALUDO_DISPARAR]
+suscripciones = [t for t, _ in al_conectar.cliente.suscritos]
+prueba("todo topico que atiende el despacho esta en las suscripciones",
+       all(t in suscripciones for t in despachados),
+       (despachados, suscripciones))
 prueba("la primera conexión no dispara el aviso de reconexión",
        al_conectar._primera_conexion is False, al_conectar._primera_conexion)
 

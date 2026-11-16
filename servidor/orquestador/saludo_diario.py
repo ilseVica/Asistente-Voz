@@ -175,6 +175,7 @@ class Estado:
         if (not manual) and not cfg.get("activo", False):
             return False
         if (not manual) and self._hay_alerta_abierta():
+            registro.info("saludo diario: saltado por alerta abierta")
             return False
         if not self._sala_conectada():
             # aviso (no alerta)
@@ -252,6 +253,7 @@ class Estado:
                 return False
         # disparar en modo adelantado: pregunta directamente (sin repetir buenos dias)
         if self._hay_alerta_abierta():
+            registro.info("saludo diario: saltado por alerta abierta")
             return False
         if not self._sala_conectada():
             return False

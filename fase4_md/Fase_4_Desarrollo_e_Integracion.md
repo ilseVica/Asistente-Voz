@@ -404,11 +404,11 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 | P08 | Gas real cerca del MQ-2 (encendedor sin flama) | Buzzer, un aviso por voz, una alerta en Telegram y aviso en el panel | ✅ | commit ea0aee0 (2 nov): gas.sh / simulación. | A · Aprobada (gas simulado) |
 | P09 | Comando de prueba que hace oscilar la lectura alrededor del umbral durante 1 minuto | Un solo episodio y una sola alerta | ✅ | reporte 2026-11-02 T-35 + commit af68c5d (2 nov). | R · Aprobada |
 | P10 | MQ-2 en aire limpio durante 30 minutos, ya caliente (60 minutos en el ensayo general) | Cero alertas | ⏳ | Pendiente. | A · Pendiente |
-| P11 | Inactividad con el tiempo ajustado a 2 minutos desde el panel, antes de la sesión | Aviso en el panel y en Telegram 2 minutos después del último movimiento (±10 s) | ⏳ | No realizada. | A · No realizada: no bloquea la entrega (cubierta en parte por P22, recuperación tras corte). |
+| P11 | Inactividad con el tiempo ajustado a 2 minutos desde el panel, antes de la sesión | Aviso en el panel y en Telegram 2 minutos después del último movimiento (±10 s) | ❌ | No realizada. | A · No realizada: no bloquea la entrega (cubierta en parte por P22, recuperación tras corte). |
 | P12 | Verificar la hora del servidor y crear desde el panel un recordatorio para dentro de 2 minutos | El asistente lo dice en voz alta a la hora indicada (±15 s) | 🟡 | Parcial; reporte 2 nov bloque A. | A · Parcial |
-| P13 | Cancelar un recordatorio desde el panel | No suena | ⏳ | No realizada. | A · No realizada: cubierta en parte por P12 (recordatorio creado y dicho en voz). |
-| P14 | El asistente habla con la pausa del micrófono activa | El satélite no envía audio mientras Piper suena | ⏳ | No realizada. | R · No realizada: cubierta en parte por P29 (orden de voz con gas abierto). |
-| P15 | El asistente habla con la captura forzada (sin pausa) | No ejecuta ninguna orden a partir de su propia voz | ⏳ | No realizada. | A · No realizada: cubierta en parte por P29 (orden de voz con gas abierto). |
+| P13 | Cancelar un recordatorio desde el panel | No suena | ❌ | No realizada. | A · No realizada: cubierta en parte por P12 (recordatorio creado y dicho en voz). |
+| P14 | El asistente habla con la pausa del micrófono activa | El satélite no envía audio mientras Piper suena | ❌ | No realizada. | R · No realizada: cubierta en parte por P29 (orden de voz con gas abierto). |
+| P15 | El asistente habla con la captura forzada (sin pausa) | No ejecuta ninguna orden a partir de su propia voz | ❌ | No realizada. | A · No realizada: cubierta en parte por P29 (orden de voz con gas abierto). |
 | P16 | Una alerta llega dos veces al servidor, con un reinicio del servidor entre ambas | Telegram recibe un solo mensaje | ✅ | commit 9f4c012 (4 oct): alerta duplicada descartada. | R · Aprobada |
 | P17 | Botón «Ya lo atendí» en Telegram, en el aviso de cada familiar | La alerta se marca como resuelta y el asistente avisa al usuario; lo puede pulsar cualquiera de los familiares registrados y el mensaje se reescribe en su chat | ✅ | commit 9f4c012 (4 oct): «Ya lo atendí» en Telegram. | A · Aprobada |
 | P18 | Acceso al panel desde un celular con datos móviles (sin Tailscale) | El panel se abre en `https://asistente.tail722206.ts.net` sin instalar nada; el WebSocket se conecta | ✅ | commit 41dad4b (8 oct): panel por Tailscale Funnel. | R · Aprobada |
@@ -436,7 +436,7 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 | P40 | El familiar escribe en el chat (opcional) | El mensaje se dice en voz alta en el sitio | ✅ | commit 8cf97d8 (27 oct): chat de dos vías. | A · Aprobada |
 | P41 | El usuario responde por voz al familiar (opcional) | La respuesta aparece transcrita en el chat | ✅ | commit 8cf97d8 (27 oct): respuesta por voz. | A · Aprobada |
 | P42 | Publicar una orden de luz con ts de hace 60 segundos | La luz no se enciende y el ESP32 registra el descarte por antigüedad | ✅ | commit b28b49d (29 oct): regla de antigüedad. | R · Aprobada |
-| P43 | Publicar en satelite/decir, con ts de hace 60 segundos, una respuesta y un recordatorio | La respuesta no se dice; el recordatorio sí | ⏳ | No realizada. | R · No realizada: cubierta en parte por P42 (antigüedad en órdenes de luz). |
+| P43 | Publicar en satelite/decir, con ts de hace 60 segundos, una respuesta y un recordatorio | La respuesta no se dice; el recordatorio sí | ❌ | No realizada. | R · No realizada: cubierta en parte por P42 (antigüedad en órdenes de luz). |
 | P44 | Reiniciar el ESP32 en modo instalación, sin Internet | Obtiene la hora del NTP del servidor y las órdenes de voz funcionan | 🟡 | commit cfb328d (3 nov): NTP del servidor. | A · Parcial. Prueba sin Internet en la presentación formal. |
 | P45 | Con el Wi-Fi del ESP32 cortado, disparar el gas por monitor serie, esperar 2 minutos y restaurar la red | La alerta llega una sola vez, con el mismo id que se generó durante el corte | ✅ | commit 7324bb9 (10 oct): gas con Wi-Fi cortado. | A · Aprobada |
 | P46 | Publicar una orden de luz sin el campo ts | La luz no cambia y el ESP32 registra el descarte | ✅ | commit b28b49d (29 oct): descarte sin ts. | R · Aprobada |
@@ -444,8 +444,8 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 | P48 | Agua: cubeta a la mitad (11 nov) | Lucía dice el porcentaje (~65 %) y no hay alerta | ✅ | reporte 2026-11-11 (b) MITAD. | A · aprobada 11 nov |
 | P49 | Agua: nivel bajo (~1 L) con alerta y «Ya lo atendí» (11 nov) | Se abre la alerta de agua baja y se cierra desde el panel/Telegram | ✅ | reporte 2026-11-11 (c2): alerta baja y «Ya lo atendí». | A · aprobada 11 nov |
 | P50 | Lucía: «prende la luz» 10 de 10 activaciones (11 nov) | Las 10 activaciones encienden la luz | ✅ | validación manual 11 nov: 10/10. | A · aprobada 11 nov |
-| P51 | Lucía: 20 activaciones seguidas sin falsos positivos | 20 activaciones correctas | ⏳ | No realizada. | A · No realizada: cubierta en parte por P50 (10/10 activaciones). |
-| P52 | Lucía: 5 minutos de charla o tele sin activación espuria | Sin activación espuria | ⏳ | No realizada. | A · No realizada: cubierta en parte por P50 y P54. |
+| P51 | Lucía: 20 activaciones seguidas sin falsos positivos | 20 activaciones correctas | ❌ | No realizada. | A · No realizada: cubierta en parte por P50 (10/10 activaciones). |
+| P52 | Lucía: 5 minutos de charla o tele sin activación espuria | Sin activación espuria | ❌ | No realizada. | A · No realizada: cubierta en parte por P50 y P54. |
 | P53 | Responder a un mensaje familiar con «Lucía» (11 nov) | La respuesta aparece transcrita en el panel | ✅ | validación manual 11 nov: respuesta por voz. | A · aprobada 11 nov |
 | P54 | Gramática con arnés sintético: 87 % de acierto (14 nov) | 87 % de acierto, tabla de errores del 14 nov | ✅ | herramientas/arnes_wav.py, corrida 14 nov. | R · aprobada (sintético) |
 | P55 | Frases de la Parte A y saludo diario en arnés sintético | Aprobadas en pruebas automáticas | ✅ | commit a5a527f (14 nov): pruebas automáticas Parte A. | A · aprobada (sintético) |
@@ -458,7 +458,8 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 
 - ✅ Aprobadas: 35
 - 🟡 Parciales: 6
-- ⏳ Pendientes: 15
+- ⏳ Pendientes: 8
+- ❌ No realizadas: 7
 - — No aplica: 3
 - Total: 59
 

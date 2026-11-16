@@ -70,7 +70,7 @@ paso 3 "Buenos días" \
 
 # Paso 4
 paso 4 "Saludo diario" \
-  "Presentador: lanzar con herramientas/saludo.sh (respaldo si no se dispara solo); responder «bien, gracias» al saludo diario y probar también «no me siento bien»." \
+  "Presentador: lanzar el saludo una sola vez con herramientas/saludo.sh y responder «no me siento bien»." \
   "Lucía pregunta «¿Cómo amaneció?», alerta en Telegram y panel; se cierra con «Ya lo atendí»." \
   "F9 o botón del panel; hotspot de respaldo; video de respaldo."
 ejecutar "$RAIZ_ABS/herramientas/saludo.sh" || true

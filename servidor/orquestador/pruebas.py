@@ -5164,6 +5164,41 @@ class _SatNone:
 _sd6b = _sd_mod.Estado(_base_pb6, _SatNone(), _pub_pb, None, ahora=6000.0)
 _sd6b.disparar(ahora=6000.0, manual=True)
 prueba("PB sin sala no alerta", _base_pb6.conexion.execute("SELECT COUNT(*) FROM alertas").fetchone()[0] == 0)
+# --- vacio / None en la ventana del saludo ---
+_base_ve, _ = base_nueva("saludovacio-")
+_ahora_ve = time.time()
+_sd_ve = _sd_mod.Estado(_base_ve, _SatPB(), _pub_pb, None, ahora=_ahora_ve)
+_sd_ve.disparar(ahora=_ahora_ve, manual=True)
+_pubs_pb.clear()
+voz._saludo_diario = _sd_ve
+voz.procesar('{"frase_id":"ve1","texto":"","modo":"comandos","ts":%d}' % int(time.time()),
+             _pub_pb, base=_base_ve)
+prueba("PB vacio en ventana repregunta del saludo",
+       any(c.get("texto") == textos.SALUDO_DIARIO_NO_ENTENDI for _, c in _pubs_pb)
+       and any(c.get("escuchar_al_terminar") is True for _, c in _pubs_pb
+               if c.get("texto") == textos.SALUDO_DIARIO_NO_ENTENDI),
+       _pubs_pb)
+_pubs_pb.clear()
+voz.procesar('{"frase_id":"ve2","texto":"","modo":"comandos","ts":%d}' % int(time.time()),
+             _pub_pb, base=_base_ve)
+prueba("PB segundo vacio en ventana no repregunta",
+       len(_pubs_pb) == 0, _pubs_pb)
+_pubs_pb.clear()
+voz.procesar('{"frase_id":"ve3","texto":"ayuda","modo":"comandos","ts":%d}' % int(time.time()),
+             _pub_pb, base=_base_ve)
+prueba("PB ayuda en ventana publica alerta ayuda",
+       any(t == "casa/sala/alerta/ayuda" for t, _ in _pubs_pb),
+       _pubs_pb)
+_sd_ve._cerrar_ventana()
+_pubs_pb.clear()
+voz._saludo_diario = _sd_ve
+voz.procesar('{"frase_id":"ve4","texto":"","modo":"comandos","ts":%d}' % int(time.time()),
+             _pub_pb, base=_base_ve)
+prueba("PB vacio fuera de ventana es no_entendido generico",
+       any(c.get("texto") == textos.NO_ENTENDIDO for _, c in _pubs_pb), _pubs_pb)
+voz._saludo_diario = None
+_base_ve.cerrar()
+
 # una vez al dia
 _base_pb.cerrar(); _base_pb2.cerrar(); _base_pb3.cerrar(); _base_pb4.cerrar(); _base_pb5.cerrar(); _base_pb6.cerrar()
 

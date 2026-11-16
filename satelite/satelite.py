@@ -1015,6 +1015,7 @@ class ItemHabla:
     turno: Frase | None = None
     recibido_ms: int = 0
     frase_id: str | None = None
+    escuchar_al_terminar: bool = False
 
 
 # Prioridad en la cola de voz: menor = antes. Una alerta pasa delante de todo.
@@ -1580,7 +1581,7 @@ class Nucleo:
 
     async def _capturar(self, frase: Frase) -> None:
         max_tramas = max(1, int(self.cfg.altura_max_s * TRAMAS_POR_SEGUNDO))
-        es_lucia = (getattr(frase, "origen", "") == "lucia")
+        es_lucia = (getattr(frase, "origen", "") in ("lucia", "saludo"))
         # silencio para cerrar una frase de Lucía cuando ya empezo a hablar
         silencio_cierre = 15  # tramas (1.5 s)
         enviadas = 0
@@ -1784,7 +1785,8 @@ class Nucleo:
         if tipo == "respuesta":
             self._al_decir_respuesta(texto, frase_id)
             return
-        self._encolar_habla(texto, tipo or "aviso", frase_id=frase_id)
+        self._encolar_habla(texto, tipo or "aviso", frase_id=frase_id,
+                            escuchar_al_terminar=bool(carga.get("escuchar_al_terminar")))
 
     def _al_decir_respuesta(self, texto: str, frase_id) -> None:
         if frase_id is None:
@@ -1810,7 +1812,8 @@ class Nucleo:
         if self.turno_pendiente is not None and \
                 self.turno_pendiente.frase_id == frase_id:
             frase = self._marcar_decir(self.turno_pendiente)
-        self._encolar_habla(texto, "respuesta", turno=frase, frase_id=frase_id)
+        self._encolar_habla(texto, "respuesta", turno=frase, frase_id=frase_id,
+                            escuchar_al_terminar=False)
 
     def _marcar_decir(self, frase: Frase) -> Frase:
         frase.t_decir = reloj_ms()
@@ -1825,9 +1828,11 @@ class Nucleo:
 
     # --- cola de voz ---
     def _encolar_habla(self, texto: str, tipo: str,
-                       turno: Frase | None = None, frase_id=None) -> None:
+                       turno: Frase | None = None, frase_id=None,
+                       escuchar_al_terminar: bool = False) -> None:
         item = ItemHabla(texto=texto, tipo=tipo, turno=turno,
-                         recibido_ms=reloj_ms(), frase_id=frase_id)
+                         recibido_ms=reloj_ms(), frase_id=frase_id,
+                         escuchar_al_terminar=bool(escuchar_al_terminar))
         prioridad = PRIORIDAD_ALERTA if tipo == TIPO_ALERTA else PRIORIDAD_NORMAL
         self._orden_cola += 1
         self.cola.put_nowait((prioridad, self._orden_cola, item))
@@ -1860,8 +1865,10 @@ class Nucleo:
             self._tarea_decir = asyncio.get_running_loop().create_task(
                 self.rep.decir(item.texto, tipo=item.tipo, frase_id=item.frase_id))
             try:
+                cancelado = False
                 t_sonido = await self._tarea_decir
             except asyncio.CancelledError:
+                cancelado = True
                 # Si el que se cancela es este bucle (el satelite se apaga), se
                 # sigue cancelando. Si solo se cancelo la frase, fue una alerta.
                 if asyncio.current_task().cancelling():
@@ -1869,6 +1876,7 @@ class Nucleo:
                 registro.info("%s interrumpida por una alerta", item.tipo)
             except Exception as error:  # noqa: BLE001
                 registro.error("no se pudo hablar: %s", error)
+                cancelado = True
             finally:
                 self._tarea_decir = None
                 self._item_actual = None
@@ -1880,6 +1888,23 @@ class Nucleo:
                         self._medir_primer_turno(turno)
                     if turno.t_sonido is not None:
                         self._rematar_turno(turno)
+                # Escuchar al terminar: abre el micrófono con cierre por
+                # silencio (como la deteccion de "Lucia"), solo si la
+                # reproduccion termino bien y no hay ya una frase abierta.
+                if (not cancelado
+                        and getattr(item, "escuchar_al_terminar", False)):
+                    if self.frase is not None:
+                        registro.info("escuchar_al_terminar: ya hay una frase abierta; no se abre otra")
+                    else:
+                        try:
+                            self.hablando = True
+                            await self.rep.tono()
+                        except Exception as error:  # noqa: BLE001
+                            registro.warning("tono (escuchar_al_terminar): %s", error)
+                        finally:
+                            self.hablando = False
+                        if self.frase is None:
+                            self.abrir_frase(origen="saludo")
 
     def _rematar_turno(self, frase: Frase) -> None:
         """Escribe la frase cuando ya esta completa, sea cual sea el orden.

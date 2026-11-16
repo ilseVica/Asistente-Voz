@@ -1464,5 +1464,51 @@ class TestMusicaTanda3(unittest.TestCase):
         loop.close()
 
 
+class TestEscucharAlTerminar(Base):
+    async def test_escuchar_al_terminar_abre_despues_de_reproducir(self):
+        nucleo = self.hacer_nucleo(repes=FakeRepSintetizaYReproduce())
+        async def _tono():
+            return None
+        nucleo.rep.tono = _tono
+        tarea = asyncio.get_event_loop().create_task(nucleo.bucle_habla())
+        try:
+            ahora = int(time.time())
+            nucleo.al_decir({"tipo": "aviso", "texto": "hola",
+                             "ts": ahora, "escuchar_al_terminar": True})
+            await asyncio.sleep(0.05)
+            self.assertIsNone(nucleo.frase)
+            ok = await self.esperar(lambda: nucleo.frase is not None, timeout=2.0)
+            self.assertTrue(ok, "no se abrio la frase tras reproducir")
+            self.assertEqual(nucleo.frase.origen, "saludo")
+        finally:
+            tarea.cancel()
+
+    async def test_sin_campo_no_abre_frase(self):
+        nucleo = self.hacer_nucleo(repes=FakeRepSintetizaYReproduce())
+        tarea = asyncio.get_event_loop().create_task(nucleo.bucle_habla())
+        try:
+            ahora = int(time.time())
+            nucleo.al_decir({"tipo": "aviso", "texto": "hola", "ts": ahora})
+            await self.esperar(lambda: len(self.rep.dichos) >= 1, timeout=2.0)
+            await asyncio.sleep(0.3)
+            self.assertIsNone(nucleo.frase)
+        finally:
+            tarea.cancel()
+
+    async def test_campo_con_frase_abierta_no_abre_otra(self):
+        nucleo = self.hacer_nucleo(repes=FakeRepSintetizaYReproduce())
+        nucleo.abrir_frase()
+        frase0 = nucleo.frase
+        tarea = asyncio.get_event_loop().create_task(nucleo.bucle_habla())
+        try:
+            ahora = int(time.time())
+            nucleo.al_decir({"tipo": "aviso", "texto": "hola",
+                             "ts": ahora, "escuchar_al_terminar": True})
+            await self.esperar(lambda: len(self.rep.dichos) >= 1, timeout=2.0)
+            await asyncio.sleep(0.3)
+            self.assertIs(frase0, nucleo.frase)
+        finally:
+            tarea.cancel()
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

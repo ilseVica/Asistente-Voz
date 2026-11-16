@@ -192,10 +192,8 @@ class Estado:
         # hablar
         self._publicar(getattr(config, "TOPICO_SATELITE_DECIR", "casa/sala/satelite/decir"),
                        {"texto": textos.SALUDO_DIARIO_PREGUNTA, "tipo": "saludo",
-                        "ts": int(ahora), "destino": SALA_CID}, qos=1)
-        # abrir microfono
-        self._publicar("casa/sala/satelite/%s/hablar" % SALA_CID,
-                       {"accion": "inicio", "ts": int(ahora)}, qos=1)
+                        "ts": int(ahora), "destino": SALA_CID,
+                        "escuchar_al_terminar": True}, qos=1)
         self._disparado = True
         self._fecha_disparo = fecha
         self._hora_disparo = ahora
@@ -222,7 +220,8 @@ class Estado:
         if self._fase == 1 and self._reintento_en is not None and ahora >= self._reintento_en:
             self._publicar(getattr(config, "TOPICO_SATELITE_DECIR", "casa/sala/satelite/decir"),
                            {"texto": textos.SALUDO_DIARIO_REINTENTO, "tipo": "saludo",
-                            "ts": int(ahora), "destino": SALA_CID}, qos=1)
+                            "ts": int(ahora), "destino": SALA_CID,
+                            "escuchar_al_terminar": True}, qos=1)
             self._fase = 2
             self._segundo_limite = ahora + int(cfg.get("reintento_min", 10)) * 60
             self._reintento_en = None
@@ -259,9 +258,8 @@ class Estado:
             return False
         self._publicar(getattr(config, "TOPICO_SATELITE_DECIR", "casa/sala/satelite/decir"),
                        {"texto": textos.SALUDO_DIARIO_PREGUNTA, "tipo": "saludo",
-                        "ts": int(ahora), "destino": SALA_CID}, qos=1)
-        self._publicar("casa/sala/satelite/%s/hablar" % SALA_CID,
-                       {"accion": "inicio", "ts": int(ahora)}, qos=1)
+                        "ts": int(ahora), "destino": SALA_CID,
+                        "escuchar_al_terminar": True}, qos=1)
         self._disparado = True
         self._fecha_disparo = fecha
         self._hora_disparo = ahora
@@ -359,7 +357,8 @@ class Estado:
         if not self._no_entendido_usado:
             self._publicar(getattr(config, "TOPICO_SATELITE_DECIR", "casa/sala/satelite/decir"),
                            {"texto": textos.SALUDO_DIARIO_NO_ENTENDI, "tipo": "saludo",
-                            "ts": int(ahora), "destino": SALA_CID}, qos=1)
+                            "ts": int(ahora), "destino": SALA_CID,
+                            "escuchar_al_terminar": True}, qos=1)
             self._no_entendido_usado = True
             return True
         self._cerrar_ventana()

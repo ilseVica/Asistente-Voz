@@ -2325,8 +2325,9 @@ if os.path.exists(ruta_acl):
     prueba("voz puede escribir casa/sala/voz/texto",
            "topic write casa/sala/voz/texto" in bloques.get("voz", []),
            bloques.get("voz"))
-    prueba("voz NO puede escribir nada mas",
-           bloques.get("voz") == ["topic write casa/sala/voz/texto"],
+    prueba("voz solo puede escribir voz/texto y saludo/disparar",
+           bloques.get("voz") == ["topic write casa/sala/voz/texto",
+                                 "topic write casa/sala/saludo/disparar"],
            bloques.get("voz"))
     prueba("el orquestador puede leer casa/sala/voz/texto",
            "topic read casa/sala/voz/texto" in bloques.get("orquestador", []),
@@ -5099,8 +5100,14 @@ _sd.disparar(ahora=1000.0, manual=True)
 prueba("PB disparo publica pregunta",
        any(c.get("texto") == textos.SALUDO_DIARIO_PREGUNTA for _, c in _pubs_pb),
        _pubs_pb)
-prueba("PB abre microfono",
-       any(t.endswith("/hablar") for t, _ in _pubs_pb), _pubs_pb)
+prueba("PB disparo pide escuchar al terminar",
+       any(c.get("escuchar_al_terminar") is True
+           for _, c in _pubs_pb
+           if c.get("texto") == textos.SALUDO_DIARIO_PREGUNTA),
+       _pubs_pb)
+prueba("PB disparo no publica hablar",
+       not any(str(t).endswith("/hablar") for t, _ in _pubs_pb),
+       _pubs_pb)
 # bien
 _pubs_pb.clear()
 _ok = _sd.responder("bien", ahora=1001.0)

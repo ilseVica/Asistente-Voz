@@ -66,9 +66,23 @@ PresentacionAlerta presentacionAlerta(
         titulo: bajo ? Textos.aguaBajaEnLaSala : Textos.aguaLlenaEnLaSala,
         cuerpo: bajo ? Textos.aguaBaja : Textos.aguaLlena,
         icono: Icons.water_drop,
-        colorTexto: Tema.tarjeta,
+        colorTexto: bajo ? Tema.tarjeta : Tema.ambarPildora,
         colorFondo: bajo ? Tema.peligro : Tema.ambarFondo,
         peligro: bajo,
+      );
+    case 'bienestar':
+      final String textoBienestar = (c['texto']?.toString() ?? '');
+      final String cuerpoBienestar = textoBienestar.contains('se siente mal')
+          ? 'Dijo que se siente mal'
+          : 'No contestó el saludo';
+      return PresentacionAlerta(
+        pildora: Textos.aviso,
+        titulo: 'Aviso de bienestar',
+        cuerpo: cuerpoBienestar,
+        icono: Icons.favorite,
+        colorTexto: Tema.tarjeta,
+        colorFondo: Tema.peligro,
+        peligro: true,
       );
     case 'inactividad':
       final int min = (c['minutos'] as num?)?.toInt() ?? 0;

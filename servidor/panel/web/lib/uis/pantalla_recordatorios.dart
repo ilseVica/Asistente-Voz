@@ -326,11 +326,11 @@ class _DialogoNuevoRecordatorioState extends State<_DialogoNuevoRecordatorio> {
       listenable: widget.estado,
       builder: (BuildContext contexto, Widget? _) {
         return AlertDialog(
+          scrollable: true,
           title: const Text(Textos.nuevoRecordatorio),
           content: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
-            child: SingleChildScrollView(
-              child: Column(
+            child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
@@ -487,7 +487,6 @@ class _DialogoNuevoRecordatorioState extends State<_DialogoNuevoRecordatorio> {
                   ],
                 ],
               ),
-            ),
           ),
           actions: <Widget>[
             TextButton(

@@ -138,6 +138,9 @@ que el usuario responda con una de las frases de **SALUDO_RESPUESTA** (por
 ejemplo «bien», «mal», «más o menos»). Si se responde «me siento mal» (o
 similar), se avisa a la familia.
 
+Nota (16 nov): en el estado actual el micrófono no se abre solo tras la
+pregunta; hay que decir «Lucía» antes de contestar (limitación conocida).
+
 - Se activa con `SALUDO_DIARIO_ACTIVO=1` en `servidor/.env` (por defecto está
   desactivado). Después se recrea el orquestador:
   `docker compose up -d --no-deps --force-recreate orquestador`.
@@ -460,3 +463,6 @@ funcionando como respaldo. Por defecto está desactivada (`lucia.activa = false`
 Lucía pregunta una vez al día «¿Cómo amaneció?» y abre el micrófono sola. Se
 puede disparar manualmente con `herramientas/saludo.sh` o publicando en
 `casa/sala/saludo/disparar`.
+
+Nota (16 nov): el micrófono no se abre solo tras la pregunta; hay que decir
+«Lucía» antes de contestar (limitación conocida).

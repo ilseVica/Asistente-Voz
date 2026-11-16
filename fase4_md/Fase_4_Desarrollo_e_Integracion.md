@@ -406,7 +406,7 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 | P10 | MQ-2 en aire limpio durante 30 minutos, ya caliente (60 minutos en el ensayo general) | Cero alertas | 🚫 | Descartada. | A · Descartada: sin ensayo general. |
 | P11 | Inactividad con el tiempo ajustado a 2 minutos desde el panel, antes de la sesión | Aviso en el panel y en Telegram 2 minutos después del último movimiento (±10 s) | ✅ | Probada por Ilse. | A · Aprobada: el aviso de inactividad salta a los 2 minutos sin movimiento. |
 | P12 | Verificar la hora del servidor y crear desde el panel un recordatorio para dentro de 2 minutos | El asistente lo dice en voz alta a la hora indicada (±15 s) | 🟡 | Parcial; reporte 2 nov bloque A. | A · Parcial |
-| P13 | Cancelar un recordatorio desde el panel | No suena | ⏳ | Pendiente. | A · Pendiente: la hace Ilse antes del martes. |
+| P13 | Cancelar un recordatorio desde el panel | No suena | ✅ | 16 nov: recordatorio «prueba 13» 13:25 cancelado desde el panel; no sonó y el orquestador no registró nada. | A · Aprobada 16 nov |
 | P14 | El asistente habla con la pausa del micrófono activa | El satélite no envía audio mientras Piper suena | 🚫 | Descartada. | R · Descartada: fuera del alcance de la demo (evidencia parcial: mensaje largo dicho completo del 11 nov). |
 | P15 | El asistente habla con la captura forzada (sin pausa) | No ejecuta ninguna orden a partir de su propia voz | 🚫 | Descartada. | A · Descartada: fuera del alcance de la demo. |
 | P16 | Una alerta llega dos veces al servidor, con un reinicio del servidor entre ambas | Telegram recibe un solo mensaje | ✅ | commit 9f4c012 (4 oct): alerta duplicada descartada. | R · Aprobada |
@@ -449,16 +449,16 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 | P53 | Responder a un mensaje familiar con «Lucía» (11 nov) | La respuesta aparece transcrita en el panel | ✅ | validación manual 11 nov: respuesta por voz. | A · aprobada 11 nov |
 | P54 | Gramática con arnés sintético: 87 % de acierto (14 nov) | 87 % de acierto, tabla de errores del 14 nov | ✅ | herramientas/arnes_wav.py, corrida 14 nov. | R · aprobada (sintético) |
 | P55 | Frases de la Parte A y saludo diario en arnés sintético | Aprobadas en pruebas automáticas | ✅ | commit a5a527f (14 nov): pruebas automáticas Parte A. | A · aprobada (sintético) |
-| P56 | Frases de la Parte A y saludo diario con la voz de Ilse | Aprobadas con la voz real | ⏳ | Pendiente: voz de Ilse. | A · Pendiente: se hace en el ensayo general del 16 nov. |
+| P56 | Frases de la Parte A y saludo diario con la voz de Ilse | Aprobadas con la voz real | ✅ | 16 nov: «ayuda» ×3 (3/3), alertas srv-6afb608e-0001 y srv-6afb60d8-0002; 3.ª a los 19 s en accion=ayuda_antirrebote. «no me siento bien» transcrito y notificado (13:03). Saludo: fallo 13:06 (sin suscripción/ACL), corregido (065ed50/d0bcffe) y probado 13:34: saludo/disparar recibido, SALUDO_RESPUESTA y ALERTA BIENESTAR srv-bienestar-1794861274. Limitación: el micrófono no se abre solo tras «¿Cómo amaneció?»; hay que decir «Lucía» antes. | A · Aprobada 16 nov (con limitación de micrófono) |
 | P57 | Panel desde fuera con familiar invitado, iPad con datos móviles (14 nov, 10:20) | El panel abre y el WebSocket conecta | ✅ | validación manual 14 nov, 10:20. | A · aprobada 14 nov |
 | P58 | Música por voz | No aplica: apagada para la demo | — | — (MUSICA_HABILITADO=0). | — · no aplica |
 | P59 | Reinicio de la laptop: Mosquitto arranca (espera-red.conf), satelite-sala se conecta y el ESP32 publica; medir tiempo hasta quedar todo listo | Todo listo sin tocar nada, con el tiempo medido | ✅ | Arranque en frío de la laptop el 15 nov. | A · Aprobada: Mosquitto active y satelite-sala reconectado a los ~12 s. |
 
 ## Resumen del plan de pruebas
 
-- ✅ Aprobadas: 37
+- ✅ Aprobadas: 39
 - 🟡 Parciales: 6
-- ⏳ Pendientes: 2
+- ⏳ Pendientes: 0
 - 🚫 Descartadas: 11
 - — No aplica: 3
 - Total: 59

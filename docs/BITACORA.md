@@ -82,3 +82,12 @@
 - En una gramática cerrada, frases cortas se confunden entre sí («ya desperté» con «repite»); conviene probar con voz real y quitar las ambiguas.
 - Un hotspot de respaldo con distinto nombre o un Wi-Fi abierto no presente en el firmware no sirve para la demo; hay que probar la red real de punta a punta.
 - El reacomodo físico de cables puede dejar el mismo firmware funcionando o no; revisar el cableado antes de culpar al código («Sin sensor» del agua).
+- Un tópico atendido en el despacho (`orquestador.enrutar`) pero ausente de la lista de suscripciones de `mqtt_cliente.suscribirse` es código muerto sin ruido: el broker nunca entrega el mensaje y ninguna prueba lo ve, porque el cliente falso de `pruebas.py` entrega directo sin pasar por la suscripción. A partir de ahora, toda prueba de despacho debe comprobar que el tópico esté en las suscripciones.
+
+## 16 de noviembre de 2026
+
+- Despliegue del arreglo del saludo manual: el orquestador no estaba suscrito a `casa/sala/saludo/disparar` (el despacho lo atendía, pero el mensaje nunca llegaba) y la ACL no permitía al usuario `voz` publicarlo ni al `orquestador` leerlo. Corregido en `065ed50`/`d0bcffe` y ACL `d5f2ec9`/`af08395`; recargada con `docker kill -s HUP`.
+- P56 aprobada con la voz real («ayuda» ×3, «no me siento bien», saludo manual a las 13:34: `SALUDO_RESPUESTA` y `ALERTA BIENESTAR srv-bienestar-1794861274`). Limitación: el micrófono no se abre solo tras «¿Cómo amaneció?»; hay que decir «Lucía» antes.
+- P13 aprobada: recordatorio «prueba 13» cancelado desde el panel; no sonó.
+- Tabla de pruebas: 39 aprobadas, 0 pendientes (P56 y P13 cerradas).
+

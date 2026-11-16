@@ -133,13 +133,13 @@ avisa en la sala que alguien ya la atendió.
 
 ## 4. Saludo diario
 
-Una vez al día Lucía pregunta «¿Cómo amaneció?» y abre el micrófono sola, para
-que el usuario responda con una de las frases de **SALUDO_RESPUESTA** (por
-ejemplo «bien», «mal», «más o menos»). Si se responde «me siento mal» (o
-similar), se avisa a la familia.
+Una vez al día Lucía pregunta «¿Cómo amaneció?» y, tras la pregunta, suena un
+tono y se abre la escucha sola: se contesta directo («bien», «más o menos»,
+«mal» o «ayuda») en los ~3 s siguientes, sin decir «Lucía». Si no hay respuesta,
+repregunta una vez y luego espera al reintento de 10 min. Con el botón
+«Mantener para hablar» no se dice «Lucía».
 
-Nota (16 nov): en el estado actual el micrófono no se abre solo tras la
-pregunta; hay que decir «Lucía» antes de contestar (limitación conocida).
+Si se responde «me siento mal» (o similar), se avisa a la familia.
 
 - Se activa con `SALUDO_DIARIO_ACTIVO=1` en `servidor/.env` (por defecto está
   desactivado). Después se recrea el orquestador:
@@ -460,9 +460,9 @@ funcionando como respaldo. Por defecto está desactivada (`lucia.activa = false`
 
 ## Saludo diario
 
-Lucía pregunta una vez al día «¿Cómo amaneció?» y abre el micrófono sola. Se
-puede disparar manualmente con `herramientas/saludo.sh` o publicando en
+Lucía pregunta una vez al día «¿Cómo amaneció?» y, tras la pregunta, suena un
+tono y se abre la escucha sola: se contesta directo («bien», «más o menos»,
+«mal» o «ayuda») en los ~3 s siguientes, sin decir «Lucía». Si no hay respuesta,
+repregunta una vez y luego espera al reintento de 10 min. Se puede disparar
+manualmente con `herramientas/saludo.sh` o publicando en
 `casa/sala/saludo/disparar`.
-
-Nota (16 nov): el micrófono no se abre solo tras la pregunta; hay que decir
-«Lucía» antes de contestar (limitación conocida).

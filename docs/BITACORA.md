@@ -93,3 +93,8 @@
 - P13 aprobada: recordatorio «prueba 13» cancelado desde el panel; no sonó.
 - Tabla de pruebas: 39 aprobadas, 0 pendientes (P56 y P13 cerradas).
 
+
+## 16 de noviembre de 2026 (documentación)
+
+- MANUAL.md: el saludo diario ya no necesita «Lucía»; Lucía pregunta, suena el tono y se contesta directo en los ~3 s siguientes; si no hay respuesta, repregunta una vez y espera al reintento de 10 min. «Ayuda» dentro de la escucha manda la alerta de ayuda. Con el botón «Mantener para hablar» no se dice «Lucía».
+- P56 cerrada con la versión 008ea23 y satélite md5 e970230d: A («mal» → bienestar), B (silencio → timeout → repregunta con escucha → timeout → silencio), D («ayuda» → alerta de ayuda), C («Lucía» → «qué hora es» sin cambios). Pruebas: orquestador 751, satélite 99.

@@ -43,6 +43,14 @@ Estos datos se definen en el Paso 0 y se agregan a este documento:
 - [ ] Anotar la versión de iOS del iPhone y del iPad.
 - [ ] Decidir si el asistente usa una VM dedicada (recomendado) o la VM actual, que comparte recursos con 11 servicios personales.
 
+## Pendientes para después de la presentación
+
+- Montar la carpeta de Mosquitto en lugar del archivo (`./mosquitto/config:/mosquitto/config:ro`) para evitar el problema del inodo con `acl.conf`.
+- `.dockerignore` con `__pycache__` y `base.db`.
+- Cierre limpio de la base (todo queda en el WAL).
+- Escucha del saludo de ~3 s (el log dice 5 s): alargarla para personas mayores.
+- Cambiar la contraseña MQTT de voz.
+
 ## Estado de la implementación
 
 Corte al 1 de noviembre de 2026. El desarrollo avanzó con arranque anticipado y el plan se actualizó con las decisiones tomadas (commits `f556110`, `5b41fbe`, `2b9d029`, `170a57c`, `42df57f`, `e893482`).
@@ -449,7 +457,7 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 | P53 | Responder a un mensaje familiar con «Lucía» (11 nov) | La respuesta aparece transcrita en el panel | ✅ | validación manual 11 nov: respuesta por voz. | A · aprobada 11 nov |
 | P54 | Gramática con arnés sintético: 87 % de acierto (14 nov) | 87 % de acierto, tabla de errores del 14 nov | ✅ | herramientas/arnes_wav.py, corrida 14 nov. | R · aprobada (sintético) |
 | P55 | Frases de la Parte A y saludo diario en arnés sintético | Aprobadas en pruebas automáticas | ✅ | commit a5a527f (14 nov): pruebas automáticas Parte A. | A · aprobada (sintético) |
-| P56 | Frases de la Parte A y saludo diario con la voz de Ilse | Aprobadas con la voz real | ✅ | 16 nov: «ayuda» ×3 (3/3), alertas srv-6afb608e-0001 y srv-6afb60d8-0002; 3.ª a los 19 s en accion=ayuda_antirrebote. «no me siento bien» transcrito y notificado (13:03). Saludo: fallo 13:06 (sin suscripción/ACL), corregido (065ed50/d0bcffe) y probado 13:34: saludo/disparar recibido, SALUDO_RESPUESTA y ALERTA BIENESTAR srv-bienestar-1794861274. Limitación: el micrófono no se abre solo tras «¿Cómo amaneció?»; hay que decir «Lucía» antes. | A · Aprobada 16 nov (con limitación de micrófono) |
+| P56 | Frases de la Parte A y saludo diario con la voz de Ilse | Aprobadas con la voz real | ✅ | 16 nov 14:42–14:45, versión 008ea23, satélite md5 e970230d: A «mal» → bienestar; B silencio → timeout → repregunta con escucha → timeout → silencio; D «ayuda» → alerta de ayuda en Telegram; C «Lucía» → «qué hora es» sin cambios. Pruebas automáticas: orquestador 751, satélite 99. | A · Aprobada 16 nov |
 | P57 | Panel desde fuera con familiar invitado, iPad con datos móviles (14 nov, 10:20) | El panel abre y el WebSocket conecta | ✅ | validación manual 14 nov, 10:20. | A · aprobada 14 nov |
 | P58 | Música por voz | No aplica: apagada para la demo | — | — (MUSICA_HABILITADO=0). | — · no aplica |
 | P59 | Reinicio de la laptop: Mosquitto arranca (espera-red.conf), satelite-sala se conecta y el ESP32 publica; medir tiempo hasta quedar todo listo | Todo listo sin tocar nada, con el tiempo medido | ✅ | Arranque en frío de la laptop el 15 nov. | A · Aprobada: Mosquitto active y satelite-sala reconectado a los ~12 s. |

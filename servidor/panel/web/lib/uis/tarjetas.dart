@@ -901,21 +901,31 @@ class TarjetaAgua extends StatelessWidget {
     } else if (s.aguaPct == null) {
       valor = Textos.sinSensor;
     } else {
-      switch (aguaEstado) {
-        case 'bajo':
-          valor = Textos.aguaBaja;
-          break;
-        case 'lleno':
-          valor = Textos.aguaLlena;
-          break;
-        default:
-          valor = Textos.aguaNormal;
+      final bool alto = s.aguaPct! > 90;
+      if (alto) {
+        valor = Textos.aguaLlena;
+      } else {
+        switch (aguaEstado) {
+          case 'bajo':
+            valor = Textos.aguaBaja;
+            break;
+          case 'lleno':
+            valor = Textos.aguaLlena;
+            break;
+          default:
+            valor = Textos.aguaNormal;
+        }
       }
     }
     final bool hayDato = nodoConectado && s.aguaPct != null;
-    final bool bajo = aguaEstado == 'bajo';
+    final bool bajo = aguaEstado == 'bajo' && !(s.aguaPct != null && s.aguaPct! > 90);
+    final bool alto = hayDato && s.aguaPct! > 90;
     final Color colorEstado = hayDato
-        ? (bajo ? Tema.peligro : Tema.primario)
+        ? (bajo
+            ? Tema.peligro
+            : alto
+                ? Tema.ambarPildora
+                : Tema.primario)
         : Tema.secundario;
 
     return Card(
@@ -943,7 +953,7 @@ class TarjetaAgua extends StatelessWidget {
                     fontFamily: Tema.familia)),
             if (hayDato) ...<Widget>[
               const SizedBox(height: 12),
-              BarraAgua(nivel: s.aguaPct!, bajo: bajo),
+              BarraAgua(nivel: s.aguaPct!, bajo: bajo, alto: alto),
               const SizedBox(height: 12),
               Text(
                   '${Textos.lectura}${_num(s.aguaPct)} %'
@@ -960,10 +970,11 @@ class TarjetaAgua extends StatelessWidget {
 }
 
 class BarraAgua extends StatelessWidget {
-  const BarraAgua({super.key, required this.nivel, this.bajo = false});
+  const BarraAgua({super.key, required this.nivel, this.bajo = false, this.alto = false});
 
   final num nivel;
   final bool bajo;
+  final bool alto;
 
   @override
   Widget build(BuildContext contexto) {
@@ -985,7 +996,11 @@ class BarraAgua extends StatelessWidget {
                 child: Container(
                   width: lleno < 10 ? 10 : lleno,
                   decoration: BoxDecoration(
-                      color: bajo ? Tema.peligro : Tema.primario,
+                      color: bajo
+                          ? Tema.peligro
+                          : alto
+                              ? Tema.ambarPildora
+                              : Tema.primario,
                       borderRadius: BorderRadius.circular(5)),
                 ),
               ),

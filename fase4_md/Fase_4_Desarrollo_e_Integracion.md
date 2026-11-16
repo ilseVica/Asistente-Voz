@@ -394,8 +394,8 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 
 | ID | Qué se prueba | Resultado esperado | Estado | Evidencia | Notas |
 | --- | --- | --- | --- | --- | --- |
-| P01 | «Enciende la luz» a 1 y 1.5 m, 10 repeticiones por distancia (red de la demo: hotspot) | Mediana ≤ 2.5 s y ningún caso > 3 s; se reportan mediana y máximo | ⏳ | Pendiente: sin evidencia. | A · Pendiente |
-| P02 | El mismo comando a 3 m, con conversación grabada de fondo (red de la demo: hotspot) | Se registra la tasa de aciertos (informativa, no bloquea la entrega) | ⏳ | Sin medición. | A · Informativa, no bloquea la entrega. No medida antes del 4 nov. |
+| P01 | «Enciende la luz» a 1 y 1.5 m, 10 repeticiones por distancia (red de la demo: hotspot) | Mediana ≤ 2.5 s y ningún caso > 3 s; se reportan mediana y máximo | 🚫 | Descartada. | A · Descartada: sin ensayo general (cubierta en parte por la luz 10 de 10 del 11 nov y por P52). |
+| P02 | El mismo comando a 3 m, con conversación grabada de fondo (red de la demo: hotspot) | Se registra la tasa de aciertos (informativa, no bloquea la entrega) | 🚫 | Descartada. | A · Descartada: sin ensayo general (cubierta en parte por la luz 10 de 10 del 11 nov y por P52). |
 | P03 | Frase fuera de la gramática | El asistente pide repetir sin ejecutar nada | ✅ | commit 4274a8f (25 oct): 25/25 frases en el arnés. | A · Aprobada |
 | P04 | El usuario dice «necesito ayuda» | Llega una alerta a Telegram con el botón «Abrir panel» y el panel muestra la ayuda activa | ✅ | commit 4274a8f (25 oct): alerta de ayuda a Telegram. | A · Aprobada |
 | P05 | «Alexa, necesito ayuda», dicho dos veces en 30 s | Llega una sola alerta a Telegram | ✅ | bitácora 1 nov + commit 4e4f730 (2 nov): una sola alerta en 30 s. | A · Aprobada (2 nov, desde el simulador de la consola de Alexa): dos peticiones de ayuda con segundos de diferencia generan una sola alerta (alexa-6ae958dd-0002); la segunda vez la skill responde que ya se avisó. Con el Echo Pop, la ayuda llega a Telegram usando la frase de un solo paso («Alexa, pídele a asistente de casa que pida ayuda»). |
@@ -403,7 +403,7 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 | P07 | 20 repeticiones de «Alexa, enciende la luz» a 1 m del micrófono | El asistente local se activa como máximo una vez | — | — (no aplica: tecla para hablar). | A · No aplica (tecla para hablar en lugar de palabra de activación) |
 | P08 | Gas real cerca del MQ-2 (encendedor sin flama) | Buzzer, un aviso por voz, una alerta en Telegram y aviso en el panel | ✅ | commit ea0aee0 (2 nov): gas.sh / simulación. | A · Aprobada (gas simulado) |
 | P09 | Comando de prueba que hace oscilar la lectura alrededor del umbral durante 1 minuto | Un solo episodio y una sola alerta | ✅ | reporte 2026-11-02 T-35 + commit af68c5d (2 nov). | R · Aprobada |
-| P10 | MQ-2 en aire limpio durante 30 minutos, ya caliente (60 minutos en el ensayo general) | Cero alertas | ⏳ | Pendiente. | A · Pendiente |
+| P10 | MQ-2 en aire limpio durante 30 minutos, ya caliente (60 minutos en el ensayo general) | Cero alertas | 🚫 | Descartada. | A · Descartada: sin ensayo general. |
 | P11 | Inactividad con el tiempo ajustado a 2 minutos desde el panel, antes de la sesión | Aviso en el panel y en Telegram 2 minutos después del último movimiento (±10 s) | ✅ | Probada por Ilse. | A · Aprobada: el aviso de inactividad salta a los 2 minutos sin movimiento. |
 | P12 | Verificar la hora del servidor y crear desde el panel un recordatorio para dentro de 2 minutos | El asistente lo dice en voz alta a la hora indicada (±15 s) | 🟡 | Parcial; reporte 2 nov bloque A. | A · Parcial |
 | P13 | Cancelar un recordatorio desde el panel | No suena | ⏳ | Pendiente. | A · Pendiente: la hace Ilse antes del martes. |
@@ -425,11 +425,11 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 | P29 | Orden de voz mientras suena la alarma de gas | El asistente avisa del gas una vez por episodio y ejecuta la orden; el buzzer sigue sonando | ✅ | commit 4e4f730 (2 nov): orden de voz con gas abierto. | A · Aprobada (2 nov): con el episodio de gas abierto (GAS 3000), la orden de voz enciende y apaga la luz, el aviso de gas se dice una vez por episodio y el buzzer sigue sonando. |
 | P30 | Orden de luz desde el panel | El relé se activa, el panel se actualiza y el asistente no habla | ✅ | commit 314a446 (8 oct): orden de luz desde el panel. | A · Aprobada |
 | P31 | Botón físico de luz | El relé alterna y el estado se publica con origen «boton» | ✅ | commit 314a446 (8 oct): botón físico de luz. | R · Aprobada |
-| P32 | Variante mínima con el servidor apagado: botón de luz y alarma de gas | Las dos funcionan sin servidor. Alexa no: desde el 1 nov usa la skill, que pasa por el servidor | ⏳ | Pendiente. | A · Pendiente |
-| P33 | Modo instalación: servidor y sitio en la misma red, sin Internet y con el navegador sin caché | Voz, reglas y panel funcionan sin ningún recurso externo; las alertas quedan en cola | ⏳ | No ejecutada. | A · No ejecutada antes del 4 nov: requiere apagar el Internet de la casa (riesgo antes de la entrega). |
-| P34 | Se apaga el hotspot principal y se enciende el de respaldo, sin tocar ningún dispositivo | La laptop, el ESP32 y el Echo Pop se reconectan solos | ⏳ | Presentación formal (hotspot). | A · Presentación formal: requiere el hotspot. |
+| P32 | Variante mínima con el servidor apagado: botón de luz y alarma de gas | Las dos funcionan sin servidor. Alexa no: desde el 1 nov usa la skill, que pasa por el servidor | 🚫 | Descartada. | A · Descartada: sin ensayo general. |
+| P33 | Modo instalación: servidor y sitio en la misma red, sin Internet y con el navegador sin caché | Voz, reglas y panel funcionan sin ningún recurso externo; las alertas quedan en cola | 🚫 | Descartada. | A · Descartada: sin ensayo general. |
+| P34 | Se apaga el hotspot principal y se enciende el de respaldo, sin tocar ningún dispositivo | La laptop, el ESP32 y el Echo Pop se reconectan solos | 🚫 | Descartada. | A · Descartada: no hay un hotspot de respaldo con el mismo nombre y el Wi-Fi abierto del lugar no está en el firmware. La red de la demo (hotspot «iPhone de Ilse», red 2) se probó de punta a punta el 1 nov: ESP32, broker de la laptop, puente a la VM y panel. |
 | P35 | Primer turno después de arrancar el satélite | Se mide; si pasa de 2.5 s, el satélite precarga Piper al arrancar | 🟡 | commit 85011ee (12 oct): precarga de Piper. | A · Parcial |
-| P36 | Consumo de datos durante un ensayo de 30 minutos | Se registra y se compara con el paquete del celular | ⏳ | Presentación formal (datos móviles). | A · Presentación formal: requiere datos móviles. |
+| P36 | Consumo de datos durante un ensayo de 30 minutos | Se registra y se compara con el paquete del celular | 🚫 | Descartada. | A · Descartada: sin ensayo general. |
 | P37 | Panel en Safari del iPhone, agregado a la pantalla de inicio | Abre desde el ícono; si la versión de iOS no lo permite, se usa desde Safari | ✅ | commit d26f907 (24 oct): panel en Safari/iPhone. | A · Aprobada |
 | P38 | APK en Android con datos móviles | Entra por Tailscale con su token y muestra lo mismo que la web | — | — (APK fuera del alcance). | A · No aplica (APK fuera del alcance; en Android se usa la web) |
 | P39 | Con el panel abierto, se corta el Internet del iPhone durante 1 minuto | Al volver, el panel muestra el estado actual sin recargar | ✅ | commit 6a35360 (8 oct): reconexión del WebSocket. | R · Aprobada |
@@ -458,8 +458,8 @@ Ajuste del 2 nov 2026: P32 cambia de «botón de luz, Alexa y alarma de gas» a 
 
 - ✅ Aprobadas: 37
 - 🟡 Parciales: 6
-- ⏳ Pendientes: 9
-- 🚫 Descartadas: 4
+- ⏳ Pendientes: 2
+- 🚫 Descartadas: 11
 - — No aplica: 3
 - Total: 59
 

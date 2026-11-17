@@ -137,7 +137,6 @@ def add_number(text):
 
 def parse_inline(text):
     # returns list of dicts: {text, bold, italic, code, link}
-    # checkboxes
     text = text.replace('[ ]', '☐').replace('[x]', '☒').replace('[X]', '☒')
     tokens = re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))', text)
     out = []
@@ -145,9 +144,15 @@ def parse_inline(text):
         if not tok:
             continue
         if tok.startswith('**') and tok.endswith('**'):
-            out.append({'text': tok[2:-2], 'bold': True, 'italic': False, 'code': False, 'link': None})
+            for it in parse_inline(tok[2:-2]):
+                it = dict(it)
+                it['bold'] = True
+                out.append(it)
         elif tok.startswith('*') and tok.endswith('*') and len(tok) > 2:
-            out.append({'text': tok[1:-1], 'bold': False, 'italic': True, 'code': False, 'link': None})
+            for it in parse_inline(tok[1:-1]):
+                it = dict(it)
+                it['italic'] = True
+                out.append(it)
         elif tok.startswith('`') and tok.endswith('`'):
             out.append({'text': tok[1:-1], 'bold': False, 'italic': False, 'code': True, 'link': None})
         elif tok.startswith('[') and '](' in tok:
@@ -193,6 +198,24 @@ def add_table(rows):
             c.width = Inches(6.5 / ncols)
     doc.add_paragraph().paragraph_format.space_after = Pt(2)
 
+def split_table_row(line):
+    # split by | outside backticks
+    cells = []
+    cur = ''
+    in_code = False
+    for ch in line:
+        if ch == '`':
+            in_code = not in_code
+            cur += ch
+        elif ch == '|' and not in_code:
+            cells.append(cur)
+            cur = ''
+        else:
+            cur += ch
+    if cur.strip() != '' or cells:
+        cells.append(cur)
+    return [c.strip() for c in cells]
+
 def parse_markdown_table(lines, start):
     # returns (rows, end_index)
     rows = []
@@ -202,16 +225,74 @@ def parse_markdown_table(lines, start):
         if re.match(r'^\|[\s\-:|]+\|$', line):
             i += 1
             continue
-        cells = [c.strip() for c in line.strip('|').split('|')]
+        if line.startswith('|'):
+            line = line[1:]
+        if line.endswith('|'):
+            line = line[:-1]
+        cells = split_table_row(line)
         rows.append(cells)
         i += 1
     return rows, i
 
-def insert_markdown(md_text, skip_headings=None, demote=0, skip_first_title=False):
+def clean_source_text(md_text, skip_headings=None, skip_first_title=False):
+    skip_headings = skip_headings or []
+    lines = md_text.split('\n')
+    out = []
+    i = 0
+    n = len(lines)
+    first_title_seen = False
+    while i < n:
+        line = lines[i]
+        stripped = line.strip()
+        m = re.match(r'^(#{1,3})\s+(.*)$', stripped)
+        if m:
+            raw_level = len(m.group(1))
+            title = m.group(2).strip()
+            if skip_first_title and not first_title_seen and raw_level == 1:
+                first_title_seen = True
+                i += 1
+                continue
+            if title in skip_headings:
+                lvl = raw_level
+                i += 1
+                while i < n:
+                    s2 = lines[i].strip()
+                    m2 = re.match(r'^(#{1,3})\s+', s2)
+                    if m2 and len(m2.group(1)) <= lvl:
+                        break
+                    i += 1
+                continue
+            first_title_seen = True
+        # strip markdown syntax
+        cleaned = stripped
+        cleaned = re.sub(r'^#{1,3}\s+', '', cleaned)
+        cleaned = re.sub(r'^[-*]\s+', '', cleaned)
+        cleaned = re.sub(r'^\d+\.\s+', '', cleaned)
+        cleaned = re.sub(r'`', '', cleaned)
+        cleaned = re.sub(r'\*\*', '', cleaned)
+        cleaned = re.sub(r'\*', '', cleaned)
+        cleaned = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', cleaned)
+        cleaned = cleaned.replace('[ ]', '☐').replace('[x]', '☒').replace('[X]', '☒')
+        out.append(cleaned)
+        i += 1
+    return '\n'.join(out)
+
+def count_doc_words():
+    n = 0
+    for pp in doc.paragraphs:
+        n += len(pp.text.split())
+    for tt in doc.tables:
+        for row in tt.rows:
+            for cell in row.cells:
+                n += len(cell.text.split())
+    return n
+
+def insert_markdown(md_text, skip_headings=None, demote=0, skip_first_title=False, source_name=None):
     skip_headings = skip_headings or []
     lines = md_text.split('\n')
     i = 0
     first_title_seen = False
+    _before = count_doc_words() if source_name else 0
     n = len(lines)
     # accumulate normal paragraph
     para_lines = []
@@ -243,16 +324,9 @@ def insert_markdown(md_text, skip_headings=None, demote=0, skip_first_title=Fals
             flush_para()
             level = min(3, len(m.group(1)) + demote)
             title = redact(m.group(2).strip())
-            if skip_first_title and not first_title_seen and level - demote == 1:
+            if skip_first_title and not first_title_seen and (level - demote) == 1:
                 first_title_seen = True
-                # skip this title
                 i += 1
-                while i < n:
-                    s2 = lines[i].strip()
-                    m2 = re.match(r'^(#{1,3})\s+', s2)
-                    if m2 and len(m2.group(1)) <= (level - demote):
-                        break
-                    i += 1
                 continue
             if title in skip_headings:
                 # skip until next same-or-higher heading
@@ -327,6 +401,9 @@ def insert_markdown(md_text, skip_headings=None, demote=0, skip_first_title=Fals
         para_lines.append(line)
         i += 1
     flush_para()
+    if source_name:
+        _src_text = clean_source_text(md_text, skip_headings, skip_first_title)
+        source_checks.append((source_name, len(_src_text.split()), _before, count_doc_words()))
 
 def add_image(path, caption=None, width=6.5, max_height_cm=21.0):
     from PIL import Image as PILImage
@@ -446,6 +523,8 @@ def split_bitacora_by_date(md_text):
     dated_sorted = sorted(dated, key=sort_key)
     return dated_sorted + lessons
 
+source_checks = []
+
 # ---------- Portada ----------
 title_p = doc.add_paragraph()
 title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -520,7 +599,7 @@ doc.add_heading('Fase 4 · Desarrollo e integración', level=1)
 md4_path = repo / 'fase4_md' / 'Fase_4_Desarrollo_e_Integracion.md'
 md4 = md4_path.read_text(encoding='utf-8')
 # remove plan de pruebas section (goes to Fase 5)
-insert_markdown(md4, skip_headings=['Plan de pruebas','Presupuesto de latencia','Casos de prueba','Resumen del plan de pruebas','Organización pendiente','Pendientes para después de la presentación','Pendientes antes de las pruebas en hardware','Grupo A — Hoy, con mi voz y la laptop','Grupo B — Ensayo general del domingo 15 (con hotspot de la demo)','Grupo C — No se harán antes de la presentación'], demote=1, skip_first_title=True)
+insert_markdown(md4, source_name='Fase 4 (sin pruebas)', skip_headings=['Plan de pruebas','Presupuesto de latencia','Casos de prueba','Resumen del plan de pruebas','Organización pendiente','Pendientes para después de la presentación','Pendientes antes de las pruebas en hardware','Grupo A — Hoy, con mi voz y la laptop','Grupo B — Ensayo general del domingo 15 (con hotspot de la demo)','Grupo C — No se harán antes de la presentación'], demote=1, skip_first_title=True)
 # note about wake word contradiction will be inserted after architecture? Insert note here.
 add_para('Nota (actualización nov): donde este documento indique que la palabra de activación «Lucía» se descartó, se implementó posteriormente; se activa con lucia.activa en config.toml.', italic=True)
 
@@ -537,7 +616,7 @@ if convert_svg_to_png(arch_svg, arch_png):
 # Estación de la sala
 est_md = Path(repo) / 'documentacion' / 'fuentes' / 'Estacion-de-la-sala-torre-lampara-y-cubeta.md'
 if est_md.exists():
-    insert_markdown(est_md.read_text(encoding='utf-8'), demote=1, skip_first_title=True)
+    insert_markdown(est_md.read_text(encoding='utf-8'), source_name='Estacion de la sala md', demote=1, skip_first_title=True)
 else:
     add_para('Pendiente: sin documento en el repositorio', italic=True)
 est_svg = img_dir / 'Estacion de la sala - torre y lampara (11 nov).svg'
@@ -548,7 +627,7 @@ if convert_svg_to_png(est_svg, est_png):
 # Conexiones eléctricas
 doc.add_heading('Conexiones eléctricas', level=2)
 conex = (repo / 'docs' / 'CONEXIONES.md').read_text(encoding='utf-8')
-insert_markdown(conex, demote=1, skip_first_title=True)
+insert_markdown(conex, source_name='CONEXIONES.md', demote=1, skip_first_title=True)
 esq_svg = img_dir / 'Esquema de conexiones - montaje completo (11 nov).svg'
 esq_png = out_dir / '_esq.png'
 if convert_svg_to_png(esq_svg, esq_png):
@@ -579,13 +658,13 @@ add_para('Mejoras de noviembre (según la bitácora): «Lucía cuida» (frases d
 # identidad visual
 id_md = Path(repo) / 'documentacion' / 'fuentes' / 'Identidad-visual-de-Lucia.md'
 if id_md.exists():
-    insert_markdown(id_md.read_text(encoding='utf-8'), demote=1, skip_first_title=True)
+    insert_markdown(id_md.read_text(encoding='utf-8'), source_name='Identidad visual md', demote=1, skip_first_title=True)
 else:
     add_para('Pendiente: sin documento en el repositorio', italic=True)
 # manual de uso
 doc.add_heading('Manual de uso', level=2)
 manual = (repo / 'docs' / 'MANUAL.md').read_text(encoding='utf-8')
-insert_markdown(manual, demote=1, skip_first_title=True)
+insert_markdown(manual, source_name='MANUAL.md', demote=1, skip_first_title=True)
 # trabajo futuro
 doc.add_heading('Trabajo futuro: música por voz y «Lucía, …» de corrido', level=2)
 add_para('Música por voz (MUSICA_HABILITADO=0): las frases existen, pero la orden no llega al satélite; se mantiene apagada para la demostración.')
@@ -594,8 +673,8 @@ add_para('Palabra de activación «Lucía» de corrido («Lucía, prende la luz�
 doc.add_heading('Skill de Alexa (subsección)', level=2)
 alexa_consola = (repo / 'docs' / 'alexa' / 'consola.md').read_text(encoding='utf-8')
 alexa_pruebas = (repo / 'docs' / 'alexa' / 'pruebas.md').read_text(encoding='utf-8')
-insert_markdown(alexa_consola, demote=1, skip_first_title=True)
-insert_markdown(alexa_pruebas, demote=1, skip_first_title=True)
+insert_markdown(alexa_consola, source_name='alexa/consola.md', demote=1, skip_first_title=True)
+insert_markdown(alexa_pruebas, source_name='alexa/pruebas.md', demote=1, skip_first_title=True)
 
 # ---------- Anexo A: Bitacora ----------
 doc.add_page_break()
@@ -627,24 +706,49 @@ if crono.exists():
 def redact_document(d):
     for p in d.paragraphs:
         for r in p.runs:
-            if r._r.find(qn('w:drawing')) is None and r._r.find(qn('w:pict')) is None:
+            if (r._r.find(qn('w:drawing')) is None and r._r.find(qn('w:pict')) is None
+                    and r._r.find(qn('w:fldChar')) is None and r._r.find(qn('w:instrText')) is None):
                 r.text = redact(r.text)
     for t in d.tables:
         for row in t.rows:
             for cell in row.cells:
                 for p in cell.paragraphs:
                     for r in p.runs:
-                        if r._r.find(qn('w:drawing')) is None and r._r.find(qn('w:pict')) is None:
+                        if (r._r.find(qn('w:drawing')) is None and r._r.find(qn('w:pict')) is None
+                                and r._r.find(qn('w:fldChar')) is None and r._r.find(qn('w:instrText')) is None):
                             r.text = redact(r.text)
 redact_document(doc)
 
 # Note: redact already applied during insertion mostly; ensure code blocks etc.
+# validate source coverage
+print("--- Cobertura de fuentes ---")
+_ok = True
+for name, src, before, after in source_checks:
+    delta = after - before
+    pct = (delta / src * 100) if src else 0
+    print(f"{name}: fuente={src} palabras, capítulo añadió={delta} palabras ({pct:.1f}%)")
+    if src > 0 and pct < 85:
+        _ok = False
+        print(f"ERROR: {name} por debajo del 85%")
+if not _ok:
+    sys.exit(1)
+
+# totals
+def _count_tables():
+    return len(doc.tables)
+def _count_images():
+    return sum(1 for p in doc.paragraphs for r in p.runs if r._r.find(qn('w:drawing')) is not None)
+_total_words = count_doc_words()
+print("--- Totales del .docx ---")
+print(f"párrafos={len(doc.paragraphs)} tablas={_count_tables()} imágenes={_count_images()} palabras={_total_words}")
+
 # activate updateFields in settings.xml
 _settings = doc.settings.element
 _upd = OxmlElement('w:updateFields')
 _upd.set(qn('w:val'), 'true')
 _settings.append(_upd)
 doc.save(str(out_path))
+print(f"OK: {out_path}")
 print(f"OK: {out_path}")
 PY
 

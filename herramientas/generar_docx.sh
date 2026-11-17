@@ -402,18 +402,10 @@ doc.add_page_break()
 
 # ---------- Fase 1 ----------
 doc.add_heading('Fase 1 · Investigación y análisis', level=1)
-fuentes_dir = Path("/home/ilse/Servidores/documentacion/fuentes")
-f1_file = None
-if fuentes_dir.exists():
-    for cand in sorted(fuentes_dir.iterdir()):
-        if cand.is_file():
-            f1_file = cand
-            break
-if f1_file:
-    if f1_file.suffix.lower() in ('.md', '.txt'):
-        insert_markdown(f1_file.read_text(encoding='utf-8'), demote=1)
-    else:
-        add_para(f"[Archivo de fuente: {f1_file.name}]")
+f1_pdf = Path("/home/ilse/Servidores/documentacion/fuentes/Fase_1-2_1_organized.pdf")
+if f1_pdf.exists():
+    txt1 = extract_pdf_text(f1_pdf)
+    insert_markdown('## Texto extraído del PDF\n\n' + txt1)
 else:
     add_para('Pendiente: sin documento en el repositorio', italic=True)
 
@@ -449,7 +441,6 @@ if convert_svg_to_png(arch_svg, arch_png):
     add_image(str(arch_png), 'Arquitectura del prototipo: sitio de la demo, Internet y servidor en casa', width=6.5)
 
 # Estación de la sala
-doc.add_heading('Estación de la sala: torre, lámpara y cubeta', level=2)
 est_md = Path('/home/ilse/Servidores/documentacion/fuentes/Estacion-de-la-sala-torre-lampara-y-cubeta.md')
 if est_md.exists():
     insert_markdown(est_md.read_text(encoding='utf-8'), demote=1)
@@ -492,7 +483,6 @@ doc.add_heading('Fase 6 · Mejoras y documentación', level=1)
 # mejoras de noviembre segun bitacora
 add_para('Mejoras de noviembre (según la bitácora): «Lucía cuida» (frases de la vida diaria y saludo diario apagado por defecto), saludo con escucha automática, panel con la marca Lucía (base neutra, flamita, agua junto a movimiento, pestaña con línea rosa), sensor de agua habilitado y calibrado (20/5 cm), gráfica de identidad visual.', )
 # identidad visual
-doc.add_heading('Identidad visual de Lucía', level=2)
 id_md = Path('/home/ilse/Servidores/documentacion/fuentes/Identidad-visual-de-Lucia.md')
 if id_md.exists():
     insert_markdown(id_md.read_text(encoding='utf-8'), demote=1)

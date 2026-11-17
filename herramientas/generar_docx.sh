@@ -599,7 +599,7 @@ doc.add_heading('Fase 4 · Desarrollo e integración', level=1)
 md4_path = repo / 'fase4_md' / 'Fase_4_Desarrollo_e_Integracion.md'
 md4 = md4_path.read_text(encoding='utf-8')
 # remove plan de pruebas section (goes to Fase 5)
-insert_markdown(md4, source_name='Fase 4 (sin pruebas)', skip_headings=['Plan de pruebas','Presupuesto de latencia','Casos de prueba','Resumen del plan de pruebas','Organización pendiente','Pendientes para después de la presentación','Pendientes antes de las pruebas en hardware','Grupo A — Hoy, con mi voz y la laptop','Grupo B — Ensayo general del domingo 15 (con hotspot de la demo)','Grupo C — No se harán antes de la presentación'], demote=1, skip_first_title=True)
+insert_markdown(md4, source_name='Fase 4 (sin pruebas)', demote=0, skip_headings=['Plan de pruebas','Presupuesto de latencia','Casos de prueba','Resumen del plan de pruebas','Organización pendiente','Pendientes para después de la presentación','Pendientes antes de las pruebas en hardware','Grupo A — Hoy, con mi voz y la laptop','Grupo B — Ensayo general del domingo 15 (con hotspot de la demo)','Grupo C — No se harán antes de la presentación'], skip_first_title=True)
 # note about wake word contradiction will be inserted after architecture? Insert note here.
 add_para('Nota (actualización nov): donde este documento indique que la palabra de activación «Lucía» se descartó, se implementó posteriormente; se activa con lucia.activa en config.toml.', italic=True)
 
@@ -614,6 +614,7 @@ if convert_svg_to_png(arch_svg, arch_png):
     add_image(str(arch_png), 'Arquitectura del prototipo: sitio de la demo, Internet y servidor en casa', width=6.5)
 
 # Estación de la sala
+doc.add_heading('Estación de la sala: torre, lámpara y cubeta', level=2)
 est_md = Path(repo) / 'documentacion' / 'fuentes' / 'Estacion-de-la-sala-torre-lampara-y-cubeta.md'
 if est_md.exists():
     insert_markdown(est_md.read_text(encoding='utf-8'), source_name='Estacion de la sala md', demote=1, skip_first_title=True)
@@ -656,6 +657,7 @@ doc.add_heading('Fase 6 · Mejoras y documentación', level=1)
 # mejoras de noviembre segun bitacora
 add_para('Mejoras de noviembre (según la bitácora): «Lucía cuida» (frases de la vida diaria y saludo diario apagado por defecto), saludo con escucha automática, panel con la marca Lucía (base neutra, flamita, agua junto a movimiento, pestaña con línea rosa), sensor de agua habilitado y calibrado (20/5 cm), gráfica de identidad visual.', )
 # identidad visual
+doc.add_heading('Identidad visual de Lucía', level=2)
 id_md = Path(repo) / 'documentacion' / 'fuentes' / 'Identidad-visual-de-Lucia.md'
 if id_md.exists():
     insert_markdown(id_md.read_text(encoding='utf-8'), source_name='Identidad visual md', demote=1, skip_first_title=True)

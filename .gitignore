@@ -69,3 +69,6 @@ servidor/panel/web_build*/
 
 # Reportes de sesion: nunca van en el repositorio (van en /home/ilse/Servidores/Archivos_text/Asistente-Voz/resultados/).
 resultados/
+
+# Documentacion generada (fuera del control de versiones).
+documentacion/

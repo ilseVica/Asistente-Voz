@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-OUT_DIR="/home/ilse/Servidores/documentacion"
+OUT_DIR="$REPO_DIR/documentacion"
 OUT_NAME="Lucia-documentacion-fases-1-a-6.docx"
 OUT_PATH="$OUT_DIR/$OUT_NAME"
 
@@ -22,7 +22,7 @@ from pathlib import Path
 repo = Path(sys.argv[1])
 out_path = Path(sys.argv[2])
 out_dir = out_path.parent
-img_dir = Path("/home/ilse/Servidores/documentacion/imagenes")
+img_dir = Path(repo) / "documentacion" / "imagenes"
 
 from docx import Document
 from docx.shared import Pt, Cm, Inches, RGBColor
@@ -68,10 +68,16 @@ def shade(cell, hexcolor):
 def set_cell_text(cell, text, bold=False, size=9):
     cell.text = ''
     p = cell.paragraphs[0]
-    r = p.add_run(text)
-    r.bold = bold
-    r.font.size = Pt(size)
-    r.font.name = 'Fredoka'
+    for it in parse_inline(text):
+        r = p.add_run(it['text'])
+        r.bold = bold or it['bold']
+        r.italic = it['italic']
+        if it['code']:
+            r.font.name = 'Courier New'
+            r.font.size = Pt(size)
+        else:
+            r.font.size = Pt(size)
+            r.font.name = 'Fredoka'
 
 def redact(text):
     text = re.sub(r'\b100\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[omitido]', text)
@@ -85,14 +91,15 @@ def add_para(text, style=None, bold=False, italic=False, mono=False, size=None, 
     p = doc.add_paragraph(style=style)
     if space_after is not None:
         p.paragraph_format.space_after = Pt(space_after)
-    r = p.add_run(text)
-    r.bold = bold
-    r.italic = italic
-    if mono:
-        r.font.name = 'Courier New'
-        r.font.size = Pt(9)
-    elif size:
-        r.font.size = Pt(size)
+    for it in parse_inline(text):
+        r = p.add_run(it['text'])
+        r.bold = bold or it['bold']
+        r.italic = italic or it['italic']
+        if mono or it['code']:
+            r.font.name = 'Courier New'
+            r.font.size = Pt(9)
+        elif size:
+            r.font.size = Pt(size)
     return p
 
 def add_code_block(code):
@@ -107,32 +114,61 @@ def add_code_block(code):
 
 def add_bullet(text, level=0):
     style = 'List Bullet' if level == 0 else 'List Bullet 2'
-    p = doc.add_paragraph(text, style=style)
+    p = doc.add_paragraph(style=style)
+    for it in parse_inline(text):
+        r = p.add_run(it['text'])
+        r.bold = it['bold']
+        r.italic = it['italic']
+        if it['code']:
+            r.font.name = 'Courier New'
+            r.font.size = Pt(9)
     return p
 
 def add_number(text):
-    return doc.add_paragraph(text, style='List Number')
+    p = doc.add_paragraph(style='List Number')
+    for it in parse_inline(text):
+        r = p.add_run(it['text'])
+        r.bold = it['bold']
+        r.italic = it['italic']
+        if it['code']:
+            r.font.name = 'Courier New'
+            r.font.size = Pt(9)
+    return p
 
-def md_inline(text):
-    # returns list of (text, bold, italic)
-    parts = []
-    # simple **bold** and *italic*
-    token_re = re.compile(r'(\*\*[^*]+\*\*|\*[^*]+\*)')
-    for chunk in token_re.split(text):
-        if chunk.startswith('**') and chunk.endswith('**'):
-            parts.append((chunk[2:-2], True, False))
-        elif chunk.startswith('*') and chunk.endswith('*'):
-            parts.append((chunk[1:-1], False, True))
+def parse_inline(text):
+    # returns list of dicts: {text, bold, italic, code, link}
+    # checkboxes
+    text = text.replace('[ ]', '☐').replace('[x]', '☒').replace('[X]', '☒')
+    tokens = re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))', text)
+    out = []
+    for tok in tokens:
+        if not tok:
+            continue
+        if tok.startswith('**') and tok.endswith('**'):
+            out.append({'text': tok[2:-2], 'bold': True, 'italic': False, 'code': False, 'link': None})
+        elif tok.startswith('*') and tok.endswith('*') and len(tok) > 2:
+            out.append({'text': tok[1:-1], 'bold': False, 'italic': True, 'code': False, 'link': None})
+        elif tok.startswith('`') and tok.endswith('`'):
+            out.append({'text': tok[1:-1], 'bold': False, 'italic': False, 'code': True, 'link': None})
+        elif tok.startswith('[') and '](' in tok:
+            m = re.match(r'^\[([^\]]+)\]\(([^)]+)\)$', tok)
+            if m:
+                out.append({'text': m.group(1), 'bold': False, 'italic': False, 'code': False, 'link': m.group(2)})
+            else:
+                out.append({'text': tok, 'bold': False, 'italic': False, 'code': False, 'link': None})
         else:
-            parts.append((chunk, False, False))
-    return parts
+            out.append({'text': tok, 'bold': False, 'italic': False, 'code': False, 'link': None})
+    return out
 
 def add_rich_para(text, style=None):
     p = doc.add_paragraph(style=style)
-    for t, b, i in md_inline(text):
-        r = p.add_run(t)
-        r.bold = b
-        r.italic = i
+    for it in parse_inline(text):
+        r = p.add_run(it['text'])
+        r.bold = it['bold']
+        r.italic = it['italic']
+        if it['code']:
+            r.font.name = 'Courier New'
+            r.font.size = Pt(9)
     return p
 
 def add_table(rows):
@@ -171,10 +207,11 @@ def parse_markdown_table(lines, start):
         i += 1
     return rows, i
 
-def insert_markdown(md_text, skip_headings=None, demote=0):
+def insert_markdown(md_text, skip_headings=None, demote=0, skip_first_title=False):
     skip_headings = skip_headings or []
     lines = md_text.split('\n')
     i = 0
+    first_title_seen = False
     n = len(lines)
     # accumulate normal paragraph
     para_lines = []
@@ -206,6 +243,17 @@ def insert_markdown(md_text, skip_headings=None, demote=0):
             flush_para()
             level = min(3, len(m.group(1)) + demote)
             title = redact(m.group(2).strip())
+            if skip_first_title and not first_title_seen and level - demote == 1:
+                first_title_seen = True
+                # skip this title
+                i += 1
+                while i < n:
+                    s2 = lines[i].strip()
+                    m2 = re.match(r'^(#{1,3})\s+', s2)
+                    if m2 and len(m2.group(1)) <= (level - demote):
+                        break
+                    i += 1
+                continue
             if title in skip_headings:
                 # skip until next same-or-higher heading
                 i += 1
@@ -216,12 +264,16 @@ def insert_markdown(md_text, skip_headings=None, demote=0):
                         break
                     i += 1
                 continue
+            first_title_seen = True
             style = 'Heading 1' if level == 1 else ('Heading 2' if level == 2 else 'Heading 3')
             doc.add_heading(title, level=level) if False else None
             p = doc.add_paragraph(style=style)
-            r = p.add_run(title)
-            r.font.color.rgb = PURPLE
-            r.bold = True
+            for it in parse_inline(title):
+                r = p.add_run(it['text'])
+                r.font.color.rgb = PURPLE
+                r.bold = True
+                if it['code']:
+                    r.font.name = 'Courier New' 
             i += 1
             continue
         # table
@@ -235,14 +287,24 @@ def insert_markdown(md_text, skip_headings=None, demote=0):
         if mimg:
             flush_para()
             alt = mimg.group(1)
-            imgpath = (repo / mimg.group(2)).resolve() if not Path(mimg.group(2)).is_absolute() else Path(mimg.group(2))
-            # also try relative to repo
-            if not imgpath.exists():
-                imgpath = (repo / mimg.group(2).lstrip('./')).resolve()
-            if imgpath.exists():
+            raw = mimg.group(2)
+            candidates = []
+            if Path(raw).is_absolute():
+                candidates.append(Path(raw))
+            else:
+                candidates.append(repo / raw)
+                candidates.append(repo / 'fase4_md' / raw)
+                candidates.append(repo / 'fase4_md' / raw.lstrip('./'))
+                candidates.append(repo / raw.lstrip('./'))
+            imgpath = None
+            for c in candidates:
+                if c.exists():
+                    imgpath = c
+                    break
+            if imgpath:
                 add_image(str(imgpath), alt)
             else:
-                add_para(f"[Imagen no encontrada: {mimg.group(2)}]", italic=True)
+                add_para(f"[Imagen no encontrada: {raw}]", italic=True)
             i += 1
             continue
         # bullet
@@ -266,11 +328,21 @@ def insert_markdown(md_text, skip_headings=None, demote=0):
         i += 1
     flush_para()
 
-def add_image(path, caption=None, width=6.5):
+def add_image(path, caption=None, width=6.5, max_height_cm=21.0):
+    from PIL import Image as PILImage
+    im = PILImage.open(path)
+    px_w, px_h = im.size
+    aspect = px_h / px_w
+    # width in cm
+    w_cm = width * 2.54
+    h_cm = w_cm * aspect
+    if h_cm > max_height_cm:
+        h_cm = max_height_cm
+        w_cm = h_cm / aspect
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run()
-    run.add_picture(path, width=Inches(width))
+    run.add_picture(path, width=Cm(w_cm), height=Cm(h_cm))
     if caption:
         cap = doc.add_paragraph(caption)
         cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -297,6 +369,14 @@ def convert_svg_to_png(svg_path, png_path):
         import cairosvg
     cairosvg.svg2png(url=str(svg_path), write_to=str(png_path), output_width=2000)
     return png_path.exists() and png_path.stat().st_size > 0
+
+def pdf_to_images(pdf_path, out_dir, prefix):
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob(prefix + '-*.png'):
+        old.unlink()
+    subprocess.run(['pdftoppm', '-png', '-r', '200', str(pdf_path), str(out_dir / prefix)], check=True)
+    return sorted(out_dir.glob(prefix + '-*.png'))
 
 def extract_pdf_text(pdf_path):
     out_txt = Path('/tmp/opencode') / (Path(pdf_path).stem + '.txt')
@@ -348,11 +428,23 @@ def split_bitacora_by_date(md_text):
             year = int(myear.group(1)) if myear else 2026
             return (year, mon, day)
         return (9999, 99, 99)
-    # keep first non-date block (intro) first
-    dated = [s for s in sections if re.search(r'\d{1,2}\s+de\s+[a-záéíóú]+', s[0].lower())]
-    other = [s for s in sections if s not in dated]
+    # merge duplicate dates (e.g. two "11 de noviembre de 2026")
+    merged = {}
+    merged_order = []
+    for title, content in sections:
+        if re.search(r'\d{1,2}\s+de\s+[a-záéíóú]+', title.lower()):
+            if title in merged:
+                # append body without duplicate heading
+                body = content.split('\n', 1)[1] if '\n' in content else ''
+                merged[title] = merged[title] + '\n' + body
+            else:
+                merged[title] = content
+                merged_order.append(title)
+    dated = [(t, merged[t]) for t in merged_order]
+    # Lecciones goes to the end
+    lessons = [s for s in sections if s[0].strip().lower() == 'lecciones']
     dated_sorted = sorted(dated, key=sort_key)
-    return other + dated_sorted
+    return dated_sorted + lessons
 
 # ---------- Portada ----------
 title_p = doc.add_paragraph()
@@ -366,7 +458,9 @@ r.font.size = Pt(14); r.font.color.rgb = PURPLE
 meta = doc.add_paragraph()
 meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
 import datetime
-r = meta.add_run(f'Fecha de generación: {datetime.date.today().strftime("%d de %B de %Y")}\n')
+_meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]
+_hoy = datetime.date.today()
+r = meta.add_run(f'Fecha de generación: {_hoy.day} de {_meses[_hoy.month-1]} de {_hoy.year}\n')
 r.font.size = Pt(10)
 r = meta.add_run(f'Rama: {subprocess.check_output(["git","-C",str(repo),"branch","--show-current"]).decode().strip()}  ·  Commit: {subprocess.check_output(["git","-C",str(repo),"rev-parse","--short","HEAD"]).decode().strip()}')
 r.font.size = Pt(10)
@@ -402,31 +496,31 @@ doc.add_page_break()
 
 # ---------- Fase 1 ----------
 doc.add_heading('Fase 1 · Investigación y análisis', level=1)
-f1_pdf = Path("/home/ilse/Servidores/documentacion/fuentes/Fase_1-2_1_organized.pdf")
+f1_pdf = Path(repo) / "documentacion" / "fuentes" / "Fase_1-2_1_organized.pdf"
 if f1_pdf.exists():
-    txt1 = extract_pdf_text(f1_pdf)
-    insert_markdown('## Texto extraído del PDF\n\n' + txt1)
+    for im in pdf_to_images(f1_pdf, out_dir, 'fase1'):
+        add_image(str(im), width=6.5)
 else:
     add_para('Pendiente: sin documento en el repositorio', italic=True)
 
 # ---------- Fase 2 ----------
 doc.add_heading('Fase 2 · Definición de requisitos', level=1)
 pdf2 = repo / 'docs' / 'Etapa 3 - Definicion de requisitos actualizada.pdf'
-txt2 = extract_pdf_text(pdf2)
-insert_markdown('## Texto extraído del PDF\n\n' + txt2)
+for im in pdf_to_images(pdf2, out_dir, 'fase2'):
+    add_image(str(im), width=6.5)
 
 # ---------- Fase 3 ----------
 doc.add_heading('Fase 3 · Diseño y selección de componentes', level=1)
 pdf3 = repo / 'docs' / 'Etapas 4 y 5 - Arquitectura y componentes actualizada.pdf'
-txt3 = extract_pdf_text(pdf3)
-insert_markdown('## Texto extraído del PDF\n\n' + txt3)
+for im in pdf_to_images(pdf3, out_dir, 'fase3'):
+    add_image(str(im), width=6.5)
 
 # ---------- Fase 4 ----------
 doc.add_heading('Fase 4 · Desarrollo e integración', level=1)
 md4_path = repo / 'fase4_md' / 'Fase_4_Desarrollo_e_Integracion.md'
 md4 = md4_path.read_text(encoding='utf-8')
 # remove plan de pruebas section (goes to Fase 5)
-insert_markdown(md4, skip_headings=['Plan de pruebas'], demote=1)
+insert_markdown(md4, skip_headings=['Plan de pruebas','Presupuesto de latencia','Casos de prueba','Resumen del plan de pruebas','Organización pendiente','Pendientes para después de la presentación','Pendientes antes de las pruebas en hardware','Grupo A — Hoy, con mi voz y la laptop','Grupo B — Ensayo general del domingo 15 (con hotspot de la demo)','Grupo C — No se harán antes de la presentación'], demote=1, skip_first_title=True)
 # note about wake word contradiction will be inserted after architecture? Insert note here.
 add_para('Nota (actualización nov): donde este documento indique que la palabra de activación «Lucía» se descartó, se implementó posteriormente; se activa con lucia.activa en config.toml.', italic=True)
 
@@ -441,9 +535,9 @@ if convert_svg_to_png(arch_svg, arch_png):
     add_image(str(arch_png), 'Arquitectura del prototipo: sitio de la demo, Internet y servidor en casa', width=6.5)
 
 # Estación de la sala
-est_md = Path('/home/ilse/Servidores/documentacion/fuentes/Estacion-de-la-sala-torre-lampara-y-cubeta.md')
+est_md = Path(repo) / 'documentacion' / 'fuentes' / 'Estacion-de-la-sala-torre-lampara-y-cubeta.md'
 if est_md.exists():
-    insert_markdown(est_md.read_text(encoding='utf-8'), demote=1)
+    insert_markdown(est_md.read_text(encoding='utf-8'), demote=1, skip_first_title=True)
 else:
     add_para('Pendiente: sin documento en el repositorio', italic=True)
 est_svg = img_dir / 'Estacion de la sala - torre y lampara (11 nov).svg'
@@ -454,7 +548,7 @@ if convert_svg_to_png(est_svg, est_png):
 # Conexiones eléctricas
 doc.add_heading('Conexiones eléctricas', level=2)
 conex = (repo / 'docs' / 'CONEXIONES.md').read_text(encoding='utf-8')
-insert_markdown(conex, demote=1)
+insert_markdown(conex, demote=1, skip_first_title=True)
 esq_svg = img_dir / 'Esquema de conexiones - montaje completo (11 nov).svg'
 esq_png = out_dir / '_esq.png'
 if convert_svg_to_png(esq_svg, esq_png):
@@ -483,15 +577,15 @@ doc.add_heading('Fase 6 · Mejoras y documentación', level=1)
 # mejoras de noviembre segun bitacora
 add_para('Mejoras de noviembre (según la bitácora): «Lucía cuida» (frases de la vida diaria y saludo diario apagado por defecto), saludo con escucha automática, panel con la marca Lucía (base neutra, flamita, agua junto a movimiento, pestaña con línea rosa), sensor de agua habilitado y calibrado (20/5 cm), gráfica de identidad visual.', )
 # identidad visual
-id_md = Path('/home/ilse/Servidores/documentacion/fuentes/Identidad-visual-de-Lucia.md')
+id_md = Path(repo) / 'documentacion' / 'fuentes' / 'Identidad-visual-de-Lucia.md'
 if id_md.exists():
-    insert_markdown(id_md.read_text(encoding='utf-8'), demote=1)
+    insert_markdown(id_md.read_text(encoding='utf-8'), demote=1, skip_first_title=True)
 else:
     add_para('Pendiente: sin documento en el repositorio', italic=True)
 # manual de uso
 doc.add_heading('Manual de uso', level=2)
 manual = (repo / 'docs' / 'MANUAL.md').read_text(encoding='utf-8')
-insert_markdown(manual, demote=1)
+insert_markdown(manual, demote=1, skip_first_title=True)
 # trabajo futuro
 doc.add_heading('Trabajo futuro: música por voz y «Lucía, …» de corrido', level=2)
 add_para('Música por voz (MUSICA_HABILITADO=0): las frases existen, pero la orden no llega al satélite; se mantiene apagada para la demostración.')
@@ -500,8 +594,8 @@ add_para('Palabra de activación «Lucía» de corrido («Lucía, prende la luz�
 doc.add_heading('Skill de Alexa (subsección)', level=2)
 alexa_consola = (repo / 'docs' / 'alexa' / 'consola.md').read_text(encoding='utf-8')
 alexa_pruebas = (repo / 'docs' / 'alexa' / 'pruebas.md').read_text(encoding='utf-8')
-insert_markdown(alexa_consola, demote=1)
-insert_markdown(alexa_pruebas, demote=1)
+insert_markdown(alexa_consola, demote=1, skip_first_title=True)
+insert_markdown(alexa_pruebas, demote=1, skip_first_title=True)
 
 # ---------- Anexo A: Bitacora ----------
 doc.add_page_break()
@@ -545,13 +639,18 @@ def redact_document(d):
 redact_document(doc)
 
 # Note: redact already applied during insertion mostly; ensure code blocks etc.
+# activate updateFields in settings.xml
+_settings = doc.settings.element
+_upd = OxmlElement('w:updateFields')
+_upd.set(qn('w:val'), 'true')
+_settings.append(_upd)
 doc.save(str(out_path))
 print(f"OK: {out_path}")
 PY
 
 echo "=== ls -la ==="
-ls -la /home/ilse/Servidores/documentacion/
+ls -la "$OUT_DIR/"
 echo "=== media count ==="
-cd /home/ilse/Servidores/documentacion && unzip -l Lucia-documentacion-fases-1-a-6.docx | tail -5
+cd "$OUT_DIR" && unzip -l Lucia-documentacion-fases-1-a-6.docx | tail -5
 echo "word/media count:"
 unzip -l Lucia-documentacion-fases-1-a-6.docx | grep -c 'word/media/'

@@ -8,9 +8,8 @@ import 'navegacion.dart';
 import 'tarjetas.dart';
 
 Future<void> abrirNuevoRecordatorio(BuildContext contexto, EstadoPanel estado) {
-  return showModalBottomSheet<void>(
+  return showDialog<void>(
     context: contexto,
-    isScrollControlled: true,
     builder: (BuildContext contexto) => _DialogoNuevoRecordatorio(estado: estado),
   );
 }

@@ -71,10 +71,7 @@ PresentacionAlerta presentacionAlerta(
         peligro: bajo,
       );
     case 'bienestar':
-      final String textoBienestar = (c['texto']?.toString() ?? '');
-      final String cuerpoBienestar = textoBienestar.contains('se siente mal')
-          ? 'Dijo que se siente mal'
-          : 'No contestó el saludo';
+      final String cuerpoBienestar = detalleBienestar(c);
       return PresentacionAlerta(
         pildora: Textos.aviso,
         titulo: 'Aviso de bienestar',

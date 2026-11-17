@@ -6,8 +6,8 @@ import 'package:asistente_panel/modelos.dart';
 import 'package:asistente_panel/tema.dart';
 
 void main() {
-  testWidgets('recordatorios abre un solo AlertDialog con fondo neutro', (tester) async {
-    tester.view.physicalSize = const Size(1200, 900);
+  testWidgets('app completa: Nuevo abre AlertDialog, no BottomSheet', (tester) async {
+    tester.view.physicalSize = const Size(1849, 939);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
@@ -34,7 +34,7 @@ void main() {
     estado.alertas = <Alerta>[];
     estado.conectadoAlServidor = true;
     estado.anotarMensajeVivo(ahora);
-    estado.destino = Destino.recordatorios;
+    estado.destino = Destino.inicio;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -46,19 +46,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Nuevo recordatorio'));
+    await tester.tap(find.text('Nuevo'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
 
     expect(find.byType(AlertDialog), findsOneWidget);
-    final AlertDialog dialogo = tester.widget(find.byType(AlertDialog));
-    expect(dialogo.backgroundColor, isNull);
-    final ThemeData tema = Theme.of(tester.element(find.byType(AlertDialog)));
-    expect(tema.dialogTheme.backgroundColor, Tema.tarjeta);
-    expect(tema.dialogTheme.surfaceTintColor, Colors.transparent);
-    final Size tamanoContenido = tester.getSize(
-        find.descendant(of: find.byType(AlertDialog), matching: find.byType(ConstrainedBox)).first);
-    expect(tamanoContenido.height, lessThan(600));
+    expect(find.byType(BottomSheet), findsNothing);
   });
 }

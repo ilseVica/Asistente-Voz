@@ -221,6 +221,9 @@ class _FilaHistorial extends StatelessWidget {
 
   String? _origenFila(Alerta alerta) {
     final Map<String, dynamic> c = alerta.carga;
+    if (alerta.tipo == 'bienestar') {
+      return detalleBienestar(c);
+    }
     if (alerta.tipo == 'inactividad') {
       final Object? m = c['minutos'];
       if (m is num) return '${m.toInt()} min sin movimiento';

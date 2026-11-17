@@ -533,3 +533,11 @@ String tituloAlerta(String tipo) {
       return tipo;
   }
 }
+
+
+/// Detalle para una alerta de bienestar, según el texto que mandó el saludo.
+String detalleBienestar(Map<String, dynamic> carga) {
+  final String texto = carga['texto']?.toString() ?? '';
+  if (texto.contains('se siente mal')) return 'Dijo que se siente mal';
+  return 'No contestó el saludo';
+}

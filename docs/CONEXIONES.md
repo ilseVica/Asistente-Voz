@@ -19,3 +19,29 @@ Notas:
 - MQ-2: calentamiento de 3 minutos; durante ese tiempo `gas_adc` se publica `null`.
 - PIR HC-SR501: calentamiento de 60 s.
 - IN2 del relé queda sin conectar (reserva).
+
+## Reacomodo de cables (9 nov)
+
+Orientación: placa 1 atrás, placa 2 al frente, fila 1 a la derecha; rieles
+«de arriba» y «de abajo». Los pines del ESP32 no cambiaron; solo dónde va cada
+cable en la protoboard.
+
+- Relé: R+ en el riel + de abajo de la placa 1 (fila 42), R− en el riel − de
+  abajo de la placa 1 (fila 44), I− en la fila 47. El cable 7 (VCC del lado IN)
+  va al riel + de abajo de la placa 2 (fila 25, 3,3 V).
+- MQ-2: VCC al riel + de abajo de la placa 1 (fila 23), GND al riel − de
+  abajo de la placa 1 (fila 26), AOUT (cable 6) a H18.
+- PIR HC-SR501: VCC al riel + de abajo de la placa 1 (fila 37), GND al riel −
+  de abajo de la placa 1 (fila 39).
+- Agua (HC-SR04/JSN-SR04T): VCC al riel + de arriba de la placa 2 (fila 1),
+  GND al riel − de arriba de la placa 2 (fila 3), ECHO a H3.
+  `AGUA_HABILITADO=true`, calibración 20/5 cm.
+- DHT22: GND en A10, DATA en A12, VCC en A13. E10 → riel − de arriba de la
+  placa 2; B13 → riel + de abajo de la placa 2 (3,3 V). El riel − de abajo de
+  la placa 2 ya no se usa.
+- Puentes: placa 1 arriba↔abajo en las filas 2 (+) y 3 (−), y vuelta en 59–60.
+  Placa 1 → placa 2 en las filas 14 y 21 (5 V) y 16 y 19 (GND).
+- Cable 1: A11 → riel + de abajo de la placa 2, fila 9.
+
+Sin cambios: divisores (R4 I3–I6, R5 J6 → riel −, R2 I18–I22, R3 J22 → riel −),
+buzzer y pines del ESP32.

@@ -63,6 +63,7 @@ void main() {
     expect(find.textContaining('Sin conexión'), findsWidgets);
     expect(find.text('Sin datos'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
+    expect(find.text('Agua'), findsWidgets);
   });
 
   testWidgets('escritorio 1200 con nodo', (tester) async {
@@ -119,6 +120,7 @@ void main() {
     expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Sala conectada'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
+    expect(find.text('Agua'), findsWidgets);
     expect(find.text('Normal'), findsWidgets);
     expect(find.textContaining('Lectura'), findsWidgets);
     expect(find.textContaining('Umbral'), findsWidgets);
@@ -189,6 +191,7 @@ void main() {
     expect(find.textContaining('Gas detectado'), findsWidgets);
     expect(find.text('Pendiente'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
+    expect(find.text('Agua'), findsWidgets);
   });
 
   testWidgets('movil 390 sin nodo', (tester) async {
@@ -243,6 +246,7 @@ void main() {
     expect(find.text('Sin datos'), findsWidgets);
     expect(find.textContaining('Sin conexión'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
+    expect(find.text('Agua'), findsWidgets);
   });
 
   testWidgets('movil 390 con nodo', (tester) async {
@@ -296,6 +300,7 @@ void main() {
     expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Conectada'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
+    expect(find.text('Agua'), findsWidgets);
   });
 
   testWidgets('movil 390 alerta de gas', (tester) async {
@@ -360,6 +365,7 @@ void main() {
     expect(find.textContaining('Gas detectado'), findsWidgets);
     expect(find.text('Pendiente'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
+    expect(find.text('Agua'), findsWidgets);
   });
   testWidgets('tableta 820 sin nodo', (tester) async {
     tester.view.physicalSize = const Size(820, 1180);
@@ -413,6 +419,7 @@ void main() {
     expect(find.text('Sin datos'), findsWidgets);
     expect(find.textContaining('Sin conexión'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
+    expect(find.text('Agua'), findsWidgets);
   });
 
   testWidgets('tableta 820 con nodo', (tester) async {
@@ -466,6 +473,7 @@ void main() {
     expect(find.text('Mensajes'), findsWidgets);
     expect(find.text('Sala conectada'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
+    expect(find.text('Agua'), findsWidgets);
   });
 
   testWidgets('tableta 820 alerta de gas', (tester) async {
@@ -530,6 +538,7 @@ void main() {
     expect(find.textContaining('Gas detectado'), findsWidgets);
     expect(find.text('Pendiente'), findsWidgets);
     expect(find.text('Cambiar'), findsOneWidget);
+    expect(find.text('Agua'), findsWidgets);
   });
 
   testWidgets('movil 390 recordatorios titulo y boton no se superponen', (tester) async {
@@ -967,6 +976,8 @@ testWidgets('gas y ayuda a la vez: manda gas en 390, 820 y 1280', (tester) async
     await tester.pump();
     final FilledButton boton = tester.widget<FilledButton>(find.widgetWithText(FilledButton, Textos.enviarYDecirEnVozAlta));
     expect(boton.onPressed, isNotNull);
+    await tester.ensureVisible(find.widgetWithText(FilledButton, Textos.enviarYDecirEnVozAlta));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, Textos.enviarYDecirEnVozAlta));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -996,6 +1007,8 @@ testWidgets('gas y ayuda a la vez: manda gas en 390, 820 y 1280', (tester) async
 
     await tester.enterText(find.byType(TextField), 'hola');
     await tester.pump();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, Textos.enviarYDecirEnVozAlta));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, Textos.enviarYDecirEnVozAlta));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));

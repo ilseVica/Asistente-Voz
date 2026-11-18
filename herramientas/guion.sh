@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Apoyo para operar la demostracion de 10 minutos (herramientas/GUION.md).
+# Apoyo para operar la demostracion de 10 minutos.
 #
 # Uso:
 #   herramientas/guion.sh            # interactivo: Enter ejecuta cada paso
@@ -11,6 +11,14 @@
 set -u
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SERVER_DIR="$RAIZ/servidor"
+SCRIPT_DIR="$RAIZ/herramientas"
+# shellcheck source=env.sh
+source "$SCRIPT_DIR/env.sh"
+MQTT_VOZ_PASSWORD="$(cargar_var_env "$SERVER_DIR/.env" MQTT_VOZ_PASSWORD)" || {
+  echo "No se pudo cargar MQTT_VOZ_PASSWORD desde $SERVER_DIR/.env" >&2
+  exit 1
+}
 ENSAYO=0
 if [[ "${1:-}" == "--ensayo" ]]; then
   ENSAYO=1
@@ -62,7 +70,7 @@ paso 3 "Buenos días" \
 
 # Paso 4
 paso 4 "Saludo diario" \
-  "Presentador: lanzar con herramientas/saludo.sh (respaldo si no se dispara solo) y responder «me siento mal»." \
+  "Presentador: lanzar el saludo una sola vez con herramientas/saludo.sh y responder «no me siento bien»." \
   "Lucía pregunta «¿Cómo amaneció?», alerta en Telegram y panel; se cierra con «Ya lo atendí»." \
   "F9 o botón del panel; hotspot de respaldo; video de respaldo."
 ejecutar "$RAIZ_ABS/herramientas/saludo.sh" || true

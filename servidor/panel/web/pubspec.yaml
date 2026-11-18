@@ -24,6 +24,7 @@ flutter:
 
   assets:
     - assets/fuentes/
+    - assets/identidad/
 
   fonts:
     - family: AtkinsonHyperlegible
@@ -31,3 +32,6 @@ flutter:
         - asset: assets/fuentes/AtkinsonHyperlegible-Regular.ttf
         - asset: assets/fuentes/AtkinsonHyperlegible-Bold.ttf
           weight: 700
+    - family: Fredoka
+      fonts:
+        - asset: assets/fuentes/Fredoka.ttf

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../main.dart';
 import '../tema.dart';
 import '../textos.dart';
+import 'navegacion.dart';
 
 /// Sin token: explica cómo conseguir el código y lo pide.
 ///
@@ -80,13 +81,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Text(Textos.asistenteDeVoz,
-                      style: TextStyle(
-                          fontSize: movil ? 20 : 22,
-                          fontWeight: FontWeight.w700,
-                          color: Tema.primario,
-                          fontFamily: Tema.familia),
-                      textAlign: TextAlign.center),
+                  Center(child: MarcaLucia(tamano: movil ? 30 : 34)),
                   const SizedBox(height: 24),
                   Container(
                     padding: const EdgeInsets.all(36),
@@ -189,13 +184,13 @@ class _Aviso extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7E1E1),
+        color: Tema.peligro.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         texto,
         style: const TextStyle(
-            color: Color(0xFF7A1616), fontSize: 16, height: 1.45,
+            color: Tema.peligro, fontSize: 16, height: 1.45,
             fontFamily: Tema.familia),
       ),
     );

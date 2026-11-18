@@ -44,13 +44,20 @@ class PantallaPanel extends StatelessWidget {
                 const Expanded(child: TarjetaAmbiente()),
                 const SizedBox(width: 20),
                 const Expanded(child: TarjetaGas()),
-                const SizedBox(width: 20),
-                const Expanded(child: TarjetaMovimiento()),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          const TarjetaAgua(),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                const Expanded(child: TarjetaMovimiento()),
+                const SizedBox(width: 20),
+                const Expanded(child: TarjetaAgua()),
+              ],
+            ),
+          ),
           const SizedBox(height: 20),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -622,7 +629,9 @@ class _RecordatoriosProximos extends StatelessWidget {
                 OutlinedButton(
                   onPressed: () => abrirNuevoRecordatorio(contexto, estado),
                   style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(48, 44), padding: const EdgeInsets.symmetric(horizontal: 14)),
+                      minimumSize: const Size(48, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      backgroundColor: Tema.tarjeta),
                   child: const Text(Textos.nuevo),
                 ),
               ],
@@ -910,7 +919,7 @@ class PastillaEstado extends StatelessWidget {
     final String texto;
 
     if (estado == 'resuelta' || estado == 'atendida') {
-      color = Tema.primario;
+      color = Tema.verdeOscuro;
       texto = Textos.atendida;
     } else if (estado == 'pendiente' || estado == 'enviada') {
       color = Tema.peligro;
@@ -926,7 +935,9 @@ class PastillaEstado extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
+          color: (estado == 'resuelta' || estado == 'atendida')
+              ? Tema.verdeHoja
+              : color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(999)),
       child: Text(texto,
           style: TextStyle(
